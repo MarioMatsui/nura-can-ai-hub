@@ -190,7 +190,7 @@ const Dashboard = () => {
 
     // Call AI API and save response
     try {
-      const { data: aiData, error: aiError } = await supabase.functions.invoke('chat-ai', {
+      const response = await supabase.functions.invoke('chat-ai', {
         body: {
           conversationId,
           message: content,
@@ -198,18 +198,36 @@ const Dashboard = () => {
         }
       });
 
-      // Check for daily limit error in the response
-      if (aiData?.error && aiData.error.includes('limite diário')) {
-        toast({
-          title: 'Limite Diário Atingido',
-          description: 'Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.',
-          variant: 'destructive',
-        });
-        throw new Error('limite diário atingido');
+      // Check for HTTP error status (429 for rate limit)
+      if (response.error) {
+        console.error('Edge function error:', response.error);
+        
+        // Check if it's a rate limit error (429)
+        if (response.error.message?.includes('FunctionsHttpError: 429')) {
+          toast({
+            title: 'Limite Diário Atingido',
+            description: 'Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        
+        throw response.error;
       }
 
-      if (aiError) {
-        throw aiError;
+      const aiData = response.data;
+
+      // Check for error in response data
+      if (aiData?.error) {
+        if (aiData.error.includes('limite diário')) {
+          toast({
+            title: 'Limite Diário Atingido',
+            description: 'Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw new Error(aiData.error);
       }
 
       if (!aiData?.response) {

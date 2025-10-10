@@ -252,6 +252,9 @@ serve(async (req) => {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
+      console.log(`Checking daily limit for user ${userId}`);
+      console.log(`Today: ${today.toISOString()}, Tomorrow: ${tomorrow.toISOString()}`);
+
       // Count user messages across all conversations for today
       const { data: todayMessages, error: countError } = await supabase
         .from('messages')
@@ -263,16 +266,22 @@ serve(async (req) => {
 
       if (countError) {
         console.error('Error counting messages:', countError);
-      } else if (todayMessages && todayMessages.length >= 5) {
-        console.log(`User ${userId} has reached daily limit: ${todayMessages.length} messages`);
-        return new Response(JSON.stringify({ 
-          error: 'Você atingiu o limite diário de 5 mensagens do plano gratuito. Faça upgrade para continuar.' 
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
       } else {
-        console.log(`User ${userId} has sent ${todayMessages?.length || 0} messages today`);
+        console.log(`Found ${todayMessages?.length || 0} messages for user ${userId} today`);
+        
+        if (todayMessages && todayMessages.length > 0) {
+          console.log('Sample messages:', todayMessages.slice(0, 3));
+        }
+        
+        if (todayMessages && todayMessages.length >= 5) {
+          console.log(`User ${userId} has reached daily limit: ${todayMessages.length} messages`);
+          return new Response(JSON.stringify({ 
+            error: 'Você atingiu o limite diário de 5 mensagens do plano gratuito. Faça upgrade para continuar.' 
+          }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
     }
 
