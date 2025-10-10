@@ -14,6 +14,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          model_type: Database["public"]["Enums"]["ai_model_type"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          model_type?: Database["public"]["Enums"]["ai_model_type"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          model_type?: Database["public"]["Enums"]["ai_model_type"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           birth_date: string
@@ -50,6 +109,42 @@ export type Database = {
         }
         Relationships: []
       }
+      user_subscriptions: {
+        Row: {
+          billing_period: Database["public"]["Enums"]["billing_period"] | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          plan_type: Database["public"]["Enums"]["subscription_plan"]
+          started_at: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billing_period?: Database["public"]["Enums"]["billing_period"] | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          plan_type?: Database["public"]["Enums"]["subscription_plan"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billing_period?: Database["public"]["Enums"]["billing_period"] | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          plan_type?: Database["public"]["Enums"]["subscription_plan"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -58,7 +153,15 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      ai_model_type: "generic" | "medical" | "legal" | "veterinary"
+      billing_period: "monthly" | "annual"
+      subscription_plan:
+        | "free"
+        | "medical"
+        | "legal"
+        | "veterinary"
+        | "specialist"
+      subscription_status: "active" | "inactive" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -185,6 +288,17 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      ai_model_type: ["generic", "medical", "legal", "veterinary"],
+      billing_period: ["monthly", "annual"],
+      subscription_plan: [
+        "free",
+        "medical",
+        "legal",
+        "veterinary",
+        "specialist",
+      ],
+      subscription_status: ["active", "inactive", "cancelled"],
+    },
   },
 } as const

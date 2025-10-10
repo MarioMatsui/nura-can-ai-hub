@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import logo from "@/assets/logo.png";
 
 interface HeaderProps {
@@ -8,6 +10,19 @@ interface HeaderProps {
 
 const Header = ({ isLoggedIn = false }: HeaderProps) => {
   const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+  
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
   
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -59,13 +74,13 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
 
           {/* CTA Buttons */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {isLoggedIn ? (
+            {user ? (
               <Button
                 size="lg"
-                onClick={() => navigate("/chat")}
+                onClick={() => navigate("/app")}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth"
               >
-                Ir para o Chat
+                Dashboard
               </Button>
             ) : (
               <>
