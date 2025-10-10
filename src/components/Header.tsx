@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import logo from "@/assets/logo.png";
 
 interface HeaderProps {
@@ -6,6 +7,8 @@ interface HeaderProps {
 }
 
 const Header = ({ isLoggedIn = false }: HeaderProps) => {
+  const navigate = useNavigate();
+  
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     element?.scrollIntoView({ behavior: "smooth" });
@@ -16,12 +19,15 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-smooth"
+          >
             <img src={logo} alt="NuraCan AI" className="h-8 sm:h-10 w-auto" />
             <span className="text-xl sm:text-2xl font-bold text-foreground">
               Nura<span className="text-primary">Can</span> AI
             </span>
-          </div>
+          </button>
 
           {/* Navigation - Hidden on mobile */}
           <nav className="hidden md:flex items-center gap-6 lg:gap-8">
@@ -56,6 +62,7 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
             {isLoggedIn ? (
               <Button
                 size="lg"
+                onClick={() => navigate("/chat")}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth"
               >
                 Ir para o Chat
@@ -65,12 +72,14 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
                 <Button
                   variant="ghost"
                   size="lg"
+                  onClick={() => navigate("/auth/login")}
                   className="hidden sm:flex font-medium"
                 >
                   Login
                 </Button>
                 <Button
                   size="lg"
+                  onClick={() => navigate("/auth/signup")}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth text-sm sm:text-base px-3 sm:px-6"
                 >
                   Assine Agora
