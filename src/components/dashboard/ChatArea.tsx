@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Message, UserSubscription, Conversation } from '@/pages/Dashboard';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatAreaProps {
   user: any;
@@ -31,6 +32,7 @@ export const ChatArea = ({
   const [selectedModel, setSelectedModel] = useState<ModelType>('generic');
   const [isProcessing, setIsProcessing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -56,7 +58,36 @@ export const ChatArea = ({
     if (!inputValue.trim() || isProcessing) return;
     
     if (!hasAccess(selectedModel)) {
+      toast({
+        title: "Acesso Negado",
+        description: "Você precisa de uma assinatura premium para usar este modelo de IA.",
+        variant: "destructive",
+      });
       return;
+    }
+
+    // Check daily message limit for free plan users
+    const activeSub = subscriptions?.find(sub => sub.status === 'active');
+    const isFreePlan = !activeSub || activeSub.plan_type === 'free';
+    
+    if (isFreePlan) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todayMessages = messages.filter(msg => {
+        const msgDate = new Date(msg.created_at);
+        msgDate.setHours(0, 0, 0, 0);
+        return msg.role === 'user' && msgDate.getTime() === today.getTime();
+      });
+
+      if (todayMessages.length >= 5) {
+        toast({
+          title: "Limite Diário Atingido",
+          description: "Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     setIsProcessing(true);
