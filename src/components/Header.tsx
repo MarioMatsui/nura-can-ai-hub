@@ -1,0 +1,87 @@
+import { Button } from "@/components/ui/button";
+import logo from "@/assets/logo.png";
+
+interface HeaderProps {
+  isLoggedIn?: boolean;
+}
+
+const Header = ({ isLoggedIn = false }: HeaderProps) => {
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    element?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20">
+          {/* Logo */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <img src={logo} alt="NuraCan AI" className="h-8 sm:h-10 w-auto" />
+            <span className="text-xl sm:text-2xl font-bold text-foreground">
+              Nura<span className="text-primary">Can</span> AI
+            </span>
+          </div>
+
+          {/* Navigation - Hidden on mobile */}
+          <nav className="hidden md:flex items-center gap-6 lg:gap-8">
+            <button
+              onClick={() => scrollToSection("beneficios")}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-smooth"
+            >
+              Benefícios
+            </button>
+            <button
+              onClick={() => scrollToSection("como-funciona")}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-smooth"
+            >
+              Como Funciona
+            </button>
+            <button
+              onClick={() => scrollToSection("planos")}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-smooth"
+            >
+              Planos
+            </button>
+            <button
+              onClick={() => scrollToSection("faq")}
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-smooth"
+            >
+              FAQ
+            </button>
+          </nav>
+
+          {/* CTA Buttons */}
+          <div className="flex items-center gap-2 sm:gap-4">
+            {isLoggedIn ? (
+              <Button
+                size="lg"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth"
+              >
+                Ir para o Chat
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  className="hidden sm:flex font-medium"
+                >
+                  Login
+                </Button>
+                <Button
+                  size="lg"
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth text-sm sm:text-base px-3 sm:px-6"
+                >
+                  Assine Agora
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default Header;
