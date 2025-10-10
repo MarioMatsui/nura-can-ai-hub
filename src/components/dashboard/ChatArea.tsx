@@ -66,36 +66,21 @@ export const ChatArea = ({
       return;
     }
 
-    // Check daily message limit for free plan users
-    const activeSub = subscriptions?.find(sub => sub.status === 'active');
-    const isFreePlan = !activeSub || activeSub.plan_type === 'free';
-    
-    if (isFreePlan) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const todayMessages = messages.filter(msg => {
-        const msgDate = new Date(msg.created_at);
-        msgDate.setHours(0, 0, 0, 0);
-        return msg.role === 'user' && msgDate.getTime() === today.getTime();
-      });
-
-      if (todayMessages.length >= 5) {
-        toast({
-          title: "Limite Diário Atingido",
-          description: "Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
     setIsProcessing(true);
     const messageToSend = inputValue;
     setInputValue('');
     
     try {
       await onSendMessage(messageToSend, selectedModel);
+    } catch (error: any) {
+      // Check if it's a daily limit error
+      if (error?.message?.includes('limite diário')) {
+        toast({
+          title: "Limite Diário Atingido",
+          description: "Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsProcessing(false);
     }

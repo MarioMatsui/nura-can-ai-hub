@@ -214,6 +214,64 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Get conversation to check user_id
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('user_id')
+      .eq('id', conversationId)
+      .single();
+
+    if (convError || !conversation) {
+      console.error('Error fetching conversation:', convError);
+      return new Response(JSON.stringify({ error: 'Conversation not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const userId = conversation.user_id;
+
+    // Check if user has active paid subscription
+    const { data: subscriptions, error: subError } = await supabase
+      .from('user_subscriptions')
+      .select('plan_type, status')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+    if (subError) {
+      console.error('Error fetching subscriptions:', subError);
+    }
+
+    const hasActivePaidPlan = subscriptions && subscriptions.length > 0 && 
+      subscriptions.some(sub => sub.plan_type !== 'free');
+
+    // If free plan, check daily message limit
+    if (!hasActivePaidPlan) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const { data: todayMessages, error: countError } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('role', 'user')
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString());
+
+      if (countError) {
+        console.error('Error counting messages:', countError);
+      } else if (todayMessages && todayMessages.length >= 5) {
+        return new Response(JSON.stringify({ 
+          error: 'Você atingiu o limite diário de 5 mensagens do plano gratuito. Faça upgrade para continuar.' 
+        }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // Get conversation history
     const { data: messages, error: messagesError } = await supabase
       .from('messages')

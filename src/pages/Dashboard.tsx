@@ -198,6 +198,16 @@ const Dashboard = () => {
         }
       });
 
+      // Check for daily limit error in the response
+      if (aiData?.error && aiData.error.includes('limite diário')) {
+        toast({
+          title: 'Limite Diário Atingido',
+          description: 'Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.',
+          variant: 'destructive',
+        });
+        throw new Error('limite diário atingido');
+      }
+
       if (aiError) {
         throw aiError;
       }
@@ -224,13 +234,20 @@ const Dashboard = () => {
       if (aiMessage) {
         setMessages(prev => [...prev, aiMessage as Message]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error getting AI response:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível obter resposta da IA. Tente novamente.',
-        variant: 'destructive',
-      });
+      
+      // Check if it's a daily limit error
+      const errorMessage = error?.message || '';
+      const isLimitError = errorMessage.includes('limite diário');
+      
+      if (!isLimitError) {
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível obter resposta da IA. Tente novamente.',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
