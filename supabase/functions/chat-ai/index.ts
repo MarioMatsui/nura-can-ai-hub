@@ -252,23 +252,27 @@ serve(async (req) => {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
+      // Count user messages across all conversations for today
       const { data: todayMessages, error: countError } = await supabase
         .from('messages')
-        .select('id')
-        .eq('user_id', userId)
+        .select('id, conversation_id, conversations!inner(user_id)')
         .eq('role', 'user')
+        .eq('conversations.user_id', userId)
         .gte('created_at', today.toISOString())
         .lt('created_at', tomorrow.toISOString());
 
       if (countError) {
         console.error('Error counting messages:', countError);
       } else if (todayMessages && todayMessages.length >= 5) {
+        console.log(`User ${userId} has reached daily limit: ${todayMessages.length} messages`);
         return new Response(JSON.stringify({ 
           error: 'Você atingiu o limite diário de 5 mensagens do plano gratuito. Faça upgrade para continuar.' 
         }), {
           status: 429,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      } else {
+        console.log(`User ${userId} has sent ${todayMessages?.length || 0} messages today`);
       }
     }
 
