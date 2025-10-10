@@ -198,36 +198,21 @@ const Dashboard = () => {
         }
       });
 
-      // Check for HTTP error status (429 for rate limit)
-      if (response.error) {
-        console.error('Edge function error:', response.error);
-        
-        // Check if it's a rate limit error (429)
-        if (response.error.message?.includes('FunctionsHttpError: 429')) {
-          toast({
-            title: 'Limite Diário Atingido',
-            description: 'Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        
-        throw response.error;
+      const aiData = response.data as any;
+
+      // Check for business logic errors (like daily limit)
+      if (aiData?.error === 'limite_diario') {
+        toast({
+          title: 'Limite Diário Atingido',
+          description: aiData.message || 'Você atingiu o limite de 5 mensagens por dia do plano gratuito.',
+          variant: 'destructive',
+        });
+        return;
       }
 
-      const aiData = response.data;
-
-      // Check for error in response data
-      if (aiData?.error) {
-        if (aiData.error.includes('limite diário')) {
-          toast({
-            title: 'Limite Diário Atingido',
-            description: 'Você atingiu o limite de 5 mensagens por dia do plano gratuito. Faça upgrade para continuar.',
-            variant: 'destructive',
-          });
-          return;
-        }
-        throw new Error(aiData.error);
+      // Check for other errors
+      if (response.error) {
+        throw response.error;
       }
 
       if (!aiData?.response) {

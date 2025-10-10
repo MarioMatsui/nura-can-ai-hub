@@ -275,10 +275,12 @@ serve(async (req) => {
         
         if (todayMessages && todayMessages.length >= 5) {
           console.log(`User ${userId} has reached daily limit: ${todayMessages.length} messages`);
+          // Return 200 with error in JSON so frontend can access it
           return new Response(JSON.stringify({ 
-            error: 'Você atingiu o limite diário de 5 mensagens do plano gratuito. Faça upgrade para continuar.' 
+            error: 'limite_diario',
+            message: 'Você atingiu o limite diário de 5 mensagens do plano gratuito. Faça upgrade para continuar.' 
           }), {
-            status: 429,
+            status: 200, // Use 200 so Supabase client passes the data
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
