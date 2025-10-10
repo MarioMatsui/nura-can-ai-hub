@@ -28,9 +28,9 @@ export const ConversationSidebar = ({
   };
 
   return (
-    <div className="w-[30%] border-r border-border bg-card flex flex-col">
-      <div className="p-4 border-b border-border">
-        <h2 className="text-lg font-semibold mb-3">Histórico de Consultas</h2>
+    <div className="w-full lg:w-[30%] h-full border-r border-border bg-card flex flex-col">
+      <div className="p-3 sm:p-4 border-b border-border">
+        <h2 className="text-base sm:text-lg font-semibold mb-3">Histórico de Consultas</h2>
         <Button
           onClick={onNewConversation}
           className="w-full"
@@ -42,9 +42,9 @@ export const ConversationSidebar = ({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+        <div className="p-1 sm:p-2 space-y-1">
           {conversations.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8 px-4">
+            <div className="text-center text-muted-foreground py-8 px-3 sm:px-4 text-sm">
               Nenhuma conversa ainda.
               <br />
               Comece uma nova consulta!
@@ -55,8 +55,8 @@ export const ConversationSidebar = ({
                 key={conversation.id}
                 onClick={() => onSelectConversation(conversation)}
                 className={cn(
-                  'w-full text-left p-3 rounded-lg transition-colors',
-                  'hover:bg-accent',
+                  'w-full text-left p-2 sm:p-3 rounded-lg transition-colors',
+                  'hover:bg-accent active:bg-accent',
                   currentConversation?.id === conversation.id && 'bg-accent'
                 )}
               >

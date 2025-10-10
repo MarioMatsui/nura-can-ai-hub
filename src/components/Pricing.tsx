@@ -97,28 +97,28 @@ const Pricing = () => {
       const monthlyEquivalent = plan.annualPrice / 12;
       return (
         <div className="flex flex-col items-center">
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl sm:text-4xl font-bold">
-              R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
-            </span>
-            <span className="text-muted-foreground">/mês</span>
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            <span className="line-through">
-              R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
-            </span>
-            {" • "}cobrado anualmente
-          </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-2xl sm:text-3xl font-bold">
+            R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
+          </span>
+          <span className="text-sm sm:text-base text-muted-foreground">/mês</span>
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">
+          <span className="line-through">
+            R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
+          </span>
+          {" • "}cobrado anualmente
+        </div>
         </div>
       );
     }
     
     return (
       <div className="flex items-baseline gap-1">
-        <span className="text-3xl sm:text-4xl font-bold">
+        <span className="text-2xl sm:text-3xl font-bold">
           R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
         </span>
-        <span className="text-muted-foreground">/mês</span>
+        <span className="text-sm sm:text-base text-muted-foreground">/mês</span>
       </div>
     );
   };
@@ -142,9 +142,9 @@ const Pricing = () => {
           </p>
 
           {/* Billing Toggle */}
-          <div className="inline-flex items-center gap-4 p-2 rounded-full bg-muted/50 border border-border">
+          <div className="inline-flex items-center gap-2 sm:gap-4 p-2 rounded-full bg-muted/50 border border-border">
             <span
-              className={`px-4 py-2 rounded-full font-medium transition-smooth ${
+              className={`px-3 sm:px-4 py-2 rounded-full text-sm sm:text-base font-medium transition-smooth ${
                 !isAnnual
                   ? "bg-background text-foreground shadow-card"
                   : "text-muted-foreground"
@@ -158,14 +158,14 @@ const Pricing = () => {
               className="data-[state=checked]:bg-primary"
             />
             <span
-              className={`px-4 py-2 rounded-full font-medium transition-smooth flex items-center gap-2 ${
+              className={`px-3 sm:px-4 py-2 rounded-full text-sm sm:text-base font-medium transition-smooth flex items-center gap-1 sm:gap-2 ${
                 isAnnual
                   ? "bg-background text-foreground shadow-card"
                   : "text-muted-foreground"
               }`}
             >
               Anual
-              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+              <span className="text-xs bg-primary/10 text-primary px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">
                 -14%
               </span>
             </span>
@@ -173,7 +173,7 @@ const Pricing = () => {
         </div>
 
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto">
           {Object.entries(plans).map(([key, plan]) => (
             <Card
               key={key}
@@ -188,22 +188,22 @@ const Pricing = () => {
                 </div>
               )}
 
-              <CardHeader className="pb-6">
-                <h3 className="text-xl sm:text-2xl font-bold mb-2">
+              <CardHeader className="pb-4 sm:pb-6">
+                <h3 className="text-lg sm:text-xl font-bold mb-2">
                   {plan.name}
                 </h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
                   {plan.description}
                 </p>
-                <div className="mb-6">{getDisplayPrice(plan)}</div>
+                <div className="mb-4 sm:mb-6">{getDisplayPrice(plan)}</div>
               </CardHeader>
 
-              <CardContent className="space-y-6">
-                <ul className="space-y-3">
+              <CardContent className="space-y-4 sm:space-y-6">
+                <ul className="space-y-2 sm:space-y-3">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-start gap-2">
-                      <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                      <span className="text-sm">{feature}</span>
+                      <Check className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0 mt-0.5" />
+                      <span className="text-xs sm:text-sm">{feature}</span>
                     </li>
                   ))}
                 </ul>
@@ -226,8 +226,8 @@ const Pricing = () => {
         </div>
 
         {/* Additional Info */}
-        <div className="mt-12 text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="mt-8 sm:mt-12 text-center px-4">
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Todos os planos incluem 7 dias de garantia de reembolso • Cancele a
             qualquer momento
           </p>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Lock } from 'lucide-react';
+import { Send, Lock, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +13,7 @@ interface ChatAreaProps {
   subscriptions: UserSubscription[];
   currentConversation: Conversation | null;
   onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary') => void;
+  onOpenSidebar: () => void;
 }
 
 type ModelType = 'generic' | 'medical' | 'legal' | 'veterinary';
@@ -24,6 +25,7 @@ export const ChatArea = ({
   subscriptions,
   currentConversation,
   onSendMessage,
+  onOpenSidebar,
 }: ChatAreaProps) => {
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelType>('generic');
@@ -77,11 +79,21 @@ export const ChatArea = ({
   const userName = profile?.full_name?.split(' ')[0] || 'Doutor(a)';
 
   return (
-    <div className="flex-1 flex flex-col bg-background">
-      <div className="p-4 border-b border-border">
-        <h1 className="text-2xl font-bold mb-4">Nura AI</h1>
+    <div className="flex-1 flex flex-col bg-background min-w-0">
+      <div className="p-3 sm:p-4 border-b border-border">
+        <div className="flex items-center gap-3 mb-3 sm:mb-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onOpenSidebar}
+            className="lg:hidden"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <h1 className="text-xl sm:text-2xl font-bold">Nura AI</h1>
+        </div>
         
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 sm:gap-2 flex-wrap">
           {models.map((model) => {
             const accessible = hasAccess(model.type);
             const isSelected = selectedModel === model.type;
@@ -98,14 +110,14 @@ export const ChatArea = ({
                 variant={isSelected ? 'default' : 'outline'}
                 size="sm"
                 className={cn(
-                  'relative',
+                  'relative text-xs sm:text-sm px-2 sm:px-3',
                   !accessible && 'opacity-50 cursor-not-allowed'
                 )}
                 disabled={!accessible}
               >
-                <span>{model.label}</span>
+                <span className="truncate">{model.label}</span>
                 {!accessible && (
-                  <Lock className="ml-2 h-3 w-3 text-purple-500" />
+                  <Lock className="ml-1 sm:ml-2 h-3 w-3 text-purple-500 flex-shrink-0" />
                 )}
               </Button>
             );
@@ -113,28 +125,28 @@ export const ChatArea = ({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+      <ScrollArea className="flex-1 p-3 sm:p-4" ref={scrollRef}>
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
+          <div className="flex flex-col items-center justify-center h-full text-center px-4">
             {currentConversation ? (
               <div className="text-muted-foreground">
-                <p className="text-lg mb-2">
+                <p className="text-base sm:text-lg mb-2">
                   Olá, Dr. {userName}. Como posso ajudar em sua pesquisa hoje?
                 </p>
               </div>
             ) : (
               <div className="max-w-2xl">
-                <p className="text-lg text-muted-foreground mb-4">
+                <p className="text-base sm:text-lg text-muted-foreground mb-3 sm:mb-4">
                   Aguardando sua pergunta...
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Você pode perguntar sobre dosagens, interações medicamentosas, estudos clínicos e mais.
                 </p>
               </div>
             )}
           </div>
         ) : (
-          <div className="space-y-4 max-w-4xl mx-auto">
+          <div className="space-y-3 sm:space-y-4 max-w-4xl mx-auto">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -145,13 +157,13 @@ export const ChatArea = ({
               >
                 <div
                   className={cn(
-                    'max-w-[70%] rounded-lg p-4',
+                    'max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4',
                     message.role === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted'
                   )}
                 >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <p className="whitespace-pre-wrap text-sm sm:text-base break-words">{message.content}</p>
                 </div>
               </div>
             ))}
@@ -159,27 +171,27 @@ export const ChatArea = ({
         )}
       </ScrollArea>
 
-      <div className="p-4 border-t border-border">
+      <div className="p-2 sm:p-4 border-t border-border">
         <div className="flex gap-2 max-w-4xl mx-auto">
           <Textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Digite sua pergunta..."
-            className="min-h-[60px] max-h-[200px]"
+            className="min-h-[50px] sm:min-h-[60px] max-h-[120px] sm:max-h-[200px] text-sm sm:text-base"
             disabled={!hasAccess(selectedModel)}
           />
           <Button
             onClick={handleSend}
             size="icon"
-            className="h-[60px] w-[60px]"
+            className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
             disabled={!inputValue.trim() || !hasAccess(selectedModel)}
           >
-            <Send className="h-5 w-5" />
+            <Send className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
         </div>
         {!hasAccess(selectedModel) && (
-          <p className="text-xs text-muted-foreground text-center mt-2">
+          <p className="text-xs text-muted-foreground text-center mt-2 px-2">
             Você não tem acesso a este modelo. Faça upgrade do seu plano.
           </p>
         )}

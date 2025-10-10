@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { ConversationSidebar } from '@/components/dashboard/ConversationSidebar';
 import { ChatArea } from '@/components/dashboard/ChatArea';
+import { MobileSidebar } from '@/components/dashboard/MobileSidebar';
 import { useToast } from '@/hooks/use-toast';
 
 export interface Conversation {
@@ -34,6 +35,7 @@ const Dashboard = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -124,6 +126,7 @@ const Dashboard = () => {
   const handleSelectConversation = async (conversation: Conversation) => {
     setCurrentConversation(conversation);
     await fetchMessages(conversation.id);
+    setSidebarOpen(false); // Close mobile sidebar
   };
 
   const handleNewConversation = () => {
@@ -214,12 +217,26 @@ const Dashboard = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <ConversationSidebar
+      {/* Desktop Sidebar */}
+      <div className="hidden lg:block">
+        <ConversationSidebar
+          conversations={conversations}
+          currentConversation={currentConversation}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
+        />
+      </div>
+
+      {/* Mobile Sidebar */}
+      <MobileSidebar
         conversations={conversations}
         currentConversation={currentConversation}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
       />
+
       <ChatArea
         user={user}
         profile={profile}
@@ -227,6 +244,7 @@ const Dashboard = () => {
         subscriptions={subscriptions}
         currentConversation={currentConversation}
         onSendMessage={handleSendMessage}
+        onOpenSidebar={() => setSidebarOpen(true)}
       />
     </div>
   );

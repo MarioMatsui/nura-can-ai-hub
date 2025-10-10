@@ -125,8 +125,8 @@ const SignUp = () => {
               Nura<span className="text-primary">Can</span> AI
             </span>
           </Link>
-          <h1 className="text-3xl font-bold mb-2">Criar Conta</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Criar Conta</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Preencha seus dados para começar
           </p>
         </div>
