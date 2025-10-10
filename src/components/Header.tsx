@@ -37,12 +37,12 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
             >
               Como Funciona
             </button>
-            <button
-              onClick={() => scrollToSection("planos")}
+            <a
+              href="/planos"
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-smooth"
             >
               Planos
-            </button>
+            </a>
             <button
               onClick={() => scrollToSection("faq")}
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-smooth"
