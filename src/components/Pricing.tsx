@@ -10,7 +10,7 @@ import { toast } from "sonner";
 const plans = {
   free: {
     name: "Gratuito",
-    description: "GPT-4o-mini",
+    description: "",
     features: [
       "Acesso à IA genérica",
       "Até 5 consultas por dia",
@@ -25,7 +25,7 @@ const plans = {
   },
   medical: {
     name: "Médico",
-    description: "GPT-4o",
+    description: "",
     features: [
       "Modelo especializado para médicos",
       "Consultas ilimitadas",
@@ -41,7 +41,7 @@ const plans = {
   },
   legal: {
     name: "Jurídico",
-    description: "GPT-4o",
+    description: "",
     features: [
       "Modelo especializado para juristas",
       "Consultas ilimitadas",
@@ -57,7 +57,7 @@ const plans = {
   },
   veterinary: {
     name: "Veterinário",
-    description: "GPT-4o",
+    description: "",
     features: [
       "Modelo especializado para veterinários",
       "Consultas ilimitadas",
@@ -73,7 +73,7 @@ const plans = {
   },
   specialist: {
     name: "Especialista",
-    description: "Todos os modelos",
+    description: "",
     features: [
       "Acesso aos 3 modelos (Médico + Jurídico + Veterinário)",
       "Consultas ilimitadas em todos",
@@ -210,7 +210,7 @@ const Pricing = () => {
           {Object.entries(plans).map(([key, plan]) => (
             <Card
               key={key}
-              className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative ${
+              className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
                 plan.popular ? "ring-2 ring-primary" : ""
               }`}
             >
@@ -225,13 +225,15 @@ const Pricing = () => {
                 <h3 className="text-lg sm:text-xl font-bold mb-2">
                   {plan.name}
                 </h3>
-                <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-                  {plan.description}
-                </p>
+                {plan.description && (
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
+                    {plan.description}
+                  </p>
+                )}
                 <div className="mb-4 sm:mb-6">{getDisplayPrice(plan)}</div>
               </CardHeader>
 
-              <CardContent className="flex flex-col h-full">
+              <CardContent className="flex flex-col flex-grow">
                 <ul className="space-y-2 sm:space-y-3 flex-grow mb-6">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-start gap-2">
