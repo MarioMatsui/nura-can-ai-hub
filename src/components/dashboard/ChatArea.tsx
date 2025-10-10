@@ -29,6 +29,7 @@ export const ChatArea = ({
 }: ChatAreaProps) => {
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelType>('generic');
+  const [isProcessing, setIsProcessing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,15 +52,22 @@ export const ChatArea = ({
     );
   };
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
+  const handleSend = async () => {
+    if (!inputValue.trim() || isProcessing) return;
     
     if (!hasAccess(selectedModel)) {
       return;
     }
 
-    onSendMessage(inputValue, selectedModel);
+    setIsProcessing(true);
+    const messageToSend = inputValue;
     setInputValue('');
+    
+    try {
+      await onSendMessage(messageToSend, selectedModel);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -167,6 +175,19 @@ export const ChatArea = ({
                 </div>
               </div>
             ))}
+            
+            {/* AI Processing Indicator */}
+            {isProcessing && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4 bg-muted">
+                  <div className="flex gap-1">
+                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </ScrollArea>
@@ -179,13 +200,13 @@ export const ChatArea = ({
             onKeyPress={handleKeyPress}
             placeholder="Digite sua pergunta..."
             className="min-h-[50px] sm:min-h-[60px] max-h-[120px] sm:max-h-[200px] text-sm sm:text-base"
-            disabled={!hasAccess(selectedModel)}
+            disabled={!hasAccess(selectedModel) || isProcessing}
           />
           <Button
             onClick={handleSend}
             size="icon"
             className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
-            disabled={!inputValue.trim() || !hasAccess(selectedModel)}
+            disabled={!inputValue.trim() || !hasAccess(selectedModel) || isProcessing}
           >
             <Send className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>

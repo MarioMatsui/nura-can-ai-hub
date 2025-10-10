@@ -188,23 +188,50 @@ const Dashboard = () => {
 
     setMessages([...messages, userMessage as Message]);
 
-    // TODO: Call AI API here and save response
-    // For now, just a placeholder response
-    setTimeout(async () => {
-      const { data: aiMessage } = await supabase
+    // Call AI API and save response
+    try {
+      const { data: aiData, error: aiError } = await supabase.functions.invoke('chat-ai', {
+        body: {
+          conversationId,
+          message: content,
+          modelType,
+        }
+      });
+
+      if (aiError) {
+        throw aiError;
+      }
+
+      if (!aiData?.response) {
+        throw new Error('No response from AI');
+      }
+
+      // Save AI response to database
+      const { data: aiMessage, error: aiMsgError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           role: 'assistant',
-          content: 'Esta é uma resposta temporária. A integração com a IA será implementada em breve.',
+          content: aiData.response,
         })
         .select()
         .single();
 
+      if (aiMsgError) {
+        throw aiMsgError;
+      }
+
       if (aiMessage) {
         setMessages(prev => [...prev, aiMessage as Message]);
       }
-    }, 1000);
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível obter resposta da IA. Tente novamente.',
+        variant: 'destructive',
+      });
+    }
   };
 
   if (loading) {
