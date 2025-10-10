@@ -10,12 +10,12 @@ import { toast } from "sonner";
 const plans = {
   free: {
     name: "Gratuito",
-    description: "Para conhecer a plataforma",
+    description: "GPT-4o-mini",
     features: [
-      "IA genérica (GPT-4o-mini)",
-      "Sem acesso a bancos especializados",
-      "Limite de 5 usos por dia",
-      "Suporte por e-mail",
+      "Acesso à IA genérica",
+      "Até 5 consultas por dia",
+      "Sem acesso a bancos de dados especializados",
+      "Respostas básicas",
     ],
     monthlyPrice: 0,
     annualPrice: 0,
@@ -25,12 +25,12 @@ const plans = {
   },
   medical: {
     name: "Médico",
-    description: "Para profissionais da medicina",
+    description: "GPT-4o",
     features: [
-      "IA especializada (GPT-4o)",
-      "Base de dados médica completa",
+      "Modelo especializado para médicos",
       "Consultas ilimitadas",
-      "Respostas baseadas em evidências",
+      "Acesso a banco de dados médico",
+      "Respostas baseadas em evidências científicas",
       "Suporte prioritário",
     ],
     monthlyPrice: 69.9,
@@ -41,12 +41,12 @@ const plans = {
   },
   legal: {
     name: "Jurídico",
-    description: "Para advogados e juristas",
+    description: "GPT-4o",
     features: [
-      "IA especializada (GPT-4o)",
-      "Base de dados jurídica completa",
+      "Modelo especializado para juristas",
       "Consultas ilimitadas",
-      "Legislação atualizada",
+      "Acesso a banco de dados jurídico",
+      "Informações sobre regulamentação",
       "Suporte prioritário",
     ],
     monthlyPrice: 69.9,
@@ -57,12 +57,12 @@ const plans = {
   },
   veterinary: {
     name: "Veterinário",
-    description: "Para médicos veterinários",
+    description: "GPT-4o",
     features: [
-      "IA especializada (GPT-4o)",
-      "Base de dados veterinária completa",
+      "Modelo especializado para veterinários",
       "Consultas ilimitadas",
-      "Tratamentos atualizados",
+      "Acesso a banco de dados veterinário",
+      "Evidências científicas em medicina veterinária",
       "Suporte prioritário",
     ],
     monthlyPrice: 69.9,
@@ -73,13 +73,13 @@ const plans = {
   },
   specialist: {
     name: "Especialista",
-    description: "Acesso completo a todos os modelos",
+    description: "Todos os modelos",
     features: [
-      "Todos os 3 modelos de IA (GPT-4o)",
-      "Acesso Médico + Jurídico + Veterinário",
-      "Todas as bases de dados",
-      "Consultas ilimitadas",
-      "Suporte premium 24/7",
+      "Acesso aos 3 modelos (Médico + Jurídico + Veterinário)",
+      "Consultas ilimitadas em todos",
+      "Todos os bancos de dados",
+      "Máxima flexibilidade profissional",
+      "Suporte VIP",
       "Melhor custo-benefício",
     ],
     monthlyPrice: 159.9,
@@ -115,28 +115,28 @@ const Pricing = () => {
       const monthlyEquivalent = plan.annualPrice / 12;
       return (
         <div className="flex flex-col items-center">
-        <div className="flex items-baseline gap-1">
-          <span className="text-2xl sm:text-3xl font-bold">
-            R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
-          </span>
-          <span className="text-sm sm:text-base text-muted-foreground">/mês</span>
-        </div>
-        <div className="text-xs text-muted-foreground mt-1">
-          <span className="line-through">
-            R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
-          </span>
-          {" • "}cobrado anualmente
-        </div>
+          <div className="flex flex-col items-center">
+            <span className="text-2xl sm:text-3xl font-bold">
+              R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
+            </span>
+            <span className="text-sm text-muted-foreground">/mês</span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            <span className="line-through">
+              R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
+            </span>
+            {" • "}cobrado anualmente
+          </div>
         </div>
       );
     }
     
     return (
-      <div className="flex items-baseline gap-1">
+      <div className="flex flex-col items-center">
         <span className="text-2xl sm:text-3xl font-bold">
           R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
         </span>
-        <span className="text-sm sm:text-base text-muted-foreground">/mês</span>
+        <span className="text-sm text-muted-foreground">/mês</span>
       </div>
     );
   };
@@ -231,8 +231,8 @@ const Pricing = () => {
                 <div className="mb-4 sm:mb-6">{getDisplayPrice(plan)}</div>
               </CardHeader>
 
-              <CardContent className="space-y-4 sm:space-y-6">
-                <ul className="space-y-2 sm:space-y-3">
+              <CardContent className="flex flex-col h-full">
+                <ul className="space-y-2 sm:space-y-3 flex-grow mb-6">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-start gap-2">
                       <Check className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0 mt-0.5" />
@@ -251,7 +251,7 @@ const Pricing = () => {
                   }`}
                   size="lg"
                 >
-                  {plan.monthlyPrice === 0 ? "Plano Atual" : "Assinar"}
+                  {plan.monthlyPrice === 0 ? "Começar Grátis" : "Assinar"}
                 </Button>
               </CardContent>
             </Card>
