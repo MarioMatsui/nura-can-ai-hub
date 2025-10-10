@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Check, Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const plans = {
   free: {
@@ -89,6 +92,21 @@ const plans = {
 
 const Pricing = () => {
   const [isAnnual, setIsAnnual] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Get current user ID
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const getDisplayPrice = (plan: typeof plans.medical) => {
     if (plan.monthlyPrice === 0) return "Grátis";
@@ -126,8 +144,23 @@ const Pricing = () => {
   const handleSubscribe = (plan: typeof plans.medical) => {
     if (plan.monthlyPrice === 0) return;
     
-    const link = isAnnual ? plan.annualLink : plan.monthlyLink;
-    window.open(link, "_blank");
+    // Check if user is logged in
+    if (!userId) {
+      toast.error('Você precisa estar logado para assinar um plano');
+      navigate('/auth/login');
+      return;
+    }
+
+    // Get the base payment link
+    const baseLink = isAnnual ? plan.annualLink : plan.monthlyLink;
+    
+    // Add user ID as external_reference
+    const paymentUrl = `${baseLink}?external_reference=${userId}`;
+    
+    console.log('Redirecting to payment with external_reference:', userId);
+    
+    // Redirect to payment page
+    window.location.href = paymentUrl;
   };
 
   return (
