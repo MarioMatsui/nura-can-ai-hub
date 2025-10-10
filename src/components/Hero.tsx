@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
-import heroImage from "@/assets/hero-bg.jpg";
 
 const Hero = () => {
   const scrollToPlans = () => {
@@ -10,15 +9,8 @@ const Hero = () => {
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
-      {/* Background with gradient overlay */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10" />
-        <img
-          src={heroImage}
-          alt="Medical Cannabis AI"
-          className="w-full h-full object-cover opacity-20"
-        />
-      </div>
+      {/* Minimalist gradient background */}
+      <div className="absolute inset-0 z-0 bg-gradient-to-br from-primary/5 via-background to-primary/10" />
 
       {/* Content */}
       <div className="container relative z-10 mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-32">
