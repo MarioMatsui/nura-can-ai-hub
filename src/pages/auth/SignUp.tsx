@@ -106,6 +106,23 @@ const SignUp = () => {
         return;
       }
 
+      // Add contact to Brevo
+      try {
+        await supabase.functions.invoke("add-brevo-contact", {
+          body: {
+            email: data.email,
+            fullName: data.fullName,
+            phone: data.phone || undefined,
+            birthDate: data.birthDate,
+            cpf: data.cpf,
+            crmCrv: data.crmCrv || undefined,
+          },
+        });
+      } catch (brevoError) {
+        console.error("Error adding contact to Brevo:", brevoError);
+        // Don't block signup if Brevo fails
+      }
+
       toast.success("Cadastro realizado com sucesso! Você já pode fazer login.");
       navigate("/auth/login");
     } catch (error: any) {

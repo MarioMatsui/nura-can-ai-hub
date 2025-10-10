@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.chat-ai]
 verify_jwt = true
+
+[functions.add-brevo-contact]
+verify_jwt = false
