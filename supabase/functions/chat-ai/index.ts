@@ -7,6 +7,41 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
+// Function to generate embeddings using OpenAI
+async function generateQueryEmbedding(text: string): Promise<number[]> {
+  const response = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-ada-002",
+      input: text,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("OpenAI Embedding API error:", await response.text());
+    throw new Error("Failed to generate embedding");
+  }
+
+  const data = await response.json();
+  return data.data[0].embedding;
+}
+
+// Map model types to knowledge base types
+function getKnowledgeType(modelType: string): string | null {
+  const mapping: Record<string, string> = {
+    "medical": "medical",
+    "legal": "legal",
+    "veterinary": "veterinary",
+  };
+  return mapping[modelType] || null;
+}
+
 const SYSTEM_PROMPTS = {
   generic: `Você é "NuraAI", um assistente de inteligência artificial especializado em cannabis medicinal, projetado exclusivamente para médicos, pesquisadores, juristas e médicos-veterinários.
 Sua base de conhecimento é composta por estudos científicos, ensaios clínicos, publicações revisadas por pares, normas regulatórias, pareceres jurídicos, e literatura técnico-veterinária relacionada ao uso da cannabis medicinal em humanos e animais.
@@ -194,18 +229,59 @@ serve(async (req) => {
       });
     }
 
+    // RAG: Retrieve relevant context if available
+    let ragContext = "";
+    const knowledgeType = getKnowledgeType(modelType);
+    
+    if (knowledgeType) {
+      try {
+        console.log(`Performing RAG search for knowledge type: ${knowledgeType}`);
+        
+        // Generate embedding for the user's question
+        const queryEmbedding = await generateQueryEmbedding(message);
+        
+        // Search for similar chunks in the knowledge base
+        const { data: similarChunks, error: searchError } = await supabase.rpc(
+          'search_similar_chunks',
+          {
+            query_embedding: queryEmbedding,
+            knowledge_type_filter: knowledgeType,
+            match_count: 3
+          }
+        );
+
+        if (searchError) {
+          console.error('Error searching knowledge base:', searchError);
+        } else if (similarChunks && similarChunks.length > 0) {
+          console.log(`Found ${similarChunks.length} relevant chunks`);
+          
+          // Build context from retrieved chunks
+          ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
+          similarChunks.forEach((chunk: any, index: number) => {
+            ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
+          });
+          ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
+        } else {
+          console.log('No relevant chunks found in knowledge base');
+        }
+      } catch (ragError) {
+        console.error('RAG error (continuing without context):', ragError);
+        // Continue without RAG context if there's an error
+      }
+    }
+
     // Determine model and system prompt
     const model = modelType === 'generic' ? 'gpt-4o-mini' : 'gpt-4o';
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
-    // Build messages array for OpenAI
+    // Build messages array for OpenAI with RAG context
     const openAIMessages = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: systemPrompt + ragContext },
       ...(messages || []).map((m: any) => ({ role: m.role, content: m.content })),
       { role: 'user', content: message }
     ];
 
-    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}`);
+    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}, RAG: ${ragContext ? 'Yes' : 'No'}`);
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
