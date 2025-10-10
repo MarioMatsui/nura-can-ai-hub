@@ -1,0 +1,240 @@
+import { useState } from "react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Check, Sparkles } from "lucide-react";
+
+const plans = {
+  free: {
+    name: "Gratuito",
+    description: "Para conhecer a plataforma",
+    features: [
+      "IA genérica (GPT-4o-mini)",
+      "Sem acesso a bancos especializados",
+      "Limite de 5 usos por dia",
+      "Suporte por e-mail",
+    ],
+    monthlyPrice: 0,
+    annualPrice: 0,
+    monthlyLink: "",
+    annualLink: "",
+    popular: false,
+  },
+  medical: {
+    name: "Médico",
+    description: "Para profissionais da medicina",
+    features: [
+      "IA especializada (GPT-4o)",
+      "Base de dados médica completa",
+      "Consultas ilimitadas",
+      "Respostas baseadas em evidências",
+      "Suporte prioritário",
+    ],
+    monthlyPrice: 69.9,
+    annualPrice: 718.8,
+    monthlyLink: "https://gateway.cannapag.com/pagamento/e68ce176-b2b0-4013-817c-a02d29419176",
+    annualLink: "https://gateway.cannapag.com/pagamento/0c4d0af3-b48d-4ed7-b59b-d8b76eb6e538",
+    popular: false,
+  },
+  legal: {
+    name: "Jurídico",
+    description: "Para advogados e juristas",
+    features: [
+      "IA especializada (GPT-4o)",
+      "Base de dados jurídica completa",
+      "Consultas ilimitadas",
+      "Legislação atualizada",
+      "Suporte prioritário",
+    ],
+    monthlyPrice: 69.9,
+    annualPrice: 718.8,
+    monthlyLink: "https://gateway.cannapag.com/pagamento/9dbfd8f1-3edf-46ed-a6d7-50de12176ed3",
+    annualLink: "https://gateway.cannapag.com/pagamento/ed2d1e63-4fb8-4cfb-9cb7-b26710ce979b",
+    popular: false,
+  },
+  veterinary: {
+    name: "Veterinário",
+    description: "Para médicos veterinários",
+    features: [
+      "IA especializada (GPT-4o)",
+      "Base de dados veterinária completa",
+      "Consultas ilimitadas",
+      "Tratamentos atualizados",
+      "Suporte prioritário",
+    ],
+    monthlyPrice: 69.9,
+    annualPrice: 718.8,
+    monthlyLink: "https://gateway.cannapag.com/pagamento/8a33c660-b08f-44b2-84d1-c5f9c907d912",
+    annualLink: "https://gateway.cannapag.com/pagamento/9b779179-68b7-4f03-9862-991a14c426f9",
+    popular: false,
+  },
+  specialist: {
+    name: "Especialista",
+    description: "Acesso completo a todos os modelos",
+    features: [
+      "Todos os 3 modelos de IA (GPT-4o)",
+      "Acesso Médico + Jurídico + Veterinário",
+      "Todas as bases de dados",
+      "Consultas ilimitadas",
+      "Suporte premium 24/7",
+      "Melhor custo-benefício",
+    ],
+    monthlyPrice: 159.9,
+    annualPrice: 1798.8,
+    monthlyLink: "https://gateway.cannapag.com/pagamento/4e8284a1-3f3d-4ac1-b7fb-aa1102922539",
+    annualLink: "https://gateway.cannapag.com/pagamento/9082ff5d-4283-441f-a395-2b045b746192",
+    popular: true,
+  },
+};
+
+const Pricing = () => {
+  const [isAnnual, setIsAnnual] = useState(false);
+
+  const getDisplayPrice = (plan: typeof plans.medical) => {
+    if (plan.monthlyPrice === 0) return "Grátis";
+    
+    if (isAnnual) {
+      const monthlyEquivalent = plan.annualPrice / 12;
+      return (
+        <div className="flex flex-col items-center">
+          <div className="flex items-baseline gap-1">
+            <span className="text-3xl sm:text-4xl font-bold">
+              R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
+            </span>
+            <span className="text-muted-foreground">/mês</span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            <span className="line-through">
+              R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
+            </span>
+            {" • "}cobrado anualmente
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-baseline gap-1">
+        <span className="text-3xl sm:text-4xl font-bold">
+          R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
+        </span>
+        <span className="text-muted-foreground">/mês</span>
+      </div>
+    );
+  };
+
+  const handleSubscribe = (plan: typeof plans.medical) => {
+    if (plan.monthlyPrice === 0) return;
+    
+    const link = isAnnual ? plan.annualLink : plan.monthlyLink;
+    window.open(link, "_blank");
+  };
+
+  return (
+    <section id="planos" className="py-20 sm:py-32">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto text-center mb-12 sm:mb-16">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6">
+            Escolha o Plano Ideal Para Você
+          </h2>
+          <p className="text-lg sm:text-xl text-muted-foreground mb-8">
+            Acesso especializado para cada área profissional
+          </p>
+
+          {/* Billing Toggle */}
+          <div className="inline-flex items-center gap-4 p-2 rounded-full bg-muted/50 border border-border">
+            <span
+              className={`px-4 py-2 rounded-full font-medium transition-smooth ${
+                !isAnnual
+                  ? "bg-background text-foreground shadow-card"
+                  : "text-muted-foreground"
+              }`}
+            >
+              Mensal
+            </span>
+            <Switch
+              checked={isAnnual}
+              onCheckedChange={setIsAnnual}
+              className="data-[state=checked]:bg-primary"
+            />
+            <span
+              className={`px-4 py-2 rounded-full font-medium transition-smooth flex items-center gap-2 ${
+                isAnnual
+                  ? "bg-background text-foreground shadow-card"
+                  : "text-muted-foreground"
+              }`}
+            >
+              Anual
+              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                -14%
+              </span>
+            </span>
+          </div>
+        </div>
+
+        {/* Plans Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 lg:gap-8">
+          {Object.entries(plans).map(([key, plan]) => (
+            <Card
+              key={key}
+              className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative ${
+                plan.popular ? "ring-2 ring-primary" : ""
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-primary-foreground rounded-full text-sm font-semibold flex items-center gap-1 shadow-glow">
+                  <Sparkles className="w-3 h-3" />
+                  Mais Popular
+                </div>
+              )}
+
+              <CardHeader className="pb-6">
+                <h3 className="text-xl sm:text-2xl font-bold mb-2">
+                  {plan.name}
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {plan.description}
+                </p>
+                <div className="mb-6">{getDisplayPrice(plan)}</div>
+              </CardHeader>
+
+              <CardContent className="space-y-6">
+                <ul className="space-y-3">
+                  {plan.features.map((feature, index) => (
+                    <li key={index} className="flex items-start gap-2">
+                      <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                      <span className="text-sm">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <Button
+                  onClick={() => handleSubscribe(plan)}
+                  disabled={plan.monthlyPrice === 0}
+                  className={`w-full font-semibold transition-smooth ${
+                    plan.popular
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
+                      : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                  }`}
+                  size="lg"
+                >
+                  {plan.monthlyPrice === 0 ? "Plano Atual" : "Assinar"}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Additional Info */}
+        <div className="mt-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            Todos os planos incluem 7 dias de garantia de reembolso • Cancele a
+            qualquer momento
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default Pricing;
