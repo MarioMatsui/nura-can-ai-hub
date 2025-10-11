@@ -23,14 +23,13 @@ const Hero = () => {
 
           {/* Main Heading */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 sm:mb-8 leading-tight">
-            A IA Especialista em <span className="text-primary">C/\NN/\BIS Medicinal</span> para Profissionais de
-            Diversas Áreas!
+            A IA Especialista em <span className="text-primary">C/\NN/\BIS Medicinal</span> mais completa do Mundo!
           </h1>
 
           {/* Subtitle */}
           <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed">
             Consulte uma base de conhecimento científico global, obtenha respostas baseadas em evidências e acelere suas
-            pesquisas.
+            pesquisas. Feito para médicos, veterinários e advogados.
           </p>
 
           {/* CTA Button */}
