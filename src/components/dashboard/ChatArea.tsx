@@ -104,8 +104,8 @@ export const ChatArea = ({
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
-      <div className="p-3 sm:p-4 border-b border-border">
-        <div className="flex items-center gap-3 mb-3 sm:mb-4">
+      <div className="p-3 border-b border-border">
+        <div className="flex items-center gap-3 mb-3">
           <Button
             variant="ghost"
             size="icon"
@@ -149,9 +149,9 @@ export const ChatArea = ({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 p-3 sm:p-4" ref={scrollRef}>
+      <ScrollArea className="flex-1 p-3" ref={scrollRef}>
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
+          <div className="flex flex-col items-center justify-center h-full text-center px-3">
             {currentConversation ? (
               <div className="text-muted-foreground">
                 <p className="text-base sm:text-lg mb-2">
@@ -208,7 +208,7 @@ export const ChatArea = ({
         )}
       </ScrollArea>
 
-      <div className="p-2 sm:p-4 border-t border-border">
+      <div className="p-3 border-t border-border">
         <div className="flex gap-2 max-w-4xl mx-auto">
           <Textarea
             value={inputValue}
