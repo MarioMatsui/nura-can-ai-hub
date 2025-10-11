@@ -1,8 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Lock, Menu } from 'lucide-react';
+import { Send, Lock, Menu, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Message, UserSubscription, Conversation } from '@/pages/Dashboard';
 import { cn, formatMarkdown } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -93,15 +99,22 @@ export const ChatArea = ({
     }
   };
 
-  const models: { type: ModelType; label: string; description: string }[] = [
-    { type: 'generic', label: 'Genérico', description: 'IA básica' },
-    { type: 'medical', label: 'Médico', description: 'Especializado em cannabis medicinal' },
-    { type: 'legal', label: 'Jurídico', description: 'Especializado em leis e regulações' },
-    { type: 'veterinary', label: 'Veterinário', description: 'Especializado em uso veterinário' },
-    { type: 'specialist', label: 'Especialista', description: 'Acesso completo a todas as áreas' },
+  const models: { 
+    type: ModelType; 
+    label: string; 
+    description: string;
+    icon: typeof Sparkles;
+  }[] = [
+    { type: 'generic', label: 'Genérico', description: 'IA básica', icon: Sparkles },
+    { type: 'medical', label: 'Médico', description: 'Especializado em cannabis medicinal', icon: Stethoscope },
+    { type: 'legal', label: 'Jurídico', description: 'Especializado em leis e regulações', icon: Scale },
+    { type: 'veterinary', label: 'Veterinário', description: 'Especializado em uso veterinário', icon: PawPrint },
+    { type: 'specialist', label: 'Especialista', description: 'Acesso completo a todas as áreas', icon: GraduationCap },
   ];
 
   const userName = profile?.full_name?.split(' ')[0] || 'Doutor(a)';
+  const selectedModelData = models.find(m => m.type === selectedModel);
+  const SelectedIcon = selectedModelData?.icon || Sparkles;
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
@@ -118,36 +131,57 @@ export const ChatArea = ({
           <h1 className="text-xl sm:text-2xl font-bold">Nura AI</h1>
         </div>
         
-        <div className="flex gap-1.5 sm:gap-2 flex-wrap">
-          {models.map((model) => {
-            const accessible = hasAccess(model.type);
-            const isSelected = selectedModel === model.type;
-            
-            // Hide generic model if user has any subscription
-            if (model.type === 'generic' && subscriptions.length > 1) {
-              return null;
-            }
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full sm:w-auto justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <SelectedIcon className="h-4 w-4" />
+                <span>{selectedModelData?.label}</span>
+              </div>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-[280px] bg-background z-50">
+            {models.map((model) => {
+              const accessible = hasAccess(model.type);
+              const isSelected = selectedModel === model.type;
+              const ModelIcon = model.icon;
+              
+              // Hide generic model if user has paid subscription
+              if (model.type === 'generic' && subscriptions.some(sub => sub.plan_type !== 'free' && sub.status === 'active')) {
+                return null;
+              }
 
-            return (
-              <Button
-                key={model.type}
-                onClick={() => accessible && setSelectedModel(model.type)}
-                variant={isSelected ? 'default' : 'outline'}
-                size="sm"
-                className={cn(
-                  'relative text-xs sm:text-sm px-2 sm:px-3',
-                  !accessible && 'opacity-50 cursor-not-allowed'
-                )}
-                disabled={!accessible}
-              >
-                <span className="truncate">{model.label}</span>
-                {!accessible && (
-                  <Lock className="ml-1 sm:ml-2 h-3 w-3 text-purple-500 flex-shrink-0" />
-                )}
-              </Button>
-            );
-          })}
-        </div>
+              return (
+                <DropdownMenuItem
+                  key={model.type}
+                  onClick={() => accessible && setSelectedModel(model.type)}
+                  disabled={!accessible}
+                  className={cn(
+                    'flex items-center gap-3 cursor-pointer py-3 px-3',
+                    !accessible && 'opacity-50 cursor-not-allowed',
+                    isSelected && 'bg-accent'
+                  )}
+                >
+                  <ModelIcon className={cn(
+                    "h-5 w-5 flex-shrink-0",
+                    isSelected && "text-primary"
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{model.label}</span>
+                      {isSelected && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{model.description}</p>
+                  </div>
+                  {!accessible && (
+                    <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ScrollArea className="flex-1 p-3" ref={scrollRef}>
