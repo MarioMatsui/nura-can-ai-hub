@@ -27,11 +27,21 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Adding contact to Brevo:", email);
 
-    const brevoPayload = {
+    const brevoPayload: {
+      email: string;
+      attributes: {
+        contato: string;
+        nascimento: string;
+        CPF: string;
+        CRM?: string;
+        sms?: string;
+      };
+      listIds: number[];
+      updateEnabled: boolean;
+    } = {
       email,
       attributes: {
         contato: fullName,
-        ...(phone && { sms: phone }),
         nascimento: birthDate,
         CPF: cpf,
         ...(crmCrv && { CRM: crmCrv }),
@@ -39,6 +49,15 @@ const handler = async (req: Request): Promise<Response> => {
       listIds: [BREVO_LIST_ID],
       updateEnabled: true, // Update contact if already exists
     };
+
+    // Only add phone if it's provided and in a valid format
+    if (phone && phone.trim() !== '') {
+      // Remove all non-digit characters and add +55 prefix for Brazil
+      const cleanPhone = phone.replace(/\D/g, '');
+      if (cleanPhone.length >= 10) {
+        brevoPayload.attributes.sms = `+55${cleanPhone}`;
+      }
+    }
 
     const response = await fetch("https://api.brevo.com/v3/contacts", {
       method: "POST",
