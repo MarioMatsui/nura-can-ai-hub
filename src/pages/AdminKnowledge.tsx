@@ -126,41 +126,48 @@ const AdminKnowledge = () => {
 
     setIsUploading(true);
     try {
-      let filePath = null;
       let extractedText = content;
 
-      // Upload file to storage if provided
-      if (selectedFile) {
-        const fileExt = selectedFile.name.split('.').pop();
-        const uniqueFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-        filePath = `${knowledgeType}/${uniqueFileName}`;
+      // If PDF, convert to base64 and parse locally
+      if (selectedFile && selectedFile.name.endsWith('.pdf')) {
+        toast.info("Extraindo texto do PDF (isso pode levar alguns minutos)...");
+        
+        // Read file as base64
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            // Remove data URL prefix
+            const base64Data = result.split(',')[1];
+            resolve(base64Data);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(selectedFile);
+        });
 
-        const { error: uploadError } = await supabase.storage
-          .from('knowledge-documents')
-          .upload(filePath, selectedFile);
+        // Call document parsing function
+        const { data: parseData, error: parseError } = await supabase.functions.invoke("parse-pdf-content", {
+          body: { 
+            fileContent: base64,
+            fileName: selectedFile.name 
+          },
+        });
 
-        if (uploadError) throw uploadError;
-
-        // If PDF, extract text using parse-document edge function
-        if (selectedFile.name.endsWith('.pdf')) {
-          toast.info("Extraindo texto do PDF...");
-          
-          const { data: parseData, error: parseError } = await supabase.functions.invoke("parse-pdf", {
-            body: { filePath },
-          });
-
-          if (parseError) {
-            console.error("Error parsing PDF:", parseError);
-            throw new Error("Erro ao extrair texto do PDF");
-          }
-
-          extractedText = parseData.text;
-          toast.success("Texto extraído do PDF!");
+        if (parseError) {
+          console.error("Error parsing PDF:", parseError);
+          throw new Error("Erro ao extrair texto do PDF. Tente converter para .txt primeiro.");
         }
+
+        if (!parseData || !parseData.text || parseData.text.length < 100) {
+          throw new Error("Não foi possível extrair texto suficiente do PDF. Tente converter para .txt primeiro.");
+        }
+
+        extractedText = parseData.text;
+        toast.success("Texto extraído com sucesso!");
       }
 
       if (!extractedText || extractedText.trim().length < 50) {
-        throw new Error("Não foi possível extrair texto suficiente do documento");
+        throw new Error("O conteúdo deve ter pelo menos 50 caracteres de texto válido");
       }
 
       // Insert document
@@ -171,7 +178,7 @@ const AdminKnowledge = () => {
           file_name: fileName || "manual-entry.txt",
           content: extractedText.trim(),
           knowledge_type: knowledgeType,
-          file_path: filePath,
+          file_path: null, // Don't save file path since we're extracting text
         })
         .select()
         .single();
@@ -199,7 +206,7 @@ const AdminKnowledge = () => {
       setSelectedFile(null);
       loadDocuments();
     } catch (error: any) {
-      toast.error("Erro ao enviar documento: " + error.message);
+      toast.error("Erro: " + error.message);
     } finally {
       setIsUploading(false);
     }
