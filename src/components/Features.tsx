@@ -10,17 +10,17 @@ const features = [
   {
     icon: Heart,
     title: "Assistência Veterinária com IA",
-    description: "Orientações para tratamentos veterinários com C/\NN/\BIS medicinal",
+    description: "Orientações para tratamentos veterinários com CαNNαBIS medicinal",
   },
   {
     icon: Scale,
     title: "Assistência Jurídica com IA",
-    description: "Informações legais e regulatórias sobre C/\NN/\BIS medicinal",
+    description: "Informações legais e regulatórias sobre CαNNαBIS medicinal",
   },
   {
     icon: MessageSquare,
     title: "Chat Inteligente Especializado",
-    description: "Conversas contextualizadas com IA treinada em C/\NN/\BIS medicinal",
+    description: "Conversas contextualizadas com IA treinada em CαNNαBIS medicinal",
   },
   {
     icon: Laptop,
