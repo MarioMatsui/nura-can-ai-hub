@@ -72,7 +72,7 @@ const plans = {
     name: "Especialista",
     description: "",
     features: [
-      "Acesso aos 3 modelos (Médico + Jurídico + Veterinário)",
+      "Modelo especializado completo (contempla Médico, Jurídico e Veterinário)",
       "Consultas ilimitadas em todos",
       "Todos os bancos de dados",
       "Máxima flexibilidade profissional",
