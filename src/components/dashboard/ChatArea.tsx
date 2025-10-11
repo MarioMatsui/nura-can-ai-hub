@@ -115,6 +115,11 @@ export const ChatArea = ({
   const userName = profile?.full_name?.split(' ')[0] || 'Doutor(a)';
   const selectedModelData = models.find(m => m.type === selectedModel);
   const SelectedIcon = selectedModelData?.icon || Sparkles;
+  
+  // Check if user has any active paid subscription
+  const hasActivePaidPlan = subscriptions.some(
+    sub => sub.plan_type !== 'free' && sub.status === 'active'
+  );
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
@@ -147,8 +152,8 @@ export const ChatArea = ({
               const isSelected = selectedModel === model.type;
               const ModelIcon = model.icon;
               
-              // Hide generic model if user has paid subscription
-              if (model.type === 'generic' && subscriptions.some(sub => sub.plan_type !== 'free' && sub.status === 'active')) {
+              // Hide generic model if user has any active paid subscription
+              if (model.type === 'generic' && hasActivePaidPlan) {
                 return null;
               }
 
