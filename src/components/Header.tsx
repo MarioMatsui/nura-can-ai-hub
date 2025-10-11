@@ -94,7 +94,7 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
                 </Button>
                 <Button
                   size="lg"
-                  onClick={() => navigate("/auth/signup")}
+                  onClick={() => navigate("/planos")}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth text-sm sm:text-base px-3 sm:px-6"
                 >
                   Assine Agora
