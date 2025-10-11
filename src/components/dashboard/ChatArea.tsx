@@ -123,7 +123,7 @@ export const ChatArea = ({
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
-      <div className="p-3 border-b border-border">
+      <div className="p-3 border-b border-border min-h-[120px]">
         <div className="flex items-center gap-3 mb-3">
           <Button
             variant="ghost"
@@ -138,7 +138,7 @@ export const ChatArea = ({
         
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto justify-between gap-2">
+            <Button variant="outline" className="w-full sm:w-auto justify-between gap-2 h-10">
               <div className="flex items-center gap-2">
                 <SelectedIcon className="h-4 w-4" />
                 <span>{selectedModelData?.label}</span>
