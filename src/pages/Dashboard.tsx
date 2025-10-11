@@ -134,6 +134,65 @@ const Dashboard = () => {
     setMessages([]);
   };
 
+  const handleRenameConversation = async (conversationId: string, newTitle: string) => {
+    const { error } = await supabase
+      .from('conversations')
+      .update({ title: newTitle })
+      .eq('id', conversationId);
+
+    if (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível renomear a conversa',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Update local state
+    setConversations(conversations.map(conv => 
+      conv.id === conversationId ? { ...conv, title: newTitle } : conv
+    ));
+    
+    if (currentConversation?.id === conversationId) {
+      setCurrentConversation({ ...currentConversation, title: newTitle });
+    }
+
+    toast({
+      title: 'Sucesso',
+      description: 'Conversa renomeada com sucesso',
+    });
+  };
+
+  const handleDeleteConversation = async (conversationId: string) => {
+    const { error } = await supabase
+      .from('conversations')
+      .delete()
+      .eq('id', conversationId);
+
+    if (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível deletar a conversa',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Update local state
+    setConversations(conversations.filter(conv => conv.id !== conversationId));
+    
+    if (currentConversation?.id === conversationId) {
+      setCurrentConversation(null);
+      setMessages([]);
+    }
+
+    toast({
+      title: 'Sucesso',
+      description: 'Conversa deletada com sucesso',
+    });
+  };
+
   const handleSendMessage = async (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary') => {
     if (!user) return;
 
@@ -271,6 +330,8 @@ const Dashboard = () => {
           currentConversation={currentConversation}
           onSelectConversation={handleSelectConversation}
           onNewConversation={handleNewConversation}
+          onRenameConversation={handleRenameConversation}
+          onDeleteConversation={handleDeleteConversation}
         />
       </div>
 
@@ -280,6 +341,8 @@ const Dashboard = () => {
         currentConversation={currentConversation}
         onSelectConversation={handleSelectConversation}
         onNewConversation={handleNewConversation}
+        onRenameConversation={handleRenameConversation}
+        onDeleteConversation={handleDeleteConversation}
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
       />

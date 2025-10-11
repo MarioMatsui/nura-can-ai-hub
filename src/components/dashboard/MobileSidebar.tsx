@@ -9,6 +9,8 @@ interface MobileSidebarProps {
   currentConversation: Conversation | null;
   onSelectConversation: (conversation: Conversation) => void;
   onNewConversation: () => void;
+  onRenameConversation: (conversationId: string, newTitle: string) => void;
+  onDeleteConversation: (conversationId: string) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -18,6 +20,8 @@ export const MobileSidebar = ({
   currentConversation,
   onSelectConversation,
   onNewConversation,
+  onRenameConversation,
+  onDeleteConversation,
   open,
   onOpenChange,
 }: MobileSidebarProps) => {
@@ -29,6 +33,8 @@ export const MobileSidebar = ({
           currentConversation={currentConversation}
           onSelectConversation={onSelectConversation}
           onNewConversation={onNewConversation}
+          onRenameConversation={onRenameConversation}
+          onDeleteConversation={onDeleteConversation}
         />
       </SheetContent>
     </Sheet>
