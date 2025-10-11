@@ -198,8 +198,8 @@ const Pricing = () => {
               }`}
             >
               Anual
-              <span className="text-xs bg-primary/10 text-primary px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full">
-                -14%
+              <span className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full" style={{ backgroundColor: 'rgba(149, 199, 0, 0.1)', color: '#95c700' }}>
+                -30%
               </span>
             </span>
           </div>
