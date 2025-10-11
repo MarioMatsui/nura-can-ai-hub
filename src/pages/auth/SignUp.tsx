@@ -108,7 +108,8 @@ const SignUp = () => {
 
       // Add contact to Brevo
       try {
-        await supabase.functions.invoke("add-brevo-contact", {
+        console.log("Enviando contato para Brevo:", data.email);
+        const { data: brevoData, error: brevoError } = await supabase.functions.invoke("add-brevo-contact", {
           body: {
             email: data.email,
             fullName: data.fullName,
@@ -118,8 +119,14 @@ const SignUp = () => {
             crmCrv: data.crmCrv || undefined,
           },
         });
+
+        if (brevoError) {
+          console.error("Erro ao adicionar contato na Brevo:", brevoError);
+        } else {
+          console.log("Contato adicionado na Brevo com sucesso:", brevoData);
+        }
       } catch (brevoError) {
-        console.error("Error adding contact to Brevo:", brevoError);
+        console.error("Exceção ao adicionar contato na Brevo:", brevoError);
         // Don't block signup if Brevo fails
       }
 
