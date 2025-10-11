@@ -138,7 +138,7 @@ export const ChatArea = ({
         
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-full sm:w-auto justify-between gap-2 h-10">
+            <Button variant="outline" className="w-full sm:w-64 justify-between gap-2 h-10">
               <div className="flex items-center gap-2">
                 <SelectedIcon className="h-4 w-4" />
                 <span>{selectedModelData?.label}</span>
