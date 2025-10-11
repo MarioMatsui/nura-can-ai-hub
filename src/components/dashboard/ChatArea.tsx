@@ -123,8 +123,8 @@ export const ChatArea = ({
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
-      <div className="p-3 border-b border-border min-h-[120px]">
-        <div className="flex items-center gap-3 mb-3">
+      <div className="p-3 pb-2 border-b border-border flex flex-col justify-end min-h-[100px]">
+        <div className="flex items-center gap-3 mb-2">
           <Button
             variant="ghost"
             size="icon"

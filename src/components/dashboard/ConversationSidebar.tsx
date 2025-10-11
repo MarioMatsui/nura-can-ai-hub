@@ -83,8 +83,8 @@ export const ConversationSidebar = ({
 
   return (
     <div className="w-full lg:w-64 h-full border-r border-border bg-card flex flex-col">
-      <div className="p-3 border-b border-border min-h-[120px]">
-        <h2 className="text-base sm:text-lg font-semibold mb-3">Histórico de Consultas</h2>
+      <div className="p-3 pb-2 border-b border-border flex flex-col justify-end min-h-[100px]">
+        <h2 className="text-base sm:text-lg font-semibold mb-2">Histórico de Consultas</h2>
         <Button
           onClick={onNewConversation}
           className="w-full h-10"
