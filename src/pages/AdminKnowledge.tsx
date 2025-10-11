@@ -89,9 +89,9 @@ const AdminKnowledge = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Accept both PDF and TXT files
-    if (!file.name.endsWith('.pdf') && !file.name.endsWith('.txt')) {
-      toast.error("Por favor, envie apenas arquivos PDF ou TXT");
+    // Accept only TXT files
+    if (!file.name.endsWith('.txt')) {
+      toast.error("Por favor, envie apenas arquivos TXT. Converta PDFs para TXT antes de fazer upload.");
       e.target.value = '';
       return;
     }
@@ -99,17 +99,12 @@ const AdminKnowledge = () => {
     setFileName(file.name);
     setSelectedFile(file);
     
-    // For text files, read the content immediately
-    if (file.name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setContent(event.target?.result as string);
-      };
-      reader.readAsText(file, 'UTF-8');
-    } else {
-      // For PDFs, clear content - will be extracted on server
-      setContent("");
-    }
+    // Read the content immediately
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setContent(event.target?.result as string);
+    };
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -126,45 +121,7 @@ const AdminKnowledge = () => {
 
     setIsUploading(true);
     try {
-      let extractedText = content;
-
-      // If PDF, convert to base64 and parse locally
-      if (selectedFile && selectedFile.name.endsWith('.pdf')) {
-        toast.info("Extraindo texto do PDF (isso pode levar alguns minutos)...");
-        
-        // Read file as base64
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            // Remove data URL prefix
-            const base64Data = result.split(',')[1];
-            resolve(base64Data);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(selectedFile);
-        });
-
-        // Call document parsing function
-        const { data: parseData, error: parseError } = await supabase.functions.invoke("parse-pdf-content", {
-          body: { 
-            fileContent: base64,
-            fileName: selectedFile.name 
-          },
-        });
-
-        if (parseError) {
-          console.error("Error parsing PDF:", parseError);
-          throw new Error("Erro ao extrair texto do PDF. Tente converter para .txt primeiro.");
-        }
-
-        if (!parseData || !parseData.text || parseData.text.length < 100) {
-          throw new Error("Não foi possível extrair texto suficiente do PDF. Tente converter para .txt primeiro.");
-        }
-
-        extractedText = parseData.text;
-        toast.success("Texto extraído com sucesso!");
-      }
+      const extractedText = content;
 
       if (!extractedText || extractedText.trim().length < 50) {
         throw new Error("O conteúdo deve ter pelo menos 50 caracteres de texto válido");
@@ -291,7 +248,7 @@ const AdminKnowledge = () => {
                   <Input
                     id="file"
                     type="file"
-                    accept=".txt,.pdf"
+                    accept=".txt"
                     onChange={handleFileUpload}
                   />
                   {fileName && (
@@ -300,22 +257,20 @@ const AdminKnowledge = () => {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Arquivos PDF e TXT aceitos (até 50 páginas para PDF, máx 10MB)
+                    Apenas arquivos TXT aceitos (máx 10MB). Converta PDFs para TXT antes de fazer upload.
                   </p>
                 </div>
 
-                {(!selectedFile || selectedFile.name.endsWith('.txt')) && (
-                  <div>
-                    <Label htmlFor="content">Conteúdo do Documento</Label>
-                    <Textarea
-                      id="content"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      placeholder="Cole ou digite o conteúdo do documento aqui..."
-                      rows={10}
-                    />
-                  </div>
-                )}
+                <div>
+                  <Label htmlFor="content">Conteúdo do Documento</Label>
+                  <Textarea
+                    id="content"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Cole ou digite o conteúdo do documento aqui..."
+                    rows={10}
+                  />
+                </div>
 
                 <Button
                   type="submit"
