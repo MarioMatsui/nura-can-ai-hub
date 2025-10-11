@@ -42,7 +42,7 @@ export const ConversationSidebar = ({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-1 sm:p-2 space-y-1">
+        <div className="p-2">
           {conversations.length === 0 ? (
             <div className="text-center text-muted-foreground py-8 px-3 sm:px-4 text-sm">
               Nenhuma conversa ainda.
@@ -55,12 +55,12 @@ export const ConversationSidebar = ({
                 key={conversation.id}
                 onClick={() => onSelectConversation(conversation)}
                 className={cn(
-                  'w-full text-left p-2 sm:p-3 rounded-lg transition-colors',
+                  'w-full text-left p-2.5 rounded-lg transition-colors mb-1',
                   'hover:bg-accent active:bg-accent',
                   currentConversation?.id === conversation.id && 'bg-accent'
                 )}
               >
-                <div className="font-medium text-sm mb-1 line-clamp-2">
+                <div className="font-medium text-sm mb-0.5 line-clamp-2">
                   {conversation.title}
                 </div>
                 <div className="text-xs text-muted-foreground flex items-center justify-between">
