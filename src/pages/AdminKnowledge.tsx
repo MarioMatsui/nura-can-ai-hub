@@ -41,6 +41,7 @@ const AdminKnowledge = () => {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [fileName, setFileName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   useEffect(() => {
     checkAdmin();
@@ -88,45 +89,77 @@ const AdminKnowledge = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check if file is a text file
-    if (!file.name.endsWith('.txt')) {
-      toast.error("Por favor, envie apenas arquivos de texto (.txt). PDFs serão suportados em breve.");
+    // Accept both PDF and TXT files
+    if (!file.name.endsWith('.pdf') && !file.name.endsWith('.txt')) {
+      toast.error("Por favor, envie apenas arquivos PDF ou TXT");
       e.target.value = '';
       return;
     }
 
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setContent(event.target?.result as string);
-    };
-    reader.readAsText(file, 'UTF-8');
+    setSelectedFile(file);
+    
+    // For text files, read the content
+    if (file.name.endsWith('.txt')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setContent(event.target?.result as string);
+      };
+      reader.readAsText(file, 'UTF-8');
+    } else {
+      // For PDFs, we'll extract text on the server
+      setContent(""); // Clear content field for PDFs
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !content) {
-      toast.error("Preencha todos os campos obrigatórios");
+    if (!title) {
+      toast.error("Preencha o título do documento");
+      return;
+    }
+
+    if (!selectedFile && !content) {
+      toast.error("Adicione um arquivo ou digite o conteúdo");
       return;
     }
 
     setIsUploading(true);
     try {
+      let filePath = null;
+      let documentContent = content;
+
+      // Upload file to storage if provided
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const uniqueFileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        filePath = `${knowledgeType}/${uniqueFileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('knowledge-documents')
+          .upload(filePath, selectedFile);
+
+        if (uploadError) throw uploadError;
+
+        toast.success("Arquivo enviado com sucesso!");
+      }
+
       // Insert document
       const { data: document, error: insertError } = await supabase
         .from("knowledge_documents")
         .insert({
           title,
           file_name: fileName || "manual-entry.txt",
-          content,
+          content: documentContent,
           knowledge_type: knowledgeType,
+          file_path: filePath,
         })
         .select()
         .single();
 
       if (insertError) throw insertError;
 
-      toast.success("Documento enviado! Processando embeddings...");
+      toast.success("Documento salvo! Processando...");
 
       // Process document to create embeddings
       const { error: processError } = await supabase.functions.invoke("process-document", {
@@ -144,6 +177,7 @@ const AdminKnowledge = () => {
       setTitle("");
       setContent("");
       setFileName("");
+      setSelectedFile(null);
       loadDocuments();
     } catch (error: any) {
       toast.error("Erro ao enviar documento: " + error.message);
@@ -227,11 +261,11 @@ const AdminKnowledge = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="file">Arquivo (opcional)</Label>
+                  <Label htmlFor="file">Arquivo</Label>
                   <Input
                     id="file"
                     type="file"
-                    accept=".txt"
+                    accept=".txt,.pdf"
                     onChange={handleFileUpload}
                   />
                   {fileName && (
@@ -240,20 +274,22 @@ const AdminKnowledge = () => {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Apenas arquivos de texto (.txt) são aceitos no momento
+                    Arquivos PDF e TXT são aceitos (máx 50MB)
                   </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="content">Conteúdo do Documento</Label>
-                  <Textarea
-                    id="content"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Cole ou digite o conteúdo do documento aqui..."
-                    rows={10}
-                  />
-                </div>
+                {!selectedFile?.name.endsWith('.pdf') && (
+                  <div>
+                    <Label htmlFor="content">Conteúdo do Documento</Label>
+                    <Textarea
+                      id="content"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Cole ou digite o conteúdo do documento aqui..."
+                      rows={10}
+                    />
+                  </div>
+                )}
 
                 <Button
                   type="submit"

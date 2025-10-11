@@ -81,6 +81,7 @@ export type Database = {
           content: string
           created_at: string
           file_name: string
+          file_path: string | null
           id: string
           knowledge_type: Database["public"]["Enums"]["knowledge_base_type"]
           metadata: Json | null
@@ -91,6 +92,7 @@ export type Database = {
           content: string
           created_at?: string
           file_name: string
+          file_path?: string | null
           id?: string
           knowledge_type: Database["public"]["Enums"]["knowledge_base_type"]
           metadata?: Json | null
@@ -101,6 +103,7 @@ export type Database = {
           content?: string
           created_at?: string
           file_name?: string
+          file_path?: string | null
           id?: string
           knowledge_type?: Database["public"]["Enums"]["knowledge_base_type"]
           metadata?: Json | null

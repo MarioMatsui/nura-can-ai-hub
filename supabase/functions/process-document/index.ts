@@ -77,10 +77,46 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error(`Document not found: ${docError?.message}`);
     }
 
+    let textContent = document.content;
+
+    // If there's a PDF file, extract text from it
+    if (document.file_path && document.file_path.endsWith('.pdf')) {
+      console.log("PDF detected, downloading and extracting text...");
+      
+      const { data: fileData, error: downloadError } = await supabaseClient
+        .storage
+        .from("knowledge-documents")
+        .download(document.file_path);
+
+      if (downloadError || !fileData) {
+        throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+      }
+
+      // For PDF extraction, we'll use a simple approach
+      // In production, you might want to use a dedicated PDF parsing library
+      const arrayBuffer = await fileData.arrayBuffer();
+      const text = new TextDecoder().decode(arrayBuffer);
+      
+      // Simple extraction - in production use proper PDF parser
+      textContent = text.replace(/[^\x20-\x7E\n]/g, ' ').trim();
+      
+      // Update document with extracted content
+      await supabaseClient
+        .from("knowledge_documents")
+        .update({ content: textContent })
+        .eq("id", documentId);
+      
+      console.log("PDF text extracted, length:", textContent.length);
+    }
+
+    if (!textContent || textContent.length < 10) {
+      throw new Error("No valid text content found in document");
+    }
+
     console.log("Document found, splitting into chunks...");
 
     // Split document into chunks
-    const chunks = splitIntoChunks(document.content);
+    const chunks = splitIntoChunks(textContent);
     console.log(`Created ${chunks.length} chunks`);
 
     // Process each chunk
