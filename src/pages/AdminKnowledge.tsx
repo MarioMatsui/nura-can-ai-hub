@@ -88,12 +88,19 @@ const AdminKnowledge = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Check if file is a text file
+    if (!file.name.endsWith('.txt')) {
+      toast.error("Por favor, envie apenas arquivos de texto (.txt). PDFs serão suportados em breve.");
+      e.target.value = '';
+      return;
+    }
+
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (event) => {
       setContent(event.target?.result as string);
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -224,7 +231,7 @@ const AdminKnowledge = () => {
                   <Input
                     id="file"
                     type="file"
-                    accept=".txt,.pdf,.doc,.docx"
+                    accept=".txt"
                     onChange={handleFileUpload}
                   />
                   {fileName && (
@@ -232,6 +239,9 @@ const AdminKnowledge = () => {
                       Arquivo: {fileName}
                     </p>
                   )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Apenas arquivos de texto (.txt) são aceitos no momento
+                  </p>
                 </div>
 
                 <div>
