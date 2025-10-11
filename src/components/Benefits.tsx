@@ -14,14 +14,14 @@ const benefits = [
     title: "Economia de Tempo em Pesquisa",
     description:
       "Encontre informações relevantes em segundos ao invés de horas de busca em bases de dados e literatura científica.",
-    gradient: "from-secondary/20 to-secondary/5",
+    gradient: "from-primary/20 to-secondary/5",
   },
   {
     icon: Shield,
     title: "Segurança e Conformidade",
     description:
       "Informações alinhadas com regulamentações locais e internacionais, garantindo prática segura e legal.",
-    gradient: "from-primary/20 to-secondary/5",
+    gradient: "from-secondary/20 to-secondary/5",
   },
 ];
 
