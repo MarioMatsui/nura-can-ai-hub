@@ -13,14 +13,19 @@ interface ProcessDocumentRequest {
 }
 
 // Function to split text into chunks
-function splitIntoChunks(text: string, chunkSize: number = 1000, overlap: number = 200): string[] {
+function splitIntoChunks(text: string, chunkSize: number = 800, overlap: number = 150): string[] {
   const chunks: string[] = [];
   let start = 0;
 
-  while (start < text.length) {
+  // Limit total chunks to avoid memory issues
+  const maxChunks = 50;
+  let chunkCount = 0;
+
+  while (start < text.length && chunkCount < maxChunks) {
     const end = Math.min(start + chunkSize, text.length);
     chunks.push(text.slice(start, end));
     start = end - overlap;
+    chunkCount++;
     
     if (start >= text.length) break;
   }
@@ -69,7 +74,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Get document
     const { data: document, error: docError } = await supabaseClient
       .from("knowledge_documents")
-      .select("*")
+      .select("id, content")
       .eq("id", documentId)
       .single();
 
@@ -77,38 +82,66 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error(`Document not found: ${docError?.message}`);
     }
 
-    const textContent = document.content;
+    let textContent = document.content;
 
     if (!textContent || textContent.length < 10) {
       throw new Error("No valid text content found in document");
     }
 
-    console.log("Document found, splitting into chunks...");
+    // Limit content size to avoid memory issues (first 100KB)
+    const maxContentLength = 100000;
+    if (textContent.length > maxContentLength) {
+      console.log(`Content too long (${textContent.length}), truncating to ${maxContentLength} characters`);
+      textContent = textContent.substring(0, maxContentLength);
+    }
+
+    console.log("Document found, content length:", textContent.length);
 
     // Split document into chunks
     const chunks = splitIntoChunks(textContent);
     console.log(`Created ${chunks.length} chunks`);
 
-    // Process each chunk
-    for (let i = 0; i < chunks.length; i++) {
-      console.log(`Processing chunk ${i + 1}/${chunks.length}...`);
+    // Process chunks in batches to avoid memory issues
+    const batchSize = 5;
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, Math.min(i + batchSize, chunks.length));
+      console.log(`Processing batch ${Math.floor(i/batchSize) + 1}, chunks ${i}-${i + batch.length - 1}`);
       
-      // Generate embedding
-      const embedding = await generateEmbedding(chunks[i]);
+      // Process batch in parallel
+      await Promise.all(
+        batch.map(async (chunkContent, batchIndex) => {
+          const chunkIndex = i + batchIndex;
+          
+          try {
+            // Generate embedding
+            const embedding = await generateEmbedding(chunkContent);
 
-      // Store chunk with embedding
-      const { error: chunkError } = await supabaseClient
-        .from("document_chunks")
-        .insert({
-          document_id: documentId,
-          chunk_index: i,
-          content: chunks[i],
-          embedding: embedding,
-        });
+            // Store chunk with embedding
+            const { error: chunkError } = await supabaseClient
+              .from("document_chunks")
+              .insert({
+                document_id: documentId,
+                chunk_index: chunkIndex,
+                content: chunkContent,
+                embedding: embedding,
+              });
 
-      if (chunkError) {
-        console.error(`Error storing chunk ${i}:`, chunkError);
-        throw chunkError;
+            if (chunkError) {
+              console.error(`Error storing chunk ${chunkIndex}:`, chunkError);
+              throw chunkError;
+            }
+            
+            console.log(`Chunk ${chunkIndex} processed successfully`);
+          } catch (error) {
+            console.error(`Failed to process chunk ${chunkIndex}:`, error);
+            throw error;
+          }
+        })
+      );
+
+      // Small delay between batches to prevent rate limiting
+      if (i + batchSize < chunks.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
