@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Message, UserSubscription, Conversation } from '@/pages/Dashboard';
-import { cn } from '@/lib/utils';
+import { cn, formatMarkdown } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
 interface ChatAreaProps {
@@ -187,7 +187,10 @@ export const ChatArea = ({
                       : 'bg-muted'
                   )}
                 >
-                  <p className="whitespace-pre-wrap text-sm sm:text-base break-words">{message.content}</p>
+                  <div 
+                    className="whitespace-pre-wrap text-sm sm:text-base break-words prose prose-sm max-w-none dark:prose-invert"
+                    dangerouslySetInnerHTML={{ __html: formatMarkdown(message.content) }}
+                  />
                 </div>
               </div>
             ))}
