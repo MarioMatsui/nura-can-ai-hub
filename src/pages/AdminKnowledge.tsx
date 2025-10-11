@@ -89,9 +89,9 @@ const AdminKnowledge = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Accept both PDF and TXT files
-    if (!file.name.endsWith('.pdf') && !file.name.endsWith('.txt')) {
-      toast.error("Por favor, envie apenas arquivos PDF ou TXT");
+    // Accept only TXT files for now
+    if (!file.name.endsWith('.txt')) {
+      toast.error("Por favor, converta seu PDF para texto primeiro. Você pode usar https://www.ilovepdf.com/pt/pdf_para_texto");
       e.target.value = '';
       return;
     }
@@ -99,17 +99,11 @@ const AdminKnowledge = () => {
     setFileName(file.name);
     setSelectedFile(file);
     
-    // For text files, read the content
-    if (file.name.endsWith('.txt')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setContent(event.target?.result as string);
-      };
-      reader.readAsText(file, 'UTF-8');
-    } else {
-      // For PDFs, we'll extract text on the server
-      setContent(""); // Clear content field for PDFs
-    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setContent(event.target?.result as string);
+    };
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,15 +113,14 @@ const AdminKnowledge = () => {
       return;
     }
 
-    if (!selectedFile && !content) {
-      toast.error("Adicione um arquivo ou digite o conteúdo");
+    if (!content || content.trim().length < 50) {
+      toast.error("O conteúdo deve ter pelo menos 50 caracteres");
       return;
     }
 
     setIsUploading(true);
     try {
       let filePath = null;
-      let documentContent = content;
 
       // Upload file to storage if provided
       if (selectedFile) {
@@ -140,8 +133,6 @@ const AdminKnowledge = () => {
           .upload(filePath, selectedFile);
 
         if (uploadError) throw uploadError;
-
-        toast.success("Arquivo enviado com sucesso!");
       }
 
       // Insert document
@@ -150,7 +141,7 @@ const AdminKnowledge = () => {
         .insert({
           title,
           file_name: fileName || "manual-entry.txt",
-          content: documentContent,
+          content: content.trim(),
           knowledge_type: knowledgeType,
           file_path: filePath,
         })
@@ -261,11 +252,11 @@ const AdminKnowledge = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="file">Arquivo</Label>
+                  <Label htmlFor="file">Arquivo de Texto</Label>
                   <Input
                     id="file"
                     type="file"
-                    accept=".txt,.pdf"
+                    accept=".txt"
                     onChange={handleFileUpload}
                   />
                   {fileName && (
@@ -274,22 +265,28 @@ const AdminKnowledge = () => {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Arquivos PDF e TXT são aceitos (máx 50MB)
+                    Apenas arquivos .txt (até 10MB). Para PDFs, converta primeiro em{" "}
+                    <a 
+                      href="https://www.ilovepdf.com/pt/pdf_para_texto" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      iLovePDF
+                    </a>
                   </p>
                 </div>
 
-                {!selectedFile?.name.endsWith('.pdf') && (
-                  <div>
-                    <Label htmlFor="content">Conteúdo do Documento</Label>
-                    <Textarea
-                      id="content"
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      placeholder="Cole ou digite o conteúdo do documento aqui..."
-                      rows={10}
-                    />
-                  </div>
-                )}
+                <div>
+                  <Label htmlFor="content">Conteúdo do Documento</Label>
+                  <Textarea
+                    id="content"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="Cole ou digite o conteúdo do documento aqui..."
+                    rows={10}
+                  />
+                </div>
 
                 <Button
                   type="submit"
