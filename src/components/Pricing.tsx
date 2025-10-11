@@ -33,8 +33,8 @@ const plans = {
       "Respostas baseadas em evidências científicas",
       "Suporte prioritário",
     ],
-    monthlyPrice: 69.9,
-    annualPrice: 588,
+    monthlyPrice: 49.9,
+    annualPrice: 478.8,
     monthlyLink: "https://gateway.cannapag.com/pagamento/e68ce176-b2b0-4013-817c-a02d29419176",
     annualLink: "https://gateway.cannapag.com/pagamento/0c4d0af3-b48d-4ed7-b59b-d8b76eb6e538",
     popular: false,
@@ -49,8 +49,8 @@ const plans = {
       "Informações sobre regulamentação",
       "Suporte prioritário",
     ],
-    monthlyPrice: 69.9,
-    annualPrice: 588,
+    monthlyPrice: 49.9,
+    annualPrice: 478.8,
     monthlyLink: "https://gateway.cannapag.com/pagamento/9dbfd8f1-3edf-46ed-a6d7-50de12176ed3",
     annualLink: "https://gateway.cannapag.com/pagamento/ed2d1e63-4fb8-4cfb-9cb7-b26710ce979b",
     popular: false,
@@ -65,8 +65,8 @@ const plans = {
       "Evidências científicas em medicina veterinária",
       "Suporte prioritário",
     ],
-    monthlyPrice: 69.9,
-    annualPrice: 588,
+    monthlyPrice: 39.9,
+    annualPrice: 358.8,
     monthlyLink: "https://gateway.cannapag.com/pagamento/8a33c660-b08f-44b2-84d1-c5f9c907d912",
     annualLink: "https://gateway.cannapag.com/pagamento/9b779179-68b7-4f03-9862-991a14c426f9",
     popular: false,
@@ -82,8 +82,8 @@ const plans = {
       "Suporte VIP",
       "Melhor custo-benefício",
     ],
-    monthlyPrice: 159.9,
-    annualPrice: 1558.8,
+    monthlyPrice: 99.9,
+    annualPrice: 1078.8,
     monthlyLink: "https://gateway.cannapag.com/pagamento/4e8284a1-3f3d-4ac1-b7fb-aa1102922539",
     annualLink: "https://gateway.cannapag.com/pagamento/9082ff5d-4283-441f-a395-2b045b746192",
     popular: true,
@@ -199,7 +199,7 @@ const Pricing = () => {
             >
               Anual
               <span className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full" style={{ backgroundColor: 'rgba(149, 199, 0, 0.1)', color: '#95c700' }}>
-                -30%
+                -20%
               </span>
             </span>
           </div>
