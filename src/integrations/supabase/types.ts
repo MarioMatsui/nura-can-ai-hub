@@ -177,6 +177,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_subscriptions: {
         Row: {
           billing_period: Database["public"]["Enums"]["billing_period"] | null
@@ -237,6 +258,13 @@ export type Database = {
       halfvec_typmod_in: {
         Args: { "": unknown[] }
         Returns: number
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
       }
       hnsw_bit_support: {
         Args: { "": unknown }
@@ -327,6 +355,7 @@ export type Database = {
     }
     Enums: {
       ai_model_type: "generic" | "medical" | "legal" | "veterinary"
+      app_role: "admin" | "user"
       billing_period: "monthly" | "annual"
       knowledge_base_type: "medical" | "legal" | "veterinary"
       subscription_plan:
@@ -464,6 +493,7 @@ export const Constants = {
   public: {
     Enums: {
       ai_model_type: ["generic", "medical", "legal", "veterinary"],
+      app_role: ["admin", "user"],
       billing_period: ["monthly", "annual"],
       knowledge_base_type: ["medical", "legal", "veterinary"],
       subscription_plan: [

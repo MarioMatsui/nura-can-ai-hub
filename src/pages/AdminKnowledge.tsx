@@ -54,13 +54,14 @@ const AdminKnowledge = () => {
       return;
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("crm_crv")
-      .eq("id", user.id)
-      .single();
+    const { data: userRole } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
 
-    if (!profile?.crm_crv) {
+    if (!userRole) {
       toast.error("Acesso negado. Apenas administradores podem acessar esta página.");
       navigate("/app");
     }
