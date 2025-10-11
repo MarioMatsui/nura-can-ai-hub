@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 export interface Conversation {
   id: string;
   title: string;
-  model_type: 'generic' | 'medical' | 'legal' | 'veterinary';
+  model_type: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist';
   created_at: string;
 }
 

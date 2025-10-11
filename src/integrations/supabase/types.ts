@@ -357,7 +357,12 @@ export type Database = {
       }
     }
     Enums: {
-      ai_model_type: "generic" | "medical" | "legal" | "veterinary"
+      ai_model_type:
+        | "generic"
+        | "medical"
+        | "legal"
+        | "veterinary"
+        | "specialist"
       app_role: "admin" | "user"
       billing_period: "monthly" | "annual"
       knowledge_base_type: "medical" | "legal" | "veterinary"
@@ -495,7 +500,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      ai_model_type: ["generic", "medical", "legal", "veterinary"],
+      ai_model_type: [
+        "generic",
+        "medical",
+        "legal",
+        "veterinary",
+        "specialist",
+      ],
       app_role: ["admin", "user"],
       billing_period: ["monthly", "annual"],
       knowledge_base_type: ["medical", "legal", "veterinary"],

@@ -13,11 +13,11 @@ interface ChatAreaProps {
   messages: Message[];
   subscriptions: UserSubscription[];
   currentConversation: Conversation | null;
-  onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary') => void;
+  onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist') => void;
   onOpenSidebar: () => void;
 }
 
-type ModelType = 'generic' | 'medical' | 'legal' | 'veterinary';
+type ModelType = 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist';
 
 export const ChatArea = ({
   user,
@@ -98,6 +98,7 @@ export const ChatArea = ({
     { type: 'medical', label: 'Médico', description: 'Especializado em cannabis medicinal' },
     { type: 'legal', label: 'Jurídico', description: 'Especializado em leis e regulações' },
     { type: 'veterinary', label: 'Veterinário', description: 'Especializado em uso veterinário' },
+    { type: 'specialist', label: 'Especialista', description: 'Acesso completo a todas as áreas' },
   ];
 
   const userName = profile?.full_name?.split(' ')[0] || 'Doutor(a)';

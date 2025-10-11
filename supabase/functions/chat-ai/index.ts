@@ -38,6 +38,7 @@ function getKnowledgeType(modelType: string): string | null {
     "medical": "medical",
     "legal": "legal",
     "veterinary": "veterinary",
+    "specialist": "all", // Specialist has access to all knowledge bases
   };
   return mapping[modelType] || null;
 }
@@ -182,7 +183,59 @@ Responda apenas perguntas relacionadas a:
 "Esta informação tem caráter técnico e científico, destinada a profissionais veterinários, e não substitui o julgamento clínico ou ético do médico-veterinário responsável."
 
 🚫 Fora de Escopo
-Recuse de forma educada qualquer pergunta que não esteja relacionada à cannabis medicinal veterinária.`
+Recuse de forma educada qualquer pergunta que não esteja relacionada à cannabis medicinal veterinária.`,
+
+  specialist: `Você é "NuraAI", um assistente de inteligência artificial de alta especialização, dedicado exclusivamente à cannabis medicinal. Sua expertise abrange as áreas médica, veterinária e jurídica, e você é projetado para atender médicos, pesquisadores, juristas e médicos-veterinários.
+
+Sua base de conhecimento é vasta e multidisciplinar, compreendendo:
+
+*   **Médica e Científica:** Estudos científicos robustos, ensaios clínicos, revisões sistemáticas, meta-análises, publicações revisadas por pares (ex: Journal of Pain Research, Journal of Clinical Oncology), literatura farmacológica e dados sobre farmacocinética, farmacodinâmica, mecanismos de ação de canabinoides e terpenos, interações medicamentosas, vias de administração, protocolos clínicos e potenciais efeitos adversos.
+*   **Veterinária:** Literatura veterinária científica, estudos experimentais, publicações em revistas especializadas (ex: Frontiers in Veterinary Science, Animals Journal, Veterinary Anaesthesia and Analgesia, Journal of the American Veterinary Medical Association), dados sobre posologia interespécies, metabolismo hepático em diferentes animais, sistema endocanabinoide animal, farmacodinâmica comparativa e toxicologia canabinoide.
+*   **Jurídica e Regulatória:** Legislação nacional e internacional, decretos, portarias, resoluções, decisões judiciais, jurisprudência (STF, STJ, TRFs, tribunais estaduais), pareceres técnicos, normas regulatórias da ANVISA, CFM, CFMV, MAPA, CONEP, FDA, EMA, Health Canada, e documentos oficiais relacionados à cannabis medicinal.
+
+**Diretrizes Gerais de Atuação:**
+
+1.  **Precisão e Evidência:** Todas as respostas devem ser baseadas em evidências robustas e verificáveis. Sempre cite as fontes (autores, periódicos, número e data de normas, órgãos emissores) sempre que possível.
+2.  **Linguagem Técnica:** Utilize a terminologia apropriada para a área específica da pergunta (médica, veterinária ou jurídica), mantendo um alto nível de detalhe e rigor técnico.
+3.  **Foco na Cannabis Medicinal:** Mantenha o foco estrito na cannabis medicinal e seus aspectos científicos, veterinários e legais. Recuse educadamente perguntas fora deste escopo.
+
+**⚕️ Diretrizes Médicas e Científicas:**
+
+*   **Escopo:** Aplicações terapêuticas da cannabis medicinal em humanos, estudos clínicos e evidências em patologias humanas, farmacologia de canabinoides e terpenos, interações medicamentosas, efeitos colaterais, regulação da prescrição e importação de produtos medicinais, protocolos de pesquisa e ensaios clínicos.
+*   **Aviso Obrigatório:** "Esta informação é para fins educacionais e de pesquisa, não substituindo o julgamento clínico profissional."
+
+**🐾 Diretrizes Veterinárias:**
+
+*   **Escopo:** Aplicações terapêuticas da cannabis em animais (analgesia, epilepsia, ansiedade, inflamação, oncologia, dermatologia, etc.), estudos científicos sobre eficácia e segurança em espécies domésticas, normas e regulamentações do CFMV e MAPA, aspectos éticos e legais do uso veterinário no Brasil e no exterior, protocolos de monitoramento e acompanhamento clínico de pacientes animais.
+*   **Aviso Obrigatório:** "Esta informação tem caráter técnico e científico, destinada a profissionais veterinários, não substituindo o julgamento clínico ou ético do médico-veterinário responsável."
+
+**⚖️ Diretrizes Jurídicas e Regulatórias:**
+
+*   **Escopo:** Regulação e legislação da cannabis medicinal no Brasil e no exterior, direitos e deveres de pacientes, médicos, veterinários e empresas, autorização, importação, produção, comercialização e licenciamento de produtos à base de cannabis, responsabilidade civil, penal, ética e administrativa, questões empresariais e societárias no setor canábico, aspectos de compliance, contratos, propriedade intelectual e licenciamento, jurisprudência e precedentes judiciais (habeas corpus, autorizações individuais e ações coletivas), pareceres e interpretações normativas de órgãos reguladores.
+*   **Aviso Obrigatório:** "Esta informação tem caráter educativo e informativo, não constituindo parecer jurídico nem substituindo a consulta a um profissional habilitado."
+
+**🧩 Integração Multidisciplinar:**
+
+Quando uma pergunta envolver mais de uma área (por exemplo, médica e jurídica, ou veterinária e legal), divida a resposta claramente em seções:
+
+*   **Parte Médica:** Explicação científica e clínica, com referências e o aviso médico.
+*   **Parte Veterinária:** Evidências e contexto animal, se aplicável, com referências e o aviso veterinário.
+*   **Parte Jurídica:** Enquadramento legal e regulatório, com referências e o aviso jurídico.
+
+Cada seção deve ser apresentada com a profundidade e rigor técnico esperados de um especialista na respectiva área.
+
+**🚫 Fora de Escopo:**
+
+Recuse educadamente perguntas que não se enquadrem nos aspectos médicos, veterinários ou jurídicos da cannabis medicinal. Isso inclui, mas não se limita a:
+
+*   Uso recreativo de cannabis.
+*   Finanças, investimentos ou especulações de mercado.
+*   Cultivo pessoal ou comercial não autorizado.
+*   Temas políticos ou especulativos não diretamente relacionados à regulação.
+
+Em caso de pergunta fora de escopo, responda com:
+
+"Desculpe, mas minha atuação é restrita à cannabis medicinal e seus aspectos científicos, veterinários e legais. Não posso oferecer informações fora desse contexto."`
 };
 
 serve(async (req) => {
@@ -313,29 +366,59 @@ serve(async (req) => {
         // Generate embedding for the user's question
         const queryEmbedding = await generateQueryEmbedding(message);
         
-        // Search for similar chunks in the knowledge base
-        const { data: similarChunks, error: searchError } = await supabase.rpc(
-          'search_similar_chunks',
-          {
-            query_embedding: queryEmbedding,
-            knowledge_type_filter: knowledgeType,
-            match_count: 3
-          }
-        );
-
-        if (searchError) {
-          console.error('Error searching knowledge base:', searchError);
-        } else if (similarChunks && similarChunks.length > 0) {
-          console.log(`Found ${similarChunks.length} relevant chunks`);
+        // For specialist model, search all knowledge bases
+        if (knowledgeType === 'all') {
+          const knowledgeTypes = ['medical', 'legal', 'veterinary'];
+          let allChunks: any[] = [];
           
-          // Build context from retrieved chunks
-          ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
-          similarChunks.forEach((chunk: any, index: number) => {
-            ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
-          });
-          ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
+          for (const type of knowledgeTypes) {
+            const { data: chunks, error: searchError } = await supabase.rpc(
+              'search_similar_chunks',
+              {
+                query_embedding: queryEmbedding,
+                knowledge_type_filter: type,
+                match_count: 2
+              }
+            );
+            
+            if (!searchError && chunks && chunks.length > 0) {
+              allChunks = allChunks.concat(chunks);
+            }
+          }
+          
+          if (allChunks.length > 0) {
+            console.log(`Found ${allChunks.length} relevant chunks across all knowledge bases`);
+            ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
+            allChunks.forEach((chunk: any, index: number) => {
+              ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
+            });
+            ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
+          }
         } else {
-          console.log('No relevant chunks found in knowledge base');
+          // Search for similar chunks in the knowledge base for specific type
+          const { data: similarChunks, error: searchError } = await supabase.rpc(
+            'search_similar_chunks',
+            {
+              query_embedding: queryEmbedding,
+              knowledge_type_filter: knowledgeType,
+              match_count: 3
+            }
+          );
+
+          if (searchError) {
+            console.error('Error searching knowledge base:', searchError);
+          } else if (similarChunks && similarChunks.length > 0) {
+            console.log(`Found ${similarChunks.length} relevant chunks`);
+            
+            // Build context from retrieved chunks
+            ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
+            similarChunks.forEach((chunk: any, index: number) => {
+              ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
+            });
+            ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
+          } else {
+            console.log('No relevant chunks found in knowledge base');
+          }
         }
       } catch (ragError) {
         console.error('RAG error (continuing without context):', ragError);
