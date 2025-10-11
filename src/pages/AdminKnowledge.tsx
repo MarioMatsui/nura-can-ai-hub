@@ -89,9 +89,9 @@ const AdminKnowledge = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Accept only TXT files for now
-    if (!file.name.endsWith('.txt')) {
-      toast.error("Por favor, converta seu PDF para texto primeiro. Você pode usar https://www.ilovepdf.com/pt/pdf_para_texto");
+    // Accept both PDF and TXT files
+    if (!file.name.endsWith('.pdf') && !file.name.endsWith('.txt')) {
+      toast.error("Por favor, envie apenas arquivos PDF ou TXT");
       e.target.value = '';
       return;
     }
@@ -99,11 +99,17 @@ const AdminKnowledge = () => {
     setFileName(file.name);
     setSelectedFile(file);
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setContent(event.target?.result as string);
-    };
-    reader.readAsText(file, 'UTF-8');
+    // For text files, read the content immediately
+    if (file.name.endsWith('.txt')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setContent(event.target?.result as string);
+      };
+      reader.readAsText(file, 'UTF-8');
+    } else {
+      // For PDFs, clear content - will be extracted on server
+      setContent("");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,14 +119,15 @@ const AdminKnowledge = () => {
       return;
     }
 
-    if (!content || content.trim().length < 50) {
-      toast.error("O conteúdo deve ter pelo menos 50 caracteres");
+    if (!selectedFile && (!content || content.trim().length < 50)) {
+      toast.error("Adicione um arquivo ou digite pelo menos 50 caracteres");
       return;
     }
 
     setIsUploading(true);
     try {
       let filePath = null;
+      let extractedText = content;
 
       // Upload file to storage if provided
       if (selectedFile) {
@@ -133,6 +140,27 @@ const AdminKnowledge = () => {
           .upload(filePath, selectedFile);
 
         if (uploadError) throw uploadError;
+
+        // If PDF, extract text using parse-document edge function
+        if (selectedFile.name.endsWith('.pdf')) {
+          toast.info("Extraindo texto do PDF...");
+          
+          const { data: parseData, error: parseError } = await supabase.functions.invoke("parse-pdf", {
+            body: { filePath },
+          });
+
+          if (parseError) {
+            console.error("Error parsing PDF:", parseError);
+            throw new Error("Erro ao extrair texto do PDF");
+          }
+
+          extractedText = parseData.text;
+          toast.success("Texto extraído do PDF!");
+        }
+      }
+
+      if (!extractedText || extractedText.trim().length < 50) {
+        throw new Error("Não foi possível extrair texto suficiente do documento");
       }
 
       // Insert document
@@ -141,7 +169,7 @@ const AdminKnowledge = () => {
         .insert({
           title,
           file_name: fileName || "manual-entry.txt",
-          content: content.trim(),
+          content: extractedText.trim(),
           knowledge_type: knowledgeType,
           file_path: filePath,
         })
@@ -150,7 +178,7 @@ const AdminKnowledge = () => {
 
       if (insertError) throw insertError;
 
-      toast.success("Documento salvo! Processando...");
+      toast.success("Documento salvo! Processando embeddings...");
 
       // Process document to create embeddings
       const { error: processError } = await supabase.functions.invoke("process-document", {
@@ -252,11 +280,11 @@ const AdminKnowledge = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="file">Arquivo de Texto</Label>
+                  <Label htmlFor="file">Arquivo</Label>
                   <Input
                     id="file"
                     type="file"
-                    accept=".txt"
+                    accept=".txt,.pdf"
                     onChange={handleFileUpload}
                   />
                   {fileName && (
@@ -265,28 +293,22 @@ const AdminKnowledge = () => {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Apenas arquivos .txt (até 10MB). Para PDFs, converta primeiro em{" "}
-                    <a 
-                      href="https://www.ilovepdf.com/pt/pdf_para_texto" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      iLovePDF
-                    </a>
+                    Arquivos PDF e TXT aceitos (até 50 páginas para PDF, máx 10MB)
                   </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="content">Conteúdo do Documento</Label>
-                  <Textarea
-                    id="content"
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Cole ou digite o conteúdo do documento aqui..."
-                    rows={10}
-                  />
-                </div>
+                {(!selectedFile || selectedFile.name.endsWith('.txt')) && (
+                  <div>
+                    <Label htmlFor="content">Conteúdo do Documento</Label>
+                    <Textarea
+                      id="content"
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Cole ou digite o conteúdo do documento aqui..."
+                      rows={10}
+                    />
+                  </div>
+                )}
 
                 <Button
                   type="submit"
