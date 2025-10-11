@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { LogOut } from "lucide-react";
+import { toast } from "sonner";
 import logo from "@/assets/logo.png";
 
 interface HeaderProps {
@@ -27,6 +29,16 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     element?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Erro ao sair");
+    } else {
+      toast.success("Você saiu com sucesso");
+      navigate("/");
+    }
   };
 
   return (
@@ -75,13 +87,24 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
           {/* CTA Buttons */}
           <div className="flex items-center gap-2 sm:gap-4">
             {user ? (
-              <Button
-                size="lg"
-                onClick={() => navigate("/app")}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth"
-              >
-                Dashboard
-              </Button>
+              <>
+                <Button
+                  size="lg"
+                  onClick={() => navigate("/app")}
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth"
+                >
+                  Dashboard
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handleLogout}
+                  className="hover:bg-destructive/10 hover:text-destructive"
+                  title="Sair"
+                >
+                  <LogOut className="h-5 w-5" />
+                </Button>
+              </>
             ) : (
               <>
                 <Button
