@@ -35,6 +35,7 @@ async function generateQueryEmbedding(text: string): Promise<number[]> {
 // Map model types to knowledge base types
 function getKnowledgeType(modelType: string): string | null {
   const mapping: Record<string, string> = {
+    "generic": "all", // Generic has access to all knowledge bases
     "medical": "medical",
     "legal": "legal",
     "veterinary": "veterinary",
@@ -427,7 +428,7 @@ serve(async (req) => {
     }
 
     // Determine model and system prompt
-    const model = modelType === 'generic' ? 'gpt-4o-mini' : 'gpt-4o';
+    const model = 'gpt-4o'; // All models now use gpt-4o
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
     // Build messages array for OpenAI with RAG context
