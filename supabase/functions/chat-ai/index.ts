@@ -472,10 +472,9 @@ serve(async (req) => {
               });
 
               if (!pdfError && pdfData?.text) {
-                // GPT-4.1 supports 200k tokens (~800k characters)
-                // GPT-4o supports 128k tokens (~512k characters)
-                // Using conservative limit of 400k chars (~100k tokens)
-                const maxLength = 400000;
+                // GPT-4.1 has 30k tokens/min rate limit, leaving room for context
+                // Using 80k chars (~20k tokens) to stay well under rate limits
+                const maxLength = 80000;
                 let text = pdfData.text;
                 let truncated = false;
                 
