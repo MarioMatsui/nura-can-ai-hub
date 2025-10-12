@@ -8,6 +8,7 @@ const corsHeaders = {
 
 interface ParsePdfRequest {
   filePath: string;
+  bucket?: string; // Optional bucket name, defaults to trying both
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -21,17 +22,39 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    const { filePath }: ParsePdfRequest = await req.json();
-    console.log("Parsing PDF:", filePath);
+    const { filePath, bucket }: ParsePdfRequest = await req.json();
+    console.log("Parsing PDF:", filePath, "from bucket:", bucket || "auto-detect");
 
-    // Download the PDF from storage
-    const { data: fileData, error: downloadError } = await supabaseClient
-      .storage
-      .from("knowledge-documents")
-      .download(filePath);
+    // Try to download from the specified bucket, or try both buckets
+    let fileData: Blob | null = null;
+    let downloadError: any = null;
+
+    if (bucket) {
+      // If bucket is specified, use it
+      const result = await supabaseClient.storage.from(bucket).download(filePath);
+      fileData = result.data;
+      downloadError = result.error;
+    } else {
+      // Try chat-attachments first (most common for user uploads)
+      const chatResult = await supabaseClient.storage.from("chat-attachments").download(filePath);
+      
+      if (!chatResult.error && chatResult.data) {
+        fileData = chatResult.data;
+        console.log("Downloaded from chat-attachments bucket");
+      } else {
+        // Fallback to knowledge-documents
+        const knowledgeResult = await supabaseClient.storage.from("knowledge-documents").download(filePath);
+        fileData = knowledgeResult.data;
+        downloadError = knowledgeResult.error;
+        
+        if (!downloadError && fileData) {
+          console.log("Downloaded from knowledge-documents bucket");
+        }
+      }
+    }
 
     if (downloadError || !fileData) {
-      throw new Error(`Failed to download file: ${downloadError?.message}`);
+      throw new Error(`Failed to download file from storage: ${downloadError?.message || 'File not found in any bucket'}`);
     }
 
     console.log("PDF downloaded, size:", fileData.size);
