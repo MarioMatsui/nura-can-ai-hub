@@ -434,6 +434,8 @@ serve(async (req) => {
 
     // Process attachments (images and documents)
     let attachmentContext = "";
+    let hasImages = false;
+    let textContentLength = 0;
     const messageContent: any[] = [{ type: "text", text: message }];
 
     if (attachments && attachments.length > 0) {
@@ -442,6 +444,7 @@ serve(async (req) => {
       for (const attachment of attachments) {
         if (attachment.file_type.startsWith('image/')) {
           // For images, use GPT-4 Vision
+          hasImages = true;
           console.log(`Adding image to vision: ${attachment.file_name}`);
           
           // Get signed URL for the image
@@ -469,11 +472,14 @@ serve(async (req) => {
               });
 
               if (!pdfError && pdfData?.text) {
-                // Limit text size to avoid OpenAI token limits 
-                // OpenAI limit: 30k tokens/min. Using ~15k tokens for PDF (60k chars) leaves room for history/prompt
-                const maxLength = 60000;
+                // GPT-4.1 supports 200k tokens (~800k characters)
+                // GPT-4o supports 128k tokens (~512k characters)
+                // Using conservative limit of 400k chars (~100k tokens)
+                const maxLength = 400000;
                 let text = pdfData.text;
                 let truncated = false;
+                
+                textContentLength += text.length;
                 
                 if (text.length > maxLength) {
                   text = text.substring(0, maxLength);
@@ -500,6 +506,7 @@ serve(async (req) => {
               
               if (!downloadError && fileData) {
                 const text = await fileData.text();
+                textContentLength += text.length;
                 attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
               } else {
                 console.error('Error reading text file:', downloadError);
@@ -535,7 +542,25 @@ serve(async (req) => {
       { role: 'user', content: userMessageContent }
     ];
 
-    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}`);
+    // Smart model selection based on content type
+    // Threshold: 60k chars (~15k tokens) for long text
+    const hasLongText = textContentLength > 60000;
+    let selectedModel = model;
+    
+    if (hasImages) {
+      // Always use GPT-4o for images/multimodal
+      selectedModel = 'gpt-4o';
+      console.log('🖼️ Using GPT-4o for image/multimodal processing');
+    } else if (hasLongText) {
+      // Use GPT-4.1 for long text documents (better context handling)
+      selectedModel = 'gpt-4.1-2025-04-14';
+      console.log(`📄 Using GPT-4.1 for long text document (~${(textContentLength / 1000).toFixed(0)}k chars)`);
+    } else {
+      // Default model for standard queries
+      console.log(`💬 Using ${model} for standard query`);
+    }
+
+    console.log(`Sending to OpenAI with model: ${selectedModel}, modelType: ${modelType}`);
     console.log(`- Attachments: ${attachments?.length || 0} ${attachmentContext ? '(processed and prioritized)' : ''}`);
     console.log(`- RAG Context: ${ragContext ? 'Yes (as support)' : 'No'}`);
 
@@ -547,7 +572,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: model,
+        model: selectedModel,
         messages: openAIMessages,
         temperature: 0.7,
         max_tokens: 2000,
