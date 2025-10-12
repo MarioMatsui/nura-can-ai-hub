@@ -469,7 +469,22 @@ serve(async (req) => {
               });
 
               if (!pdfError && pdfData?.text) {
-                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${pdfData.text}\n`;
+                // Limit text size to avoid OpenAI token limits (roughly 100k characters = ~25k tokens)
+                const maxLength = 100000;
+                let text = pdfData.text;
+                let truncated = false;
+                
+                if (text.length > maxLength) {
+                  text = text.substring(0, maxLength);
+                  truncated = true;
+                  console.log(`PDF truncated from ${pdfData.text.length} to ${maxLength} characters`);
+                }
+                
+                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
+                
+                if (truncated) {
+                  attachmentContext += `\n⚠️ Nota: Este documento é muito grande e foi truncado. Mostrando os primeiros ${(maxLength / 1000).toFixed(0)}k caracteres.\n`;
+                }
               } else {
                 console.error('Error parsing PDF:', pdfError);
                 attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
