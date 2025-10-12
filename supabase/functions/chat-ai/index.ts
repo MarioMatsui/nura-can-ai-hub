@@ -436,7 +436,6 @@ serve(async (req) => {
     let attachmentContext = "";
     let hasImages = false;
     let textContentLength = 0;
-    let chunkedAnalysisResult: string | null = null;
     const messageContent: any[] = [{ type: "text", text: message }];
 
     if (attachments && attachments.length > 0) {
@@ -476,116 +475,18 @@ serve(async (req) => {
                 const fullText = pdfData.text;
                 textContentLength += fullText.length;
                 
-                // Chunk size for processing large documents
-                const chunkSize = 70000; // ~17.5k tokens
-                const chunkOverlap = 5000; // overlap for context continuity
+                // GPT-4.1 supports 200k tokens (~800k characters) context window
+                // Using conservative limit to stay within token limits
+                const maxLength = 300000; // ~75k tokens - safe for single request
                 
-                // If document is very large, process in chunks
-                if (fullText.length > 80000) {
-                  console.log(`📚 Large document detected (${(fullText.length / 1000).toFixed(0)}k chars). Processing in chunks...`);
-                  
-                  // Split into chunks
-                  const chunks: string[] = [];
-                  for (let i = 0; i < fullText.length; i += (chunkSize - chunkOverlap)) {
-                    const chunk = fullText.substring(i, Math.min(i + chunkSize, fullText.length));
-                    chunks.push(chunk);
-                  }
-                  
-                  console.log(`Split into ${chunks.length} chunks for analysis`);
-                  
-                  // Process each chunk and collect partial analyses
-                  const chunkAnalyses: string[] = [];
-                  
-                  for (let i = 0; i < chunks.length; i++) {
-                    console.log(`Processing chunk ${i + 1}/${chunks.length}...`);
-                    
-                    const chunkPrompt = `Analise a seguinte parte (${i + 1}/${chunks.length}) do documento "${attachment.file_name}". 
-Extraia os pontos principais, informações relevantes e insights desta seção. Seja conciso mas completo.
-
-Conteúdo da parte ${i + 1}:
-${chunks[i]}`;
-                    
-                    const chunkMessages = [
-                      { role: 'system', content: systemPrompt },
-                      { role: 'user', content: chunkPrompt }
-                    ];
-                    
-                    const chunkResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({
-                        model: 'gpt-4.1-2025-04-14',
-                        messages: chunkMessages,
-                        temperature: 0.7,
-                        max_completion_tokens: 1500,
-                      }),
-                    });
-                    
-                    if (chunkResponse.ok) {
-                      const chunkData = await chunkResponse.json();
-                      chunkAnalyses.push(chunkData.choices[0].message.content);
-                    } else {
-                      console.error(`Error processing chunk ${i + 1}:`, await chunkResponse.text());
-                      chunkAnalyses.push(`[Erro ao processar parte ${i + 1}]`);
-                    }
-                    
-                    // Small delay to respect rate limits
-                    if (i < chunks.length - 1) {
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                    }
-                  }
-                  
-                  // Now synthesize all chunk analyses
-                  console.log('Synthesizing complete analysis from all chunks...');
-                  
-                  const synthesisPrompt = `Com base nas análises parciais abaixo do documento "${attachment.file_name}", crie uma análise completa, coerente e contextual do documento inteiro. 
-Integre todas as informações, mantenha a coerência narrativa e apresente uma visão global do documento.
-
-Pergunta original do usuário: ${message}
-
-Análises das partes do documento:
-${chunkAnalyses.map((analysis, idx) => `\n--- Parte ${idx + 1} ---\n${analysis}`).join('\n')}`;
-                  
-                  const synthesisMessages = [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: synthesisPrompt }
-                  ];
-                  
-                  const synthesisResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      model: 'gpt-4.1-2025-04-14',
-                      messages: synthesisMessages,
-                      temperature: 0.7,
-                      max_completion_tokens: 3000,
-                    }),
-                  });
-                  
-                  if (synthesisResponse.ok) {
-                    const synthesisData = await synthesisResponse.json();
-                    chunkedAnalysisResult = synthesisData.choices[0].message.content;
-                    console.log('✅ Complete document analysis ready');
-                    
-                    // Return the chunked analysis immediately
-                    return new Response(JSON.stringify({ response: chunkedAnalysisResult }), {
-                      status: 200,
-                      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                    });
-                  } else {
-                    console.error('Error in synthesis:', await synthesisResponse.text());
-                    throw new Error('Failed to synthesize document analysis');
-                  }
-                  
+                if (fullText.length > maxLength) {
+                  console.log(`📄 Large PDF detected (${(fullText.length / 1000).toFixed(0)}k chars). Truncating to ${(maxLength / 1000).toFixed(0)}k chars.`);
+                  const truncatedText = fullText.substring(0, maxLength);
+                  attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}" (primeiras ${(maxLength / 1000).toFixed(0)}k caracteres):\n${truncatedText}\n`;
+                  attachmentContext += `\n⚠️ Nota: Documento muito extenso. Mostrando os primeiros ${(maxLength / 1000).toFixed(0)}k caracteres. Para análise completa de documentos grandes, considere adicionar à Base de Conhecimento em /admin/knowledge.\n`;
                 } else {
-                  // Standard processing for smaller documents
-                  attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${fullText}\n`;
+                  console.log(`📄 Processing full document (${(fullText.length / 1000).toFixed(0)}k chars)`);
+                  attachmentContext += `\n\n📄 Conteúdo completo do documento "${attachment.file_name}":\n${fullText}\n`;
                 }
               } else {
                 console.error('Error parsing PDF:', pdfError);

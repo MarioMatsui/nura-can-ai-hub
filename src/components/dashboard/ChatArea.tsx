@@ -400,7 +400,7 @@ export const ChatArea = ({
                         const lastUserMessage = messages.filter(m => m.role === 'user').pop();
                         const hasAttachments = lastUserMessage?.attachments && lastUserMessage.attachments.length > 0;
                         return hasAttachments 
-                          ? 'Analisando todas as seções do documento, por favor aguarde...'
+                          ? 'Processando documento, isso pode levar alguns instantes...'
                           : 'Processando sua pergunta...';
                       })()}
                     </span>
