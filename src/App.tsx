@@ -10,7 +10,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import SignUp from "./pages/auth/SignUp";
 import Login from "./pages/auth/Login";
 import ForgotPassword from "./pages/auth/ForgotPassword";
-import AdminKnowledge from "./pages/AdminKnowledge";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,7 +29,8 @@ const App = () => (
           <Route path="/auth/signup" element={<SignUp />} />
           <Route path="/auth/login" element={<Login />} />
           <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-          <Route path="/admin/knowledge" element={<AdminKnowledge />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/knowledge" element={<Admin />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
