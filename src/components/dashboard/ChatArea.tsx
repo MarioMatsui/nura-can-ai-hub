@@ -389,10 +389,21 @@ export const ChatArea = ({
             {isProcessing && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4 bg-muted">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {(() => {
+                        const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+                        const hasAttachments = lastUserMessage?.attachments && lastUserMessage.attachments.length > 0;
+                        return hasAttachments 
+                          ? 'Analisando todas as seções do documento, por favor aguarde...'
+                          : 'Processando sua pergunta...';
+                      })()}
+                    </span>
                   </div>
                 </div>
               </div>
