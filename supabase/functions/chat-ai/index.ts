@@ -245,8 +245,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const { conversationId, message, modelType } = await req.json();
+    try {
+      const { conversationId, message, modelType, attachments = [] } = await req.json();
 
     if (!conversationId || !message || !modelType) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -429,17 +429,88 @@ serve(async (req) => {
     }
 
     // Determine model and system prompt
-    const model = 'gpt-4o'; // All models now use gpt-4o
+    const model = 'gpt-4o'; // All models now use gpt-4o for vision support
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
-    // Build messages array for OpenAI with RAG context
+    // Process attachments (images and documents)
+    let attachmentContext = "";
+    const messageContent: any[] = [{ type: "text", text: message }];
+
+    if (attachments && attachments.length > 0) {
+      console.log(`Processing ${attachments.length} attachments`);
+      
+      for (const attachment of attachments) {
+        if (attachment.file_type.startsWith('image/')) {
+          // For images, use GPT-4 Vision
+          console.log(`Adding image to vision: ${attachment.file_name}`);
+          
+          // Get signed URL for the image
+          const { data: signedUrlData } = await supabase.storage
+            .from('chat-attachments')
+            .createSignedUrl(attachment.file_path, 3600);
+          
+          if (signedUrlData?.signedUrl) {
+            messageContent.push({
+              type: "image_url",
+              image_url: {
+                url: signedUrlData.signedUrl,
+                detail: "high"
+              }
+            });
+          }
+        } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
+          // For PDFs and text files, extract text content
+          try {
+            if (attachment.file_type === 'application/pdf') {
+              console.log(`Parsing PDF: ${attachment.file_name}`);
+              
+              const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
+                body: { filePath: attachment.file_path }
+              });
+
+              if (!pdfError && pdfData?.text) {
+                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${pdfData.text}\n`;
+              } else {
+                console.error('Error parsing PDF:', pdfError);
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
+              }
+            } else {
+              // For text files, download and read directly
+              console.log(`Reading text file: ${attachment.file_name}`);
+              
+              const { data: fileData, error: downloadError } = await supabase.storage
+                .from('chat-attachments')
+                .download(attachment.file_path);
+              
+              if (!downloadError && fileData) {
+                const text = await fileData.text();
+                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
+              } else {
+                console.error('Error reading text file:', downloadError);
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
+              }
+            }
+          } catch (err) {
+            console.error(`Error processing document ${attachment.file_name}:`, err);
+            attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro no processamento)\n`;
+          }
+        }
+      }
+
+      if (attachmentContext) {
+        attachmentContext += "\n---\nAnalise o conteúdo dos documentos acima junto com a pergunta do usuário.\n";
+      }
+    }
+
+    // Build messages array for OpenAI with RAG context and attachments
+    const userMessageContent = messageContent.length > 1 ? messageContent : message;
     const openAIMessages = [
-      { role: 'system', content: systemPrompt + ragContext },
+      { role: 'system', content: systemPrompt + ragContext + attachmentContext },
       ...(messages || []).map((m: any) => ({ role: m.role, content: m.content })),
-      { role: 'user', content: message }
+      { role: 'user', content: userMessageContent }
     ];
 
-    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}, RAG: ${ragContext ? 'Yes' : 'No'}`);
+    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}, RAG: ${ragContext ? 'Yes' : 'No'}, Attachments: ${attachments?.length || 0}`);
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

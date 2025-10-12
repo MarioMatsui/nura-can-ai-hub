@@ -18,6 +18,12 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  attachments?: Array<{
+    file_path: string;
+    file_name: string;
+    file_type: string;
+    storage_url: string;
+  }>;
 }
 
 export interface UserSubscription {
@@ -120,7 +126,13 @@ const Dashboard = () => {
       return;
     }
 
-    setMessages((data || []) as Message[]);
+    setMessages((data || []).map(msg => ({
+      id: msg.id,
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+      created_at: msg.created_at,
+      attachments: Array.isArray(msg.attachments) ? msg.attachments as any : []
+    })));
   };
 
   const handleSelectConversation = async (conversation: Conversation) => {
@@ -193,7 +205,11 @@ const Dashboard = () => {
     });
   };
 
-  const handleSendMessage = async (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary') => {
+  const handleSendMessage = async (
+    content: string, 
+    modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist',
+    attachments?: Array<{file_path: string; file_name: string; file_type: string; storage_url: string}>
+  ) => {
     if (!user) return;
 
     let conversationId = currentConversation?.id;
@@ -232,6 +248,7 @@ const Dashboard = () => {
         conversation_id: conversationId,
         role: 'user',
         content,
+        attachments: attachments || [],
       })
       .select()
       .single();
@@ -245,7 +262,10 @@ const Dashboard = () => {
       return;
     }
 
-    setMessages([...messages, userMessage as Message]);
+    setMessages([...messages, {
+      ...userMessage,
+      attachments: userMessage.attachments as any
+    } as Message]);
 
     // Call AI API and save response
     try {
@@ -254,6 +274,7 @@ const Dashboard = () => {
           conversationId,
           message: content,
           modelType,
+          attachments: attachments || [],
         }
       });
 
@@ -294,7 +315,10 @@ const Dashboard = () => {
       }
 
       if (aiMessage) {
-        setMessages(prev => [...prev, aiMessage as Message]);
+        setMessages(prev => [...prev, {
+          ...aiMessage,
+          attachments: aiMessage.attachments as any
+        } as Message]);
       }
     } catch (error: any) {
       console.error('Error getting AI response:', error);

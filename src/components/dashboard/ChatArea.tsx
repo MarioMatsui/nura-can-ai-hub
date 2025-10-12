@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Lock, Menu, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check } from 'lucide-react';
+import { Send, Lock, Menu, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,6 +12,14 @@ import {
 import { Message, UserSubscription, Conversation } from '@/pages/Dashboard';
 import { cn, formatMarkdown } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Attachment {
+  file_path: string;
+  file_name: string;
+  file_type: string;
+  storage_url: string;
+}
 
 interface ChatAreaProps {
   user: any;
@@ -19,7 +27,7 @@ interface ChatAreaProps {
   messages: Message[];
   subscriptions: UserSubscription[];
   currentConversation: Conversation | null;
-  onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist') => void;
+  onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist', attachments?: Attachment[]) => void;
   onOpenSidebar: () => void;
 }
 
@@ -37,7 +45,10 @@ export const ChatArea = ({
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelType>('generic');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -60,8 +71,86 @@ export const ChatArea = ({
     );
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const uploadedAttachments: Attachment[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        // Validate file size (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+          toast({
+            title: "Arquivo muito grande",
+            description: `${file.name} excede o limite de 10MB`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        // Upload to Supabase Storage
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('chat-attachments')
+          .upload(filePath, file);
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          toast({
+            title: "Erro no upload",
+            description: `Falha ao enviar ${file.name}`,
+            variant: "destructive",
+          });
+          continue;
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('chat-attachments')
+          .getPublicUrl(filePath);
+
+        uploadedAttachments.push({
+          file_path: filePath,
+          file_name: file.name,
+          file_type: file.type,
+          storage_url: publicUrl,
+        });
+      }
+
+      setAttachments(prev => [...prev, ...uploadedAttachments]);
+      
+      if (uploadedAttachments.length > 0) {
+        toast({
+          title: "Arquivos anexados",
+          description: `${uploadedAttachments.length} arquivo(s) pronto(s) para envio`,
+        });
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast({
+        title: "Erro",
+        description: "Erro ao processar arquivos",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSend = async () => {
-    if (!inputValue.trim() || isProcessing) return;
+    if ((!inputValue.trim() && attachments.length === 0) || isProcessing) return;
     
     if (!hasAccess(selectedModel)) {
       toast({
@@ -74,10 +163,12 @@ export const ChatArea = ({
 
     setIsProcessing(true);
     const messageToSend = inputValue;
+    const attachmentsToSend = [...attachments];
     setInputValue('');
+    setAttachments([]);
     
     try {
-      await onSendMessage(messageToSend, selectedModel);
+      await onSendMessage(messageToSend, selectedModel, attachmentsToSend);
     } catch (error: any) {
       // Check if it's a daily limit error
       if (error?.message?.includes('limite diário')) {
@@ -227,6 +318,20 @@ export const ChatArea = ({
                       : 'bg-muted'
                   )}
                 >
+                  {message.attachments && message.attachments.length > 0 && (
+                    <div className="mb-2 space-y-1">
+                      {message.attachments.map((att: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs opacity-80">
+                          {att.file_type?.startsWith('image/') ? (
+                            <ImageIcon className="h-3 w-3" />
+                          ) : (
+                            <FileText className="h-3 w-3" />
+                          )}
+                          <span className="truncate">{att.file_name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div 
                     className="whitespace-pre-wrap text-sm sm:text-base break-words prose prose-sm max-w-none dark:prose-invert"
                     dangerouslySetInnerHTML={{ __html: formatMarkdown(message.content) }}
@@ -252,29 +357,71 @@ export const ChatArea = ({
       </ScrollArea>
 
       <div className="p-3 border-t border-border">
-        <div className="flex gap-2 max-w-4xl mx-auto">
-          <Textarea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Digite sua pergunta..."
-            className="min-h-[50px] sm:min-h-[60px] max-h-[120px] sm:max-h-[200px] text-sm sm:text-base"
-            disabled={!hasAccess(selectedModel) || isProcessing}
-          />
-          <Button
-            onClick={handleSend}
-            size="icon"
-            className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
-            disabled={!inputValue.trim() || !hasAccess(selectedModel) || isProcessing}
-          >
-            <Send className="h-4 w-4 sm:h-5 sm:w-5" />
-          </Button>
+        <div className="max-w-4xl mx-auto">
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {attachments.map((att, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 bg-muted px-3 py-2 rounded-lg text-sm"
+                >
+                  {att.file_type.startsWith('image/') ? (
+                    <ImageIcon className="h-4 w-4" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  <span className="truncate max-w-[150px]">{att.file_name}</span>
+                  <button
+                    onClick={() => removeAttachment(idx)}
+                    className="hover:bg-background rounded p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.txt,.doc,.docx"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading || isProcessing}
+              className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
+            >
+              <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+            <Textarea
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Digite sua pergunta..."
+              className="min-h-[50px] sm:min-h-[60px] max-h-[120px] sm:max-h-[200px] text-sm sm:text-base"
+              disabled={!hasAccess(selectedModel) || isProcessing}
+            />
+            <Button
+              onClick={handleSend}
+              size="icon"
+              className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
+              disabled={(!inputValue.trim() && attachments.length === 0) || !hasAccess(selectedModel) || isProcessing}
+            >
+              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          </div>
+          {!hasAccess(selectedModel) && (
+            <p className="text-xs text-muted-foreground text-center mt-2 px-2">
+              Você não tem acesso a este modelo. Faça upgrade do seu plano.
+            </p>
+          )}
         </div>
-        {!hasAccess(selectedModel) && (
-          <p className="text-xs text-muted-foreground text-center mt-2 px-2">
-            Você não tem acesso a este modelo. Faça upgrade do seu plano.
-          </p>
-        )}
       </div>
     </div>
   );
