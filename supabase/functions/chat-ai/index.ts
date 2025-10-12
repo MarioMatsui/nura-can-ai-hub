@@ -469,8 +469,8 @@ serve(async (req) => {
               });
 
               if (!pdfError && pdfData?.text) {
-                // Limit text size to avoid OpenAI token limits (roughly 100k characters = ~25k tokens)
-                const maxLength = 100000;
+                // Limit text size to avoid OpenAI token limits (roughly 400k characters = ~100k tokens)
+                const maxLength = 400000;
                 let text = pdfData.text;
                 let truncated = false;
                 
