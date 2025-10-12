@@ -498,19 +498,30 @@ serve(async (req) => {
       }
 
       if (attachmentContext) {
-        attachmentContext += "\n---\nAnalise o conteúdo dos documentos acima junto com a pergunta do usuário.\n";
+        attachmentContext = "\n\n⚠️ PRIORIDADE MÁXIMA - DOCUMENTOS ENVIADOS PELO USUÁRIO:\n" + 
+                          attachmentContext + 
+                          "\n---\n**IMPORTANTE**: Os documentos acima foram enviados AGORA pelo usuário e devem ser o FOCO PRINCIPAL da sua resposta. " +
+                          "Responda baseado PRIMEIRO no conteúdo destes documentos. Use o conhecimento do RAG apenas como complemento se necessário.\n";
       }
     }
 
-    // Build messages array for OpenAI with RAG context and attachments
+    // Build messages array for OpenAI - attachments have priority over RAG
     const userMessageContent = messageContent.length > 1 ? messageContent : message;
+    
+    // If there are attachments, they go first in the system prompt to give them priority
+    const systemContent = attachmentContext 
+      ? systemPrompt + attachmentContext + ragContext
+      : systemPrompt + ragContext;
+    
     const openAIMessages = [
-      { role: 'system', content: systemPrompt + ragContext + attachmentContext },
+      { role: 'system', content: systemContent },
       ...(messages || []).map((m: any) => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessageContent }
     ];
 
-    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}, RAG: ${ragContext ? 'Yes' : 'No'}, Attachments: ${attachments?.length || 0}`);
+    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}`);
+    console.log(`- Attachments: ${attachments?.length || 0} ${attachmentContext ? '(processed and prioritized)' : ''}`);
+    console.log(`- RAG Context: ${ragContext ? 'Yes (as support)' : 'No'}`);
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
