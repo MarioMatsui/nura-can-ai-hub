@@ -469,8 +469,9 @@ serve(async (req) => {
               });
 
               if (!pdfError && pdfData?.text) {
-                // Limit text size to avoid OpenAI token limits (roughly 400k characters = ~100k tokens)
-                const maxLength = 400000;
+                // Limit text size to avoid OpenAI token limits 
+                // OpenAI limit: 30k tokens/min. Using ~15k tokens for PDF (60k chars) leaves room for history/prompt
+                const maxLength = 60000;
                 let text = pdfData.text;
                 let truncated = false;
                 
@@ -483,7 +484,7 @@ serve(async (req) => {
                 attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
                 
                 if (truncated) {
-                  attachmentContext += `\n⚠️ Nota: Este documento é muito grande e foi truncado. Mostrando os primeiros ${(maxLength / 1000).toFixed(0)}k caracteres.\n`;
+                  attachmentContext += `\n⚠️ Nota: Este documento é muito grande e foi truncado. Mostrando os primeiros ${(maxLength / 1000).toFixed(0)}k caracteres. Para análise completa, adicione o documento à Base de Conhecimento em /admin/knowledge.\n`;
                 }
               } else {
                 console.error('Error parsing PDF:', pdfError);
