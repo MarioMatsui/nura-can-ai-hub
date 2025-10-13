@@ -548,13 +548,13 @@ serve(async (req) => {
       }
     }
 
-    // Build messages array for OpenAI - attachments have priority over RAG
+    // Build messages array for OpenAI - attachments have ABSOLUTE priority
     const userMessageContent = messageContent.length > 1 ? messageContent : message;
     
-    // If there are attachments, they go first in the system prompt to give them priority
+    // CRITICAL: Put attachment context FIRST in system prompt for absolute priority
     const systemContent = attachmentContext 
-      ? systemPrompt + attachmentContext + ragContext
-      : systemPrompt + ragContext;
+      ? attachmentContext + "\n\n" + systemPrompt + (ragContext ? "\n\n" + ragContext : "")
+      : systemPrompt + (ragContext ? "\n\n" + ragContext : "");
     
     const openAIMessages = [
       { role: 'system', content: systemContent },
