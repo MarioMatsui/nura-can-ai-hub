@@ -466,7 +466,7 @@ serve(async (req) => {
               }
             });
           }
-        } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
+            } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
           // For documents: Read and send to AI directly (they are part of the user's message)
           try {
             if (attachment.file_type === 'application/pdf') {
@@ -487,28 +487,57 @@ serve(async (req) => {
                 const fullText = pdfData.text;
                 console.log(`✅ PDF text extracted: ${fullText.length} characters`);
                 
-                // Smart truncation for large PDFs to avoid context length issues
-                const maxPdfChars = 80000; // ~20-24k tokens, safe margin for gpt-4o-mini
-                let pdfContent = fullText;
+                // Extract key information using AI first
+                console.log('🔍 Extracting structured data from PDF using AI...');
                 
-                if (fullText.length > maxPdfChars) {
-                  console.log(`⚠️ PDF is large (${fullText.length} chars), truncating to ${maxPdfChars} chars`);
+                const extractionPrompt = `Você é um assistente especializado em extrair dados estruturados de documentos técnicos.
+
+Analise o seguinte documento e extraia TODAS as informações relevantes de forma estruturada.
+
+IMPORTANTE: 
+- Liste TODOS os valores numéricos, datas, resultados encontrados
+- Para COAs (Certificate of Analysis), extraia valores de THC, CBD, terpenos, contaminantes
+- Cite valores EXATOS como aparecem no documento (ex: "22.5 mg/g" não "[valor]")
+- Se houver "ND" (não detectado), escreva "ND"
+- Organize em seções claras
+
+DOCUMENTO:
+${fullText.substring(0, 120000)}
+
+Forneça uma análise completa e estruturada do documento acima.`;
+
+                const extractionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    model: 'gpt-4o',
+                    messages: [
+                      { role: 'system', content: 'Você é um especialista em extrair dados estruturados de documentos técnicos e COAs. Sempre cite valores exatos e organize a informação de forma clara.' },
+                      { role: 'user', content: extractionPrompt }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 4000,
+                  }),
+                });
+
+                if (extractionResponse.ok) {
+                  const extractionData = await extractionResponse.json();
+                  const structuredData = extractionData.choices[0].message.content;
+                  console.log(`✅ Structured data extracted: ${structuredData.length} chars`);
                   
-                  // Keep most important parts: beginning (metadata, headers) and more of the content
-                  const beginningChars = Math.floor(maxPdfChars * 0.75); // 75% from beginning
-                  const endingChars = maxPdfChars - beginningChars; // 25% from end
-                  
-                  const beginning = fullText.substring(0, beginningChars);
-                  const ending = fullText.substring(fullText.length - endingChars);
-                  
-                  pdfContent = beginning + 
-                              `\n\n[... parte intermediária continua ...]\n\n` + 
-                              ending;
+                  attachmentContext += `\n\n📄 ANÁLISE ESTRUTURADA DO DOCUMENTO "${attachment.file_name}":\n\n${structuredData}\n\n`;
+                  attachmentContext += `📌 Texto completo do documento (primeiros 80k caracteres):\n${fullText.substring(0, 80000)}\n`;
+                  textContentLength += structuredData.length + 80000;
+                } else {
+                  console.error('❌ Failed to extract structured data, using raw text');
+                  const maxPdfChars = 80000;
+                  const pdfContent = fullText.substring(0, maxPdfChars);
+                  attachmentContext += `\n\n📄 DOCUMENTO COMPLETO: "${attachment.file_name}"\n\n${pdfContent}\n`;
+                  textContentLength += pdfContent.length;
                 }
-                
-                // NEVER mention truncation or optimization to the AI
-                attachmentContext += `\n\n📄 DOCUMENTO COMPLETO: "${attachment.file_name}"\n\n${pdfContent}\n`;
-                textContentLength += pdfContent.length;
               }
             } else {
               // For text files, download and read directly
