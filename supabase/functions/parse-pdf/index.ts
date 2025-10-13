@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
-import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,7 +8,7 @@ const corsHeaders = {
 
 interface ParsePdfRequest {
   filePath: string;
-  bucket?: string;
+  bucket?: string; // Optional bucket name, defaults to trying both
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -31,11 +30,12 @@ const handler = async (req: Request): Promise<Response> => {
     let downloadError: any = null;
 
     if (bucket) {
+      // If bucket is specified, use it
       const result = await supabaseClient.storage.from(bucket).download(filePath);
       fileData = result.data;
       downloadError = result.error;
     } else {
-      // Try chat-attachments first
+      // Try chat-attachments first (most common for user uploads)
       const chatResult = await supabaseClient.storage.from("chat-attachments").download(filePath);
       
       if (!chatResult.error && chatResult.data) {
@@ -59,39 +59,48 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("PDF downloaded, size:", fileData.size);
 
-    // Convert to ArrayBuffer for pdfjs
+    // Convert to ArrayBuffer for parsing
     const arrayBuffer = await fileData.arrayBuffer();
-    
-    // Load PDF document using pdf.js
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
-    
-    console.log(`PDF loaded successfully, ${pdf.numPages} pages`);
-    
-    // Extract text from all pages
-    let fullText = "";
-    
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      
-      // Extract text items and join them
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      
-      fullText += pageText + '\n\n';
-    }
+    const uint8Array = new Uint8Array(arrayBuffer);
 
+    // Simple but improved PDF text extraction
+    // This extracts text from PDF objects
+    let text = '';
+    let buffer = '';
+    
+    for (let i = 0; i < uint8Array.length; i++) {
+      const char = String.fromCharCode(uint8Array[i]);
+      
+      // Look for text objects in PDF
+      if (char === '(' && uint8Array[i - 1] !== 92) { // Opening parenthesis (not escaped)
+        buffer = '';
+      } else if (char === ')' && uint8Array[i - 1] !== 92) { // Closing parenthesis (not escaped)
+        if (buffer.length > 0) {
+          text += buffer + ' ';
+          buffer = '';
+        }
+      } else if (buffer !== null) {
+        // Only add printable characters
+        if (char.charCodeAt(0) >= 32 && char.charCodeAt(0) <= 126) {
+          buffer += char;
+        } else if (char === '\n' || char === '\r') {
+          buffer += ' ';
+        }
+      }
+    }
+    
     // Clean up the extracted text
-    const cleanedText = fullText
+    const cleanedText = text
+      .replace(/\\n/g, ' ')
+      .replace(/\\r/g, ' ')
+      .replace(/\\t/g, ' ')
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
 
-    console.log("Text extracted successfully, length:", cleanedText.length);
-    console.log("First 500 characters:", cleanedText.substring(0, 500));
+    console.log("Text extracted, length:", cleanedText.length);
+    console.log("First 500 chars:", cleanedText.substring(0, 500));
 
-    if (cleanedText.length < 50) {
+    if (cleanedText.length < 100) {
       throw new Error("Could not extract meaningful text from PDF. The file may be image-based or corrupted.");
     }
 
