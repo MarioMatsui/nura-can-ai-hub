@@ -466,78 +466,78 @@ serve(async (req) => {
               }
             });
           }
-            } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
-          // For documents: Read and send to AI directly (they are part of the user's message)
+        } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
+          // For documents: Use OpenAI Vision to read PDFs as images (more reliable)
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`📄 PDF attached: ${attachment.file_name} - Extracting text`);
+              console.log(`📄 PDF attached: ${attachment.file_name} - Using Vision API`);
               
-              // Parse PDF to get text
-              const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
-                body: { filePath: attachment.file_path }
-              });
+              // Get signed URL for direct access
+              const { data: signedUrlData } = await supabase.storage
+                .from('chat-attachments')
+                .createSignedUrl(attachment.file_path, 3600);
+              
+              if (!signedUrlData?.signedUrl) {
+                console.error('❌ Could not generate signed URL for PDF');
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro ao acessar)\n`;
+                continue;
+              }
+              
+              console.log('🔍 Using GPT-4 Vision to extract data from PDF...');
+              
+              // Use Vision API to read the PDF
+              const visionPrompt = `Você é um especialista em extrair dados de documentos técnicos.
 
-              if (pdfError) {
-                console.error('❌ Error parsing PDF:', pdfError);
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura do PDF)\n`;
-              } else if (!pdfData || !pdfData.text) {
-                console.error('❌ No text returned from PDF parser');
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (nenhum texto extraído)\n`;
-              } else {
-                const fullText = pdfData.text;
-                console.log(`✅ PDF text extracted: ${fullText.length} characters`);
-                
-                // Extract key information using AI first
-                console.log('🔍 Extracting structured data from PDF using AI...');
-                
-                const extractionPrompt = `Você é um assistente especializado em extrair dados estruturados de documentos técnicos.
+Analise este documento PDF e extraia TODAS as informações de forma estruturada e completa.
 
-Analise o seguinte documento e extraia TODAS as informações relevantes de forma estruturada.
-
-IMPORTANTE: 
-- Liste TODOS os valores numéricos, datas, resultados encontrados
-- Para COAs (Certificate of Analysis), extraia valores de THC, CBD, terpenos, contaminantes
-- Cite valores EXATOS como aparecem no documento (ex: "22.5 mg/g" não "[valor]")
+IMPORTANTE:
+- Liste TODOS os valores numéricos, datas, resultados
+- Para COAs: extraia THC, CBD, terpenos, contaminantes, datas de teste
+- Cite valores EXATOS como aparecem (ex: "22.5 mg/g")
 - Se houver "ND" (não detectado), escreva "ND"
 - Organize em seções claras
+- Seja completo e detalhado
 
-DOCUMENTO:
-${fullText.substring(0, 120000)}
+Forneça uma análise estruturada do documento.`;
 
-Forneça uma análise completa e estruturada do documento acima.`;
+              const visionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4o',
+                  messages: [
+                    {
+                      role: 'user',
+                      content: [
+                        { type: 'text', text: visionPrompt },
+                        {
+                          type: 'image_url',
+                          image_url: {
+                            url: signedUrlData.signedUrl,
+                            detail: 'high'
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  max_tokens: 4000,
+                }),
+              });
 
-                const extractionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    model: 'gpt-4o',
-                    messages: [
-                      { role: 'system', content: 'Você é um especialista em extrair dados estruturados de documentos técnicos e COAs. Sempre cite valores exatos e organize a informação de forma clara.' },
-                      { role: 'user', content: extractionPrompt }
-                    ],
-                    temperature: 0.3,
-                    max_tokens: 4000,
-                  }),
-                });
-
-                if (extractionResponse.ok) {
-                  const extractionData = await extractionResponse.json();
-                  const structuredData = extractionData.choices[0].message.content;
-                  console.log(`✅ Structured data extracted: ${structuredData.length} chars`);
-                  
-                  attachmentContext += `\n\n📄 ANÁLISE ESTRUTURADA DO DOCUMENTO "${attachment.file_name}":\n\n${structuredData}\n\n`;
-                  attachmentContext += `📌 Texto completo do documento (primeiros 80k caracteres):\n${fullText.substring(0, 80000)}\n`;
-                  textContentLength += structuredData.length + 80000;
-                } else {
-                  console.error('❌ Failed to extract structured data, using raw text');
-                  const maxPdfChars = 80000;
-                  const pdfContent = fullText.substring(0, maxPdfChars);
-                  attachmentContext += `\n\n📄 DOCUMENTO COMPLETO: "${attachment.file_name}"\n\n${pdfContent}\n`;
-                  textContentLength += pdfContent.length;
-                }
+              if (visionResponse.ok) {
+                const visionData = await visionResponse.json();
+                const extractedData = visionData.choices[0].message.content;
+                console.log(`✅ Vision extraction successful: ${extractedData.length} chars`);
+                
+                attachmentContext += `\n\n📄 ANÁLISE DO DOCUMENTO "${attachment.file_name}":\n\n${extractedData}\n\n`;
+                textContentLength += extractedData.length;
+                hasImages = true; // Mark as using vision
+              } else {
+                console.error('❌ Vision API failed:', await visionResponse.text());
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na extração)\n`;
               }
             } else {
               // For text files, download and read directly
