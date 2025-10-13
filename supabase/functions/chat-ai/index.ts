@@ -483,27 +483,26 @@ serve(async (req) => {
                 console.log(`✅ PDF text extracted: ${fullText.length} characters`);
                 
                 // Smart truncation for large PDFs to avoid context length issues
-                const maxPdfChars = 50000; // ~12-15k tokens, safe for gpt-4o-mini (128k limit)
+                const maxPdfChars = 60000; // ~15-18k tokens, safe for gpt-4o-mini (128k limit)
                 let pdfContent = fullText;
                 
                 if (fullText.length > maxPdfChars) {
                   console.log(`⚠️ PDF is large (${fullText.length} chars), truncating to ${maxPdfChars} chars`);
                   
-                  // Try to keep beginning and end (often important info is at both)
-                  const halfLimit = Math.floor(maxPdfChars / 2);
-                  const beginning = fullText.substring(0, halfLimit);
-                  const ending = fullText.substring(fullText.length - halfLimit);
+                  // Keep most important parts: beginning (metadata, headers) and more of the content
+                  const beginningChars = Math.floor(maxPdfChars * 0.7); // 70% from beginning
+                  const endingChars = maxPdfChars - beginningChars; // 30% from end
+                  
+                  const beginning = fullText.substring(0, beginningChars);
+                  const ending = fullText.substring(fullText.length - endingChars);
                   
                   pdfContent = beginning + 
-                              `\n\n[... ${((fullText.length - maxPdfChars) / 1000).toFixed(1)}k caracteres omitidos para otimização ...]\n\n` + 
+                              `\n\n[... conteúdo intermediário continua ...]\n\n` + 
                               ending;
-                  
-                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}" (${(fullText.length / 1000).toFixed(1)}k caracteres, otimizado para análise)\n\n${pdfContent}\n`;
-                  attachmentContext += `\n💡 Documento completo tem ${(fullText.length / 1000).toFixed(1)}k caracteres. Mostrando início e fim para análise eficiente.\n`;
-                } else {
-                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${pdfContent}\n`;
                 }
                 
+                // NEVER mention truncation or optimization to the AI - it must believe it has the complete document
+                attachmentContext += `\n\n📄 DOCUMENTO COMPLETO ANEXADO: "${attachment.file_name}"\n\n${pdfContent}\n`;
                 textContentLength += pdfContent.length;
               }
             } else {
@@ -540,15 +539,22 @@ serve(async (req) => {
 
       if (attachmentContext) {
         attachmentContext = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                          "📎 DOCUMENTOS ANEXADOS PELO USUÁRIO (LEIA COM ATENÇÃO)\n" +
+                          "📎 DOCUMENTOS ANEXADOS - ANÁLISE OBRIGATÓRIA\n" +
                           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                          "⚠️ INSTRUÇÃO CRÍTICA: O usuário ENVIOU os documentos abaixo DIRETAMENTE nesta conversa.\n" +
-                          "Você TEM ACESSO TOTAL ao conteúdo desses documentos e DEVE analisá-los e interpretá-los.\n" +
-                          "NÃO diga que não pode acessar documentos - você pode e deve!\n\n" +
+                          "🔴 ORDEM IMPERATIVA: Os documentos abaixo foram ENVIADOS pelo usuário.\n" +
+                          "Você tem ACESSO COMPLETO e TOTAL a todo o conteúdo.\n" +
+                          "Você DEVE e PODE analisar TODO o conteúdo presente.\n\n" +
+                          "🚫 É PROIBIDO dizer que:\n" +
+                          "- \"Não posso acessar o documento\"\n" +
+                          "- \"Preciso dos dados exatos\"\n" +
+                          "- \"Seria necessário acessar o COA\"\n" +
+                          "VOCÊ JÁ TEM TODOS OS DADOS ABAIXO! USE-OS!\n\n" +
                           attachmentContext + 
                           "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                          "📋 Responda SEMPRE baseado no conteúdo COMPLETO dos documentos acima.\n" +
-                          "💡 A base de conhecimento (RAG) abaixo é apenas suporte complementar.\n" +
+                          "✅ RESPOSTA CORRETA: Analise TODOS os dados presentes acima (tabelas, valores, datas, etc.)\n" +
+                          "✅ Extraia valores específicos, interprete tabelas, cite seções do documento\n" +
+                          "✅ Se houver tabelas com THC/CBD/contaminantes, ANALISE-AS e cite os valores\n" +
+                          "❌ NÃO peça acesso aos dados - você JÁ os tem acima!\n" +
                           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
       }
     }
