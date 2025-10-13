@@ -374,29 +374,27 @@ serve(async (req) => {
             ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
           }
         } else {
-          // Search for similar chunks in the knowledge base for specific type
-          const { data: similarChunks, error: searchError } = await supabase.rpc(
-            'search_similar_chunks',
-            {
-              query_embedding: queryEmbedding,
-              knowledge_type_filter: knowledgeType,
-              match_count: 3
-            }
-          );
+          // Simple document search for specific knowledge type (no embeddings)
+          const { data: docs, error: searchError } = await supabase
+            .from('knowledge_documents')
+            .select('title, content')
+            .eq('knowledge_type', knowledgeType)
+            .eq('status', 'ready')
+            .limit(3);
 
           if (searchError) {
             console.error('Error searching knowledge base:', searchError);
-          } else if (similarChunks && similarChunks.length > 0) {
-            console.log(`Found ${similarChunks.length} relevant chunks`);
+          } else if (docs && docs.length > 0) {
+            console.log(`Found ${docs.length} relevant documents`);
             
-            // Build context from retrieved chunks
+            // Build context from retrieved documents
             ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
-            similarChunks.forEach((chunk: any, index: number) => {
-              ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
+            docs.forEach((doc: any, index: number) => {
+              ragContext += `[Documento ${index + 1}: ${doc.title}]\n${doc.content.substring(0, 2000)}...\n\n`;
             });
             ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
           } else {
-            console.log('No relevant chunks found in knowledge base');
+            console.log('No relevant documents found in knowledge base');
           }
         }
       } catch (ragError) {
