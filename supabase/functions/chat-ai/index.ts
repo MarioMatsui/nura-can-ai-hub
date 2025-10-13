@@ -465,33 +465,26 @@ serve(async (req) => {
           // For documents: Read and send to AI directly (they are part of the user's message)
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`📄 PDF detected: ${attachment.file_name} - Using vision analysis`);
+              console.log(`📄 PDF attached: ${attachment.file_name} - Extracting text`);
               
-              // Get signed URL for direct access
-              const { data: signedUrlData } = await supabase.storage
-                .from('chat-attachments')
-                .createSignedUrl(attachment.file_path, 3600);
+              // Parse PDF to get text
+              const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
+                body: { filePath: attachment.file_path }
+              });
 
-              if (signedUrlData?.signedUrl) {
-                console.log(`✅ Got signed URL for PDF`);
-                hasImages = true;
-                
-                // Add PDF as image for GPT-4o vision
-                // GPT-4o can process PDFs directly through URLs
-                messageContent.push({
-                  type: "image_url",
-                  image_url: {
-                    url: signedUrlData.signedUrl,
-                    detail: "high" // High detail for tables and complex layouts
-                  }
-                });
-                
-                attachmentContext += `\n\n📄 Documento PDF anexado: "${attachment.file_name}"\n`;
-                attachmentContext += `ℹ️ Analise visualmente o documento para preservar tabelas, gráficos e formatação.\n`;
-                attachmentContext += `⚠️ Este é um arquivo PDF. Certifique-se de ler todo o conteúdo visual incluindo tabelas, gráficos e imagens.\n`;
+              if (pdfError) {
+                console.error('❌ Error parsing PDF:', pdfError);
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura do PDF)\n`;
+              } else if (!pdfData || !pdfData.text) {
+                console.error('❌ No text returned from PDF parser');
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (nenhum texto extraído)\n`;
               } else {
-                console.error('Failed to get signed URL for PDF');
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" (erro ao acessar)\n`;
+                const fullText = pdfData.text;
+                console.log(`✅ PDF text extracted: ${fullText.length} characters`);
+                textContentLength += fullText.length;
+                
+                // For documents like COA with tables, include full text
+                attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${fullText}\n`;
               }
             } else {
               // For text files, download and read directly
