@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Lock, Menu, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { Send, Lock, Menu, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +13,8 @@ import { Message, UserSubscription, Conversation } from '@/pages/Dashboard';
 import { cn, formatMarkdown } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { DocumentProcessingStatus } from './DocumentProcessingStatus';
+import { CitationsModal } from './CitationsModal';
 
 interface Attachment {
   file_path: string;
@@ -47,6 +49,9 @@ export const ChatArea = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [processingStages, setProcessingStages] = useState<any[]>([]);
+  const [currentCitations, setCurrentCitations] = useState<any[]>([]);
+  const [showCitationsModal, setShowCitationsModal] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -206,9 +211,54 @@ export const ChatArea = ({
     setInputValue('');
     setAttachments([]);
     
+    // Configurar stages de processamento se tiver anexos
+    if (attachmentsToSend.length > 0) {
+      setProcessingStages([
+        { id: '1', label: '🔎 Extraindo estrutura do documento...', status: 'processing' },
+        { id: '2', label: '📊 Detectando e formatando tabelas...', status: 'pending' },
+        { id: '3', label: '🧠 Indexando para busca rápida...', status: 'pending' },
+        { id: '4', label: '🧩 Compondo resposta com fontes...', status: 'pending' },
+      ]);
+      
+      // Simular progressão dos stages
+      setTimeout(() => {
+        setProcessingStages(prev => prev.map((s, i) => 
+          i === 0 ? { ...s, status: 'completed' } : 
+          i === 1 ? { ...s, status: 'processing' } : s
+        ));
+      }, 2000);
+      
+      setTimeout(() => {
+        setProcessingStages(prev => prev.map((s, i) => 
+          i <= 1 ? { ...s, status: 'completed' } : 
+          i === 2 ? { ...s, status: 'processing' } : s
+        ));
+      }, 4000);
+      
+      setTimeout(() => {
+        setProcessingStages(prev => prev.map((s, i) => 
+          i <= 2 ? { ...s, status: 'completed' } : 
+          i === 3 ? { ...s, status: 'processing' } : s
+        ));
+      }, 6000);
+    }
+    
     try {
       await onSendMessage(messageToSend, selectedModel, attachmentsToSend);
+      
+      // Finalizar processamento
+      if (attachmentsToSend.length > 0) {
+        setProcessingStages(prev => prev.map(s => ({ ...s, status: 'completed' })));
+        setTimeout(() => setProcessingStages([]), 2000);
+      }
     } catch (error: any) {
+      // Marcar erro nos stages
+      if (attachmentsToSend.length > 0) {
+        setProcessingStages(prev => prev.map(s => 
+          s.status === 'processing' ? { ...s, status: 'error', message: error.message } : s
+        ));
+      }
+      
       // Check if it's a daily limit error
       if (error?.message?.includes('limite diário')) {
         toast({
@@ -381,12 +431,49 @@ export const ChatArea = ({
                     className="whitespace-pre-wrap text-sm sm:text-base break-words prose prose-sm max-w-none dark:prose-invert"
                     dangerouslySetInnerHTML={{ __html: formatMarkdown(message.content) }}
                   />
+                  
+                  {/* Botão de citações (mock - será implementado com dados reais) */}
+                  {message.role === 'assistant' && message.content.length > 100 && (
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          // Mock de citações
+                          setCurrentCitations([
+                            {
+                              type: 'text',
+                              content: 'Exemplo de trecho relevante do documento...',
+                              page_number: 2,
+                              similarity: 0.92,
+                              document_title: 'COA - Lote 12345',
+                              section_title: 'Análise de Canabinoides'
+                            }
+                          ]);
+                          setShowCitationsModal(true);
+                        }}
+                        className="gap-2 text-xs"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Ver fontes e citações
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
             
+            {/* Processing Stages */}
+            {processingStages.length > 0 && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4 bg-muted">
+                  <DocumentProcessingStatus stages={processingStages} />
+                </div>
+              </div>
+            )}
+            
             {/* AI Processing Indicator */}
-            {isProcessing && (
+            {isProcessing && processingStages.length === 0 && (
               <div className="flex justify-start">
                 <div className="max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4 bg-muted">
                   <div className="flex items-center gap-3">
@@ -479,6 +566,13 @@ export const ChatArea = ({
           )}
         </div>
       </div>
+
+      {/* Citations Modal */}
+      <CitationsModal
+        open={showCitationsModal}
+        onClose={() => setShowCitationsModal(false)}
+        citations={currentCitations}
+      />
     </div>
   );
 };
