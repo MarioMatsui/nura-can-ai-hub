@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
+import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/+esm";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +9,7 @@ const corsHeaders = {
 
 interface ParsePdfRequest {
   filePath: string;
-  bucket?: string; // Optional bucket name, defaults to trying both
+  bucket?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -30,12 +31,11 @@ const handler = async (req: Request): Promise<Response> => {
     let downloadError: any = null;
 
     if (bucket) {
-      // If bucket is specified, use it
       const result = await supabaseClient.storage.from(bucket).download(filePath);
       fileData = result.data;
       downloadError = result.error;
     } else {
-      // Try chat-attachments first (most common for user uploads)
+      // Try chat-attachments first
       const chatResult = await supabaseClient.storage.from("chat-attachments").download(filePath);
       
       if (!chatResult.error && chatResult.data) {
@@ -59,23 +59,39 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("PDF downloaded, size:", fileData.size);
 
-    // Convert to ArrayBuffer for parsing
+    // Convert to ArrayBuffer for pdfjs
     const arrayBuffer = await fileData.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    // Use a simple text extraction approach
-    // For production, you'd want to use a proper PDF parsing library
-    const text = new TextDecoder('utf-8', { fatal: false }).decode(uint8Array);
     
+    // Load PDF document using pdf.js
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    
+    console.log(`PDF loaded successfully, ${pdf.numPages} pages`);
+    
+    // Extract text from all pages
+    let fullText = "";
+    
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      
+      // Extract text items and join them
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+      
+      fullText += pageText + '\n\n';
+    }
+
     // Clean up the extracted text
-    const cleanedText = text
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Remove non-printable characters
+    const cleanedText = fullText
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
 
-    console.log("Text extracted, length:", cleanedText.length);
+    console.log("Text extracted successfully, length:", cleanedText.length);
+    console.log("First 500 characters:", cleanedText.substring(0, 500));
 
-    if (cleanedText.length < 100) {
+    if (cleanedText.length < 50) {
       throw new Error("Could not extract meaningful text from PDF. The file may be image-based or corrupted.");
     }
 
