@@ -465,31 +465,38 @@ serve(async (req) => {
           // For documents: Read and send to AI directly (they are part of the user's message)
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`📄 PDF detected: ${attachment.file_name} - Using GPT-4o vision for complex layouts`);
+              console.log(`📄 PDF attached: ${attachment.file_name} - Extracting text`);
               
-              // PDFs often have tables, charts, complex layouts - use vision instead of text extraction
-              hasImages = true;
-              
-              // Get signed URL for the PDF
-              const { data: signedUrlData } = await supabase.storage
-                .from('chat-attachments')
-                .createSignedUrl(attachment.file_path, 3600);
+              // Parse PDF to get text
+              const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
+                body: { filePath: attachment.file_path }
+              });
 
-              
-              if (signedUrlData?.signedUrl) {
-                messageContent.push({
-                  type: "image_url",
-                  image_url: {
-                    url: signedUrlData.signedUrl,
-                    detail: "high"
-                  }
-                });
-                console.log(`✅ PDF added for vision analysis`);
-                attachmentContext += `\n\n📄 Documento PDF: "${attachment.file_name}"\n`;
-                attachmentContext += `ℹ️ Analisado visualmente para preservar tabelas e formatação.\n`;
+              if (pdfError) {
+                console.error('❌ Error parsing PDF:', pdfError);
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura do PDF)\n`;
+              } else if (!pdfData || !pdfData.text) {
+                console.error('❌ No text returned from PDF parser');
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (nenhum texto extraído)\n`;
               } else {
-                console.error('Failed to get signed URL');
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" (erro ao acessar)\n`;
+                const fullText = pdfData.text;
+                console.log(`✅ PDF text extracted: ${fullText.length} characters`);
+                textContentLength += fullText.length;
+                
+                // Smart chunking for large documents
+                const maxChars = 50000;
+                if (fullText.length > maxChars) {
+                  const chunkSize = Math.floor(maxChars / 3);
+                  const beginning = fullText.substring(0, chunkSize);
+                  const middleStart = Math.floor(fullText.length / 2) - Math.floor(chunkSize / 2);
+                  const middle = fullText.substring(middleStart, middleStart + chunkSize);
+                  const end = fullText.substring(fullText.length - chunkSize);
+                  
+                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}" (${(fullText.length / 1000).toFixed(1)}k caracteres)\n\n`;
+                  attachmentContext += `[INÍCIO DO DOCUMENTO]\n${beginning}\n\n[...]\n\n[TRECHO DO MEIO]\n${middle}\n\n[...]\n\n[FINAL DO DOCUMENTO]\n${end}\n`;
+                } else {
+                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${fullText}\n`;
+                }
               }
             } else {
               // For text files, download and read directly
