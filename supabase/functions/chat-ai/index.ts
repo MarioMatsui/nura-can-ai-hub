@@ -535,9 +535,17 @@ serve(async (req) => {
       }
 
       if (attachmentContext) {
-        attachmentContext = "\n\n📎 DOCUMENTOS ANEXADOS PELO USUÁRIO (PRIORIDADE):\n" + 
+        attachmentContext = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                          "📎 DOCUMENTOS ANEXADOS PELO USUÁRIO (LEIA COM ATENÇÃO)\n" +
+                          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+                          "⚠️ INSTRUÇÃO CRÍTICA: O usuário ENVIOU os documentos abaixo DIRETAMENTE nesta conversa.\n" +
+                          "Você TEM ACESSO TOTAL ao conteúdo desses documentos e DEVE analisá-los e interpretá-los.\n" +
+                          "NÃO diga que não pode acessar documentos - você pode e deve!\n\n" +
                           attachmentContext + 
-                          "\n---\n⚠️ IMPORTANTE: Responda SEMPRE com base nos documentos anexados acima. A base de conhecimento (RAG) é apenas suporte complementar.\n";
+                          "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                          "📋 Responda SEMPRE baseado no conteúdo COMPLETO dos documentos acima.\n" +
+                          "💡 A base de conhecimento (RAG) abaixo é apenas suporte complementar.\n" +
+                          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
       }
     }
 
