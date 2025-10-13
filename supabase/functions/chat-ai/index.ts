@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
 // Function to generate embeddings using OpenAI
 async function generateQueryEmbedding(text: string): Promise<number[]> {
@@ -467,78 +468,46 @@ serve(async (req) => {
             });
           }
         } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
-          // For documents: Use OpenAI Vision to read PDFs as images (more reliable)
+          // For documents: Download and convert to base64 for Lovable AI (Gemini supports PDFs)
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`📄 PDF attached: ${attachment.file_name} - Using Vision API`);
+              console.log(`📄 PDF attached: ${attachment.file_name} - Using Lovable AI (Gemini) for analysis`);
               
-              // Get signed URL for direct access
-              const { data: signedUrlData } = await supabase.storage
+              // Download the PDF file
+              const { data: fileData, error: downloadError } = await supabase.storage
                 .from('chat-attachments')
-                .createSignedUrl(attachment.file_path, 3600);
+                .download(attachment.file_path);
               
-              if (!signedUrlData?.signedUrl) {
-                console.error('❌ Could not generate signed URL for PDF');
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro ao acessar)\n`;
+              if (downloadError || !fileData) {
+                console.error('❌ Error downloading PDF:', downloadError);
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro ao baixar)\n`;
                 continue;
               }
               
-              console.log('🔍 Using GPT-4 Vision to extract data from PDF...');
+              // Convert to base64
+              const arrayBuffer = await fileData.arrayBuffer();
+              const bytes = new Uint8Array(arrayBuffer);
+              const base64 = btoa(String.fromCharCode(...bytes));
               
-              // Use Vision API to read the PDF
-              const visionPrompt = `Você é um especialista em extrair dados de documentos técnicos.
-
-Analise este documento PDF e extraia TODAS as informações de forma estruturada e completa.
-
-IMPORTANTE:
-- Liste TODOS os valores numéricos, datas, resultados
-- Para COAs: extraia THC, CBD, terpenos, contaminantes, datas de teste
-- Cite valores EXATOS como aparecem (ex: "22.5 mg/g")
-- Se houver "ND" (não detectado), escreva "ND"
-- Organize em seções claras
-- Seja completo e detalhado
-
-Forneça uma análise estruturada do documento.`;
-
-              const visionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  model: 'gpt-4o',
-                  messages: [
-                    {
-                      role: 'user',
-                      content: [
-                        { type: 'text', text: visionPrompt },
-                        {
-                          type: 'image_url',
-                          image_url: {
-                            url: signedUrlData.signedUrl,
-                            detail: 'high'
-                          }
-                        }
-                      ]
-                    }
-                  ],
-                  max_tokens: 4000,
-                }),
+              console.log(`✅ PDF converted to base64: ${base64.length} characters`);
+              
+              // Add to message content for Gemini (it supports PDF documents)
+              messageContent.push({
+                type: "text",
+                text: `📄 Documento anexado: "${attachment.file_name}"\nPor favor, analise este documento e extraia todas as informações relevantes.`
               });
-
-              if (visionResponse.ok) {
-                const visionData = await visionResponse.json();
-                const extractedData = visionData.choices[0].message.content;
-                console.log(`✅ Vision extraction successful: ${extractedData.length} chars`);
-                
-                attachmentContext += `\n\n📄 ANÁLISE DO DOCUMENTO "${attachment.file_name}":\n\n${extractedData}\n\n`;
-                textContentLength += extractedData.length;
-                hasImages = true; // Mark as using vision
-              } else {
-                console.error('❌ Vision API failed:', await visionResponse.text());
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na extração)\n`;
-              }
+              
+              messageContent.push({
+                type: "file",
+                file: {
+                  data: base64,
+                  mime_type: "application/pdf",
+                  name: attachment.file_name
+                }
+              });
+              
+              hasImages = true; // Use Gemini for multimodal processing
+              console.log('✅ PDF added to message content for Gemini analysis');
             } else {
               // For text files, download and read directly
               console.log(`📄 Text file attached: ${attachment.file_name}`);
@@ -606,18 +575,20 @@ Cite valores exatos do documento acima em sua resposta.
 
     // Smart model selection based on content type
     let selectedModel = model;
+    let useGemini = false;
     
     if (hasImages || attachmentContext) {
-      // Always use GPT-4o for images/multimodal AND document analysis
-      selectedModel = 'gpt-4o';
-      console.log(hasImages ? '🖼️ Using GPT-4o for image/multimodal processing' : '📄 Using GPT-4o for document analysis');
+      // Use Gemini 2.5 Pro for documents and multimodal (best for PDFs)
+      selectedModel = 'google/gemini-2.5-pro';
+      useGemini = true;
+      console.log('📄 Using Gemini 2.5 Pro for document/multimodal processing');
     } else {
       // Use GPT-4o-mini for simple text queries (fast and cheap)
       selectedModel = 'gpt-4o-mini';
       console.log(`💬 Using gpt-4o-mini for standard query`);
     }
 
-    console.log(`Sending to OpenAI with model: ${selectedModel}, modelType: ${modelType}`);
+    console.log(`Sending to ${useGemini ? 'Lovable AI (Gemini)' : 'OpenAI'} with model: ${selectedModel}, modelType: ${modelType}`);
     console.log(`- Attachments: ${attachments?.length || 0} ${attachmentContext ? '(processed and prioritized)' : ''}`);
     console.log(`- RAG Context: ${ragContext ? 'Yes (as support)' : 'No'}`);
     console.log(`- Total system content length: ${systemContent.length} chars`);
@@ -625,11 +596,17 @@ Cite valores exatos do documento acima em sua resposta.
       console.log(`- Attachment context length: ${attachmentContext.length} chars`);
     }
 
-    // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Call AI API (Gemini for documents, OpenAI for text)
+    const apiUrl = useGemini 
+      ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions';
+    
+    const apiKey = useGemini ? LOVABLE_API_KEY : OPENAI_API_KEY;
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
