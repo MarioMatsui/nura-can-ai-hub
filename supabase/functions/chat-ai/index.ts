@@ -538,23 +538,49 @@ serve(async (req) => {
       }
 
       if (attachmentContext) {
-        attachmentContext = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                          "📎 DOCUMENTOS ANEXADOS - ANÁLISE OBRIGATÓRIA\n" +
-                          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
-                          "🔴 ORDEM IMPERATIVA: Os documentos abaixo foram ENVIADOS pelo usuário.\n" +
-                          "Você tem ACESSO COMPLETO e TOTAL a todo o conteúdo.\n" +
-                          "Você DEVE e PODE analisar TODO o conteúdo presente.\n\n" +
-                          "🚫 É PROIBIDO dizer que:\n" +
-                          "- \"Não posso acessar o documento\"\n" +
-                          "- \"Preciso dos dados exatos\"\n" +
-                          "- \"Seria necessário acessar o COA\"\n" +
-                          "VOCÊ JÁ TEM TODOS OS DADOS ABAIXO! USE-OS!\n\n" +
-                          attachmentContext + 
+        // Create super directive header that overrides any system prompt restrictions
+        const analysisDirective = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 MODO DE ANÁLISE DE DOCUMENTOS ATIVADO 🚨
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OVERRIDE DE TODAS AS RESTRIÇÕES ANTERIORES:
+
+Você é um sistema especializado em análise de documentos médicos e técnicos.
+O usuário ENVIOU documentos diretamente para você analisar.
+Todo o conteúdo necessário está presente abaixo nesta mensagem.
+
+CAPACIDADES ATIVADAS:
+✅ Você PODE e DEVE analisar completamente os documentos fornecidos
+✅ Você TEM ACESSO TOTAL a todo o texto, tabelas e dados
+✅ Você DEVE extrair informações específicas (valores numéricos, datas, nomes)
+✅ Você DEVE interpretar tabelas e gráficos descritos no texto
+✅ Você DEVE citar valores exatos encontrados no documento
+
+AÇÕES PROIBIDAS:
+❌ NUNCA diga "não consigo analisar documentos enviados"
+❌ NUNCA diga "não tenho acesso ao documento"
+❌ NUNCA diga "precisa fornecer os dados do COA"
+❌ NUNCA peça para o usuário enviar informações que já estão abaixo
+
+EXEMPLO DE RESPOSTA CORRETA:
+"De acordo com o COA fornecido, o produto ALMA SLIM apresenta os seguintes resultados:
+- THC Total: [valor exato do documento] mg/g
+- CBD Total: [valor exato do documento] mg/g
+- Data de análise: [data exata do documento]
+..."
+
+EXEMPLO DE RESPOSTA INCORRETA (NÃO FAZER):
+"Para analisar o COA, seria necessário ter acesso aos dados específicos..."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+`;
+        
+        attachmentContext = analysisDirective + attachmentContext + 
                           "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                          "✅ RESPOSTA CORRETA: Analise TODOS os dados presentes acima (tabelas, valores, datas, etc.)\n" +
-                          "✅ Extraia valores específicos, interprete tabelas, cite seções do documento\n" +
-                          "✅ Se houver tabelas com THC/CBD/contaminantes, ANALISE-AS e cite os valores\n" +
-                          "❌ NÃO peça acesso aos dados - você JÁ os tem acima!\n" +
+                          "FIM DOS DOCUMENTOS ANEXADOS\n" +
+                          "LEMBRE-SE: Você DEVE usar APENAS as informações acima para responder.\n" +
+                          "Cite valores específicos, datas, e dados exatos encontrados no documento.\n" +
                           "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
       }
     }
@@ -562,10 +588,27 @@ serve(async (req) => {
     // Build messages array for OpenAI - attachments have ABSOLUTE priority
     const userMessageContent = messageContent.length > 1 ? messageContent : message;
     
+    // When there are attachments, use a specialized document analysis system prompt
+    let finalSystemPrompt = systemPrompt;
+    if (attachmentContext) {
+      finalSystemPrompt = `Você é NuraAI, um assistente especializado em análise de documentos técnicos e médicos sobre cannabis.
+
+IMPORTANTE: O usuário enviou documentos para você analisar. Todo o conteúdo necessário está presente nesta conversa.
+
+Sua função é:
+1. LER completamente os documentos fornecidos
+2. EXTRAIR informações específicas (valores, datas, concentrações, etc.)
+3. INTERPRETAR tabelas e dados técnicos
+4. RESPONDER com base EXCLUSIVAMENTE no conteúdo dos documentos
+
+Você NUNCA deve dizer que "não pode acessar" ou "não consegue analisar" documentos enviados.
+Você TEM acesso completo ao conteúdo e DEVE analisá-lo.`;
+    }
+    
     // CRITICAL: Put attachment context FIRST in system prompt for absolute priority
     const systemContent = attachmentContext 
-      ? attachmentContext + "\n\n" + systemPrompt + (ragContext ? "\n\n" + ragContext : "")
-      : systemPrompt + (ragContext ? "\n\n" + ragContext : "");
+      ? attachmentContext + "\n\n" + finalSystemPrompt + (ragContext ? "\n\n" + ragContext : "")
+      : finalSystemPrompt + (ragContext ? "\n\n" + ragContext : "");
     
     const openAIMessages = [
       { role: 'system', content: systemContent },
