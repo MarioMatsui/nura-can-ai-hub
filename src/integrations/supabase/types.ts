@@ -96,31 +96,43 @@ export type Database = {
       }
       document_chunks: {
         Row: {
+          block_ids: string[] | null
           chunk_order: number
+          chunk_type: string | null
           content: string
           created_at: string
           document_id: string
           embedding: string | null
           hash: string | null
           id: string
+          is_atomic: boolean | null
+          page_range: string | null
         }
         Insert: {
+          block_ids?: string[] | null
           chunk_order: number
+          chunk_type?: string | null
           content: string
           created_at?: string
           document_id: string
           embedding?: string | null
           hash?: string | null
           id?: string
+          is_atomic?: boolean | null
+          page_range?: string | null
         }
         Update: {
+          block_ids?: string[] | null
           chunk_order?: number
+          chunk_type?: string | null
           content?: string
           created_at?: string
           document_id?: string
           embedding?: string | null
           hash?: string | null
           id?: string
+          is_atomic?: boolean | null
+          page_range?: string | null
         }
         Relationships: [
           {
@@ -541,6 +553,25 @@ export type Database = {
         Args: { "": string } | { "": unknown } | { "": unknown }
         Returns: unknown
       }
+      search_semantic_chunks: {
+        Args: {
+          chunk_type_filter?: string
+          knowledge_type_filter: Database["public"]["Enums"]["knowledge_base_type"]
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          chunk_type: string
+          content: string
+          document_id: string
+          document_title: string
+          id: string
+          is_atomic: boolean
+          page_range: string
+          section_title: string
+          similarity: number
+        }[]
+      }
       search_similar_chunks: {
         Args: {
           knowledge_type_filter: Database["public"]["Enums"]["knowledge_base_type"]
@@ -553,6 +584,41 @@ export type Database = {
           document_title: string
           id: string
           similarity: number
+        }[]
+      }
+      search_structured_blocks: {
+        Args: {
+          block_type_filter?: string
+          document_id_filter: string
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          block_id: string
+          block_type: string
+          content: string
+          document_id: string
+          id: string
+          page_number: number
+          section_title: string
+          similarity: number
+        }[]
+      }
+      search_tables: {
+        Args: {
+          document_id_filter?: string
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          caption: string
+          document_id: string
+          id: string
+          markdown: string
+          page_number: number
+          similarity: number
+          structured_data: Json
+          table_id: string
         }[]
       }
       sparsevec_out: {

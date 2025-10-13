@@ -12,6 +12,95 @@ interface ProcessRequest {
   documentId: string;
 }
 
+// Função para criar chunks semânticos dos blocos
+function createSemanticChunks(blocks: any[], tables: any[]): any[] {
+  const chunks: any[] = [];
+  const MIN_CHUNK_SIZE = 700; // tokens mínimos
+  const MAX_CHUNK_SIZE = 1200; // tokens máximos
+  const OVERLAP_SIZE = 150; // tokens de overlap
+  
+  let currentChunk: any = {
+    blocks: [],
+    content: "",
+    tokens: 0,
+    pages: new Set<number>(),
+    section_title: "",
+    block_ids: [],
+  };
+  
+  let currentSection = "";
+  
+  for (const block of blocks) {
+    const blockTokens = Math.ceil(block.content.length / 4);
+    
+    // Detectar mudança de seção (heading)
+    if (block.block_type === 'heading') {
+      // Se já temos conteúdo, salvar chunk atual
+      if (currentChunk.tokens > MIN_CHUNK_SIZE) {
+        chunks.push({...currentChunk});
+        // Criar novo chunk com overlap
+        const lastBlocks = currentChunk.blocks.slice(-1);
+        currentChunk = {
+          blocks: lastBlocks,
+          content: lastBlocks.map((b: any) => b.content).join('\n\n'),
+          tokens: lastBlocks.reduce((sum: number, b: any) => sum + Math.ceil(b.content.length / 4), 0),
+          pages: new Set(lastBlocks.map((b: any) => b.page_number)),
+          section_title: currentSection,
+          block_ids: lastBlocks.map((b: any) => b.block_id),
+        };
+      }
+      currentSection = block.content;
+    }
+    
+    // Se adicionar este bloco ultrapassar o limite e já temos conteúdo mínimo
+    if (currentChunk.tokens + blockTokens > MAX_CHUNK_SIZE && currentChunk.tokens >= MIN_CHUNK_SIZE) {
+      chunks.push({...currentChunk});
+      // Criar novo chunk com overlap
+      const lastBlocks = currentChunk.blocks.slice(-2);
+      currentChunk = {
+        blocks: lastBlocks,
+        content: lastBlocks.map((b: any) => b.content).join('\n\n'),
+        tokens: lastBlocks.reduce((sum: number, b: any) => sum + Math.ceil(b.content.length / 4), 0),
+        pages: new Set(lastBlocks.map((b: any) => b.page_number)),
+        section_title: currentSection,
+        block_ids: lastBlocks.map((b: any) => b.block_id),
+      };
+    }
+    
+    // Adicionar bloco ao chunk atual
+    currentChunk.blocks.push(block);
+    currentChunk.content += (currentChunk.content ? '\n\n' : '') + block.content;
+    currentChunk.tokens += blockTokens;
+    currentChunk.pages.add(block.page_number);
+    currentChunk.block_ids.push(block.block_id);
+    if (!currentChunk.section_title && currentSection) {
+      currentChunk.section_title = currentSection;
+    }
+  }
+  
+  // Adicionar último chunk se tiver conteúdo
+  if (currentChunk.tokens > 0) {
+    chunks.push(currentChunk);
+  }
+  
+  // Adicionar tabelas como chunks atômicos
+  for (const table of tables) {
+    chunks.push({
+      blocks: [],
+      content: table.markdown,
+      tokens: Math.ceil(table.markdown.length / 4),
+      pages: new Set([table.page_number]),
+      section_title: table.caption || 'Tabela',
+      block_ids: [table.table_id],
+      is_atomic: true,
+      chunk_type: 'table',
+      table_data: table
+    });
+  }
+  
+  return chunks;
+}
+
 // Generate embeddings using OpenAI
 async function generateEmbedding(text: string): Promise<number[]> {
   const response = await fetch("https://api.openai.com/v1/embeddings", {
@@ -244,7 +333,66 @@ const handler = async (req: Request): Promise<Response> => {
         
         await supabaseClient
           .from("knowledge_documents")
-          .update({ progress: 60 })
+          .update({ progress: 50 })
+          .eq("id", documentId);
+
+        // Criar chunks semânticos
+        console.log(`🧩 Creating semantic chunks...`);
+        const semanticChunks = createSemanticChunks(
+          pdfData.blocks || [],
+          pdfData.tables || []
+        );
+        
+        console.log(`✅ Created ${semanticChunks.length} semantic chunks`);
+        
+        // Processar chunks semânticos
+        const chunkBatchSize = 3;
+        for (let i = 0; i < semanticChunks.length; i += chunkBatchSize) {
+          const batch = semanticChunks.slice(i, Math.min(i + chunkBatchSize, semanticChunks.length));
+          
+          for (const chunk of batch) {
+            try {
+              const embedding = await generateEmbedding(chunk.content);
+              
+              const pages = Array.from(chunk.pages).sort((a: any, b: any) => a - b);
+              const pageRange = pages.length === 1 
+                ? `${pages[0]}` 
+                : `${pages[0]}-${pages[pages.length - 1]}`;
+              
+              const { error: chunkError } = await supabaseClient
+                .from("document_chunks")
+                .insert({
+                  document_id: documentId,
+                  chunk_order: i,
+                  content: chunk.content,
+                  embedding: embedding,
+                  page_range: pageRange,
+                  block_ids: chunk.block_ids,
+                  section_title: chunk.section_title || null,
+                  is_atomic: chunk.is_atomic || false,
+                  chunk_type: chunk.chunk_type || 'mixed',
+                  hash: `chunk_${i}_${chunk.tokens}`,
+                });
+
+              if (chunkError) {
+                console.error(`Error storing semantic chunk ${i}:`, chunkError);
+                throw chunkError;
+              }
+            } catch (error: any) {
+              console.error(`Failed to process semantic chunk ${i}:`, error);
+              throw error;
+            }
+          }
+          
+          // Delay entre batches
+          if (i + chunkBatchSize < semanticChunks.length) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+        }
+        
+        await supabaseClient
+          .from("knowledge_documents")
+          .update({ progress: 70 })
           .eq("id", documentId);
       }
 
@@ -255,7 +403,7 @@ const handler = async (req: Request): Promise<Response> => {
         
         await supabaseClient
           .from("knowledge_documents")
-          .update({ progress: 80 })
+          .update({ progress: 85 })
           .eq("id", documentId);
       }
 
@@ -266,7 +414,7 @@ const handler = async (req: Request): Promise<Response> => {
         
         await supabaseClient
           .from("knowledge_documents")
-          .update({ progress: 90 })
+          .update({ progress: 95 })
           .eq("id", documentId);
       }
 
@@ -278,14 +426,28 @@ const handler = async (req: Request): Promise<Response> => {
 
       console.log("✅ Document processing completed successfully");
 
+      // Get final stats
+      const { data: chunks } = await supabaseClient
+        .from("document_chunks")
+        .select("chunk_type, is_atomic")
+        .eq("document_id", documentId);
+
+      const chunkStats = {
+        total: chunks?.length || 0,
+        semantic: chunks?.filter((c: any) => c.chunk_type === 'mixed').length || 0,
+        tables: chunks?.filter((c: any) => c.chunk_type === 'table').length || 0,
+        atomic: chunks?.filter((c: any) => c.is_atomic).length || 0
+      };
+
       return new Response(
         JSON.stringify({
           success: true,
-          message: `Document processed with structured extraction`,
+          message: `Document processed with semantic chunking`,
           stats: {
             blocks: pdfData.blocks?.length || 0,
             tables: pdfData.tables?.length || 0,
-            images: pdfData.images?.length || 0
+            images: pdfData.images?.length || 0,
+            chunks: chunkStats
           }
         }),
         {
