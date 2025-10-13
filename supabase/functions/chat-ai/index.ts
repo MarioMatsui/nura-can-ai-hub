@@ -462,11 +462,12 @@ serve(async (req) => {
             });
           }
         } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
-          // For PDFs and text files, extract text content
+          // For PDFs: Use RAG instead of sending full content
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`Parsing PDF: ${attachment.file_name}`);
+              console.log(`📄 PDF detected: ${attachment.file_name} - Using RAG search only`);
               
+              // Parse PDF to get searchable text
               const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
                 body: { filePath: attachment.file_path }
               });
@@ -475,25 +476,45 @@ serve(async (req) => {
                 const fullText = pdfData.text;
                 textContentLength += fullText.length;
                 
-                // GPT-4.1 supports 200k tokens (~800k characters) context window
-                // Using conservative limit to stay within token limits
-                const maxLength = 300000; // ~75k tokens - safe for single request
+                // Generate embedding for the user's question
+                const queryEmbedding = await generateQueryEmbedding(message);
                 
-                if (fullText.length > maxLength) {
-                  console.log(`📄 Large PDF detected (${(fullText.length / 1000).toFixed(0)}k chars). Truncating to ${(maxLength / 1000).toFixed(0)}k chars.`);
-                  const truncatedText = fullText.substring(0, maxLength);
-                  attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}" (primeiras ${(maxLength / 1000).toFixed(0)}k caracteres):\n${truncatedText}\n`;
-                  attachmentContext += `\n⚠️ Nota: Documento muito extenso. Mostrando os primeiros ${(maxLength / 1000).toFixed(0)}k caracteres. Para análise completa de documentos grandes, considere adicionar à Base de Conhecimento em /admin/knowledge.\n`;
+                // Also try to extract key terms from the document for better search
+                const documentPreview = fullText.substring(0, 500);
+                const combinedQuery = `${message}\n\nContexto do documento: ${documentPreview}`;
+                const documentEmbedding = await generateQueryEmbedding(combinedQuery);
+                
+                // Search knowledge base with combined query
+                const { data: pdfChunks, error: searchError } = await supabase.rpc(
+                  'search_similar_chunks',
+                  {
+                    query_embedding: documentEmbedding,
+                    knowledge_type_filter: knowledgeType,
+                    match_count: 6 // More chunks for document-specific queries
+                  }
+                );
+                
+                if (!searchError && pdfChunks && pdfChunks.length > 0) {
+                  console.log(`✅ Found ${pdfChunks.length} relevant chunks from knowledge base`);
+                  attachmentContext += `\n\n📄 Informações relevantes sobre "${attachment.file_name}" (via RAG):\n\n`;
+                  pdfChunks.forEach((chunk: any, index: number) => {
+                    attachmentContext += `[Trecho ${index + 1} - ${chunk.document_title}]\n${chunk.content}\n\n`;
+                  });
+                  attachmentContext += `\n---\n`;
                 } else {
-                  console.log(`📄 Processing full document (${(fullText.length / 1000).toFixed(0)}k chars)`);
-                  attachmentContext += `\n\n📄 Conteúdo completo do documento "${attachment.file_name}":\n${fullText}\n`;
+                  // If no RAG results, use truncated version (last resort)
+                  console.log('⚠️ No RAG results - using truncated document');
+                  const maxLength = 8000; // ~2k tokens - safe limit
+                  const truncatedText = fullText.substring(0, maxLength);
+                  attachmentContext += `\n\n📄 Preview do documento "${attachment.file_name}" (primeiros ${(maxLength / 1000).toFixed(1)}k caracteres):\n${truncatedText}\n`;
+                  attachmentContext += `\n⚠️ Documento analisado via preview. Para análise completa, adicione à Base de Conhecimento em /admin/knowledge.\n`;
                 }
               } else {
                 console.error('Error parsing PDF:', pdfError);
                 attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
               }
             } else {
-              // For text files, download and read directly
+              // For text files, download and read directly (usually smaller)
               console.log(`Reading text file: ${attachment.file_name}`);
               
               const { data: fileData, error: downloadError } = await supabase.storage
@@ -503,7 +524,16 @@ serve(async (req) => {
               if (!downloadError && fileData) {
                 const text = await fileData.text();
                 textContentLength += text.length;
-                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
+                
+                // Limit text files too
+                const maxLength = 12000; // ~3k tokens
+                if (text.length > maxLength) {
+                  const truncatedText = text.substring(0, maxLength);
+                  attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}" (truncado):\n${truncatedText}\n`;
+                  attachmentContext += `\n⚠️ Documento truncado. Total: ${(text.length / 1000).toFixed(1)}k caracteres.\n`;
+                } else {
+                  attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
+                }
               } else {
                 console.error('Error reading text file:', downloadError);
                 attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
@@ -517,10 +547,9 @@ serve(async (req) => {
       }
 
       if (attachmentContext) {
-        attachmentContext = "\n\n⚠️ PRIORIDADE MÁXIMA - DOCUMENTOS ENVIADOS PELO USUÁRIO:\n" + 
+        attachmentContext = "\n\n⚠️ DOCUMENTOS ENVIADOS PELO USUÁRIO:\n" + 
                           attachmentContext + 
-                          "\n---\n**IMPORTANTE**: Os documentos acima foram enviados AGORA pelo usuário e devem ser o FOCO PRINCIPAL da sua resposta. " +
-                          "Responda baseado PRIMEIRO no conteúdo destes documentos. Use o conhecimento do RAG apenas como complemento se necessário.\n";
+                          "\n---\nResponda baseado no conteúdo dos documentos acima, usando o conhecimento da base como complemento.\n";
       }
     }
 
@@ -539,21 +568,16 @@ serve(async (req) => {
     ];
 
     // Smart model selection based on content type
-    // Threshold: 60k chars (~15k tokens) for long text
-    const hasLongText = textContentLength > 60000;
     let selectedModel = model;
     
     if (hasImages) {
       // Always use GPT-4o for images/multimodal
       selectedModel = 'gpt-4o';
       console.log('🖼️ Using GPT-4o for image/multimodal processing');
-    } else if (hasLongText) {
-      // Use GPT-4.1 for long text documents (better context handling)
-      selectedModel = 'gpt-4.1-2025-04-14';
-      console.log(`📄 Using GPT-4.1 for long text document (~${(textContentLength / 1000).toFixed(0)}k chars)`);
     } else {
-      // Default model for standard queries
-      console.log(`💬 Using ${model} for standard query`);
+      // Use GPT-4o-mini for all text queries (fast and cheap)
+      selectedModel = 'gpt-4o-mini';
+      console.log(`💬 Using gpt-4o-mini for standard query`);
     }
 
     console.log(`Sending to OpenAI with model: ${selectedModel}, modelType: ${modelType}`);
