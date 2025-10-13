@@ -481,10 +481,30 @@ serve(async (req) => {
               } else {
                 const fullText = pdfData.text;
                 console.log(`✅ PDF text extracted: ${fullText.length} characters`);
-                textContentLength += fullText.length;
                 
-                // For documents like COA with tables, include full text
-                attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${fullText}\n`;
+                // Smart truncation for large PDFs to avoid context length issues
+                const maxPdfChars = 50000; // ~12-15k tokens, safe for gpt-4o-mini (128k limit)
+                let pdfContent = fullText;
+                
+                if (fullText.length > maxPdfChars) {
+                  console.log(`⚠️ PDF is large (${fullText.length} chars), truncating to ${maxPdfChars} chars`);
+                  
+                  // Try to keep beginning and end (often important info is at both)
+                  const halfLimit = Math.floor(maxPdfChars / 2);
+                  const beginning = fullText.substring(0, halfLimit);
+                  const ending = fullText.substring(fullText.length - halfLimit);
+                  
+                  pdfContent = beginning + 
+                              `\n\n[... ${((fullText.length - maxPdfChars) / 1000).toFixed(1)}k caracteres omitidos para otimização ...]\n\n` + 
+                              ending;
+                  
+                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}" (${(fullText.length / 1000).toFixed(1)}k caracteres, otimizado para análise)\n\n${pdfContent}\n`;
+                  attachmentContext += `\n💡 Documento completo tem ${(fullText.length / 1000).toFixed(1)}k caracteres. Mostrando início e fim para análise eficiente.\n`;
+                } else {
+                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${pdfContent}\n`;
+                }
+                
+                textContentLength += pdfContent.length;
               }
             } else {
               // For text files, download and read directly
