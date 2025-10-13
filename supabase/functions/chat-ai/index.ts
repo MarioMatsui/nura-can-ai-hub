@@ -107,11 +107,16 @@ Em caso de pergunta claramente fora de escopo, responda com:
 1. Precisão Científica:
 Forneça respostas baseadas em evidências científicas e revisões sistemáticas. Sempre que possível, cite as fontes (ex: "De acordo com um estudo de 2022 publicado no Journal of Clinical Oncology…").
 
-2. Linguagem Técnica:
+2. Análise de Documentos:
+Quando o usuário enviar documentos (PDFs, COAs, relatórios), você DEVE analisá-los completamente.
+Você TEM ACESSO TOTAL ao conteúdo fornecido e PODE extrair todas as informações necessárias.
+NUNCA diga que "não pode acessar" ou "não consegue analisar" documentos enviados pelo usuário.
+
+3. Linguagem Técnica:
 Use terminologia médica, farmacológica e científica adequada para o público profissional.
 Inclua dados sobre farmacocinética, farmacodinâmica, interações medicamentosas, vias de administração, dosagens em estudos clínicos e potenciais efeitos adversos.
 
-3. Escopo Médico:
+4. Escopo Médico:
 Interprete perguntas sobre condições médicas e patologias no contexto da cannabis medicinal, mesmo que não mencionem explicitamente "cannabis". Forneça informações sobre:
 - Aplicações clínicas da cannabis medicinal.
 - Farmacologia e mecanismos de ação de fitocanabinoides.
@@ -120,7 +125,7 @@ Interprete perguntas sobre condições médicas e patologias no contexto da cann
 - Protocolos de pesquisa e ensaios clínicos.
 - Regulação de prescrição, importação e uso medicinal.
 
-4. Aviso de Segurança:
+5. Aviso de Segurança:
 Nunca ofereça aconselhamento direto a pacientes. Deixe claro que suas informações são apenas para fins de educação e suporte à decisão profissional.
 "Esta informação é para fins educacionais e de pesquisa, não substituindo o julgamento clínico profissional."
 
@@ -588,27 +593,11 @@ EXEMPLO DE RESPOSTA INCORRETA (NÃO FAZER):
     // Build messages array for OpenAI - attachments have ABSOLUTE priority
     const userMessageContent = messageContent.length > 1 ? messageContent : message;
     
-    // When there are attachments, use a specialized document analysis system prompt
-    let finalSystemPrompt = systemPrompt;
-    if (attachmentContext) {
-      finalSystemPrompt = `Você é NuraAI, um assistente especializado em análise de documentos técnicos e médicos sobre cannabis.
-
-IMPORTANTE: O usuário enviou documentos para você analisar. Todo o conteúdo necessário está presente nesta conversa.
-
-Sua função é:
-1. LER completamente os documentos fornecidos
-2. EXTRAIR informações específicas (valores, datas, concentrações, etc.)
-3. INTERPRETAR tabelas e dados técnicos
-4. RESPONDER com base EXCLUSIVAMENTE no conteúdo dos documentos
-
-Você NUNCA deve dizer que "não pode acessar" ou "não consegue analisar" documentos enviados.
-Você TEM acesso completo ao conteúdo e DEVE analisá-lo.`;
-    }
-    
-    // CRITICAL: Put attachment context FIRST in system prompt for absolute priority
+    // CRITICAL: When there are attachments, the directive must come AFTER the base prompt
+    // This ensures the model sees the override instructions last (recency bias)
     const systemContent = attachmentContext 
-      ? attachmentContext + "\n\n" + finalSystemPrompt + (ragContext ? "\n\n" + ragContext : "")
-      : finalSystemPrompt + (ragContext ? "\n\n" + ragContext : "");
+      ? systemPrompt + "\n\n" + attachmentContext + (ragContext ? "\n\n" + ragContext : "")
+      : systemPrompt + (ragContext ? "\n\n" + ragContext : "");
     
     const openAIMessages = [
       { role: 'system', content: systemContent },
