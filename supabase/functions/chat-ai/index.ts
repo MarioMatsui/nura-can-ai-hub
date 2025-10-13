@@ -483,10 +483,10 @@ serve(async (req) => {
                 console.log(`✅ PDF text extracted: ${fullText.length} characters`);
                 textContentLength += fullText.length;
                 
-                // Smart chunking for large documents
-                const maxChars = 15000; // ~4k tokens
+                // Smart chunking for large documents - increase chunk size significantly
+                const maxChars = 50000; // ~12k tokens - much more context
                 if (fullText.length > maxChars) {
-                  // Take beginning, middle, and end
+                  // Take beginning, middle, and end with larger chunks
                   const chunkSize = Math.floor(maxChars / 3);
                   const beginning = fullText.substring(0, chunkSize);
                   const middleStart = Math.floor(fullText.length / 2) - Math.floor(chunkSize / 2);
@@ -495,8 +495,7 @@ serve(async (req) => {
                   
                   attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}" (${(fullText.length / 1000).toFixed(1)}k caracteres)\n\n`;
                   attachmentContext += `[INÍCIO DO DOCUMENTO]\n${beginning}\n\n[...]\n\n[TRECHO DO MEIO]\n${middle}\n\n[...]\n\n[FINAL DO DOCUMENTO]\n${end}\n`;
-                  attachmentContext += `\n💡 Documento grande foi dividido em trechos representativos.\n`;
-                  console.log(`📊 PDF chunked into 3 parts (${chunkSize} chars each)`);
+                  console.log(`📊 PDF chunked into 3 parts (~${(chunkSize / 1000).toFixed(1)}k chars each)`);
                 } else {
                   attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${fullText}\n`;
                   console.log(`📊 Full PDF text added to context (${fullText.length} chars)`);
@@ -579,6 +578,10 @@ serve(async (req) => {
     console.log(`Sending to OpenAI with model: ${selectedModel}, modelType: ${modelType}`);
     console.log(`- Attachments: ${attachments?.length || 0} ${attachmentContext ? '(processed and prioritized)' : ''}`);
     console.log(`- RAG Context: ${ragContext ? 'Yes (as support)' : 'No'}`);
+    console.log(`- Total system content length: ${systemContent.length} chars`);
+    if (attachmentContext) {
+      console.log(`- Attachment context length: ${attachmentContext.length} chars`);
+    }
 
     // Call OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
