@@ -465,38 +465,33 @@ serve(async (req) => {
           // For documents: Read and send to AI directly (they are part of the user's message)
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`📄 PDF attached: ${attachment.file_name} - Extracting text`);
+              console.log(`📄 PDF detected: ${attachment.file_name} - Using vision analysis`);
               
-              // Parse PDF to get text
-              const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
-                body: { filePath: attachment.file_path }
-              });
+              // Get signed URL for direct access
+              const { data: signedUrlData } = await supabase.storage
+                .from('chat-attachments')
+                .createSignedUrl(attachment.file_path, 3600);
 
-              if (pdfError) {
-                console.error('❌ Error parsing PDF:', pdfError);
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura do PDF)\n`;
-              } else if (!pdfData || !pdfData.text) {
-                console.error('❌ No text returned from PDF parser');
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (nenhum texto extraído)\n`;
-              } else {
-                const fullText = pdfData.text;
-                console.log(`✅ PDF text extracted: ${fullText.length} characters`);
-                textContentLength += fullText.length;
+              if (signedUrlData?.signedUrl) {
+                console.log(`✅ Got signed URL for PDF`);
+                hasImages = true;
                 
-                // Smart chunking for large documents
-                const maxChars = 50000;
-                if (fullText.length > maxChars) {
-                  const chunkSize = Math.floor(maxChars / 3);
-                  const beginning = fullText.substring(0, chunkSize);
-                  const middleStart = Math.floor(fullText.length / 2) - Math.floor(chunkSize / 2);
-                  const middle = fullText.substring(middleStart, middleStart + chunkSize);
-                  const end = fullText.substring(fullText.length - chunkSize);
-                  
-                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}" (${(fullText.length / 1000).toFixed(1)}k caracteres)\n\n`;
-                  attachmentContext += `[INÍCIO DO DOCUMENTO]\n${beginning}\n\n[...]\n\n[TRECHO DO MEIO]\n${middle}\n\n[...]\n\n[FINAL DO DOCUMENTO]\n${end}\n`;
-                } else {
-                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${fullText}\n`;
-                }
+                // Add PDF as image for GPT-4o vision
+                // GPT-4o can process PDFs directly through URLs
+                messageContent.push({
+                  type: "image_url",
+                  image_url: {
+                    url: signedUrlData.signedUrl,
+                    detail: "high" // High detail for tables and complex layouts
+                  }
+                });
+                
+                attachmentContext += `\n\n📄 Documento PDF anexado: "${attachment.file_name}"\n`;
+                attachmentContext += `ℹ️ Analise visualmente o documento para preservar tabelas, gráficos e formatação.\n`;
+                attachmentContext += `⚠️ Este é um arquivo PDF. Certifique-se de ler todo o conteúdo visual incluindo tabelas, gráficos e imagens.\n`;
+              } else {
+                console.error('Failed to get signed URL for PDF');
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" (erro ao acessar)\n`;
               }
             } else {
               // For text files, download and read directly
