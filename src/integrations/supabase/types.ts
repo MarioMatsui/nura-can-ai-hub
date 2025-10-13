@@ -41,6 +41,59 @@ export type Database = {
         }
         Relationships: []
       }
+      document_blocks: {
+        Row: {
+          bbox: Json | null
+          block_id: string
+          block_type: string
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string | null
+          id: string
+          markdown: string | null
+          page_number: number
+          section_title: string | null
+          token_count: number | null
+        }
+        Insert: {
+          bbox?: Json | null
+          block_id: string
+          block_type: string
+          content: string
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          id?: string
+          markdown?: string | null
+          page_number: number
+          section_title?: string | null
+          token_count?: number | null
+        }
+        Update: {
+          bbox?: Json | null
+          block_id?: string
+          block_type?: string
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          id?: string
+          markdown?: string | null
+          page_number?: number
+          section_title?: string | null
+          token_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_blocks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_chunks: {
         Row: {
           chunk_order: number
@@ -79,47 +132,171 @@ export type Database = {
           },
         ]
       }
+      document_images: {
+        Row: {
+          bbox: Json | null
+          caption: string | null
+          created_at: string
+          description: string | null
+          document_id: string
+          id: string
+          image_id: string
+          image_type: string | null
+          ocr_text: string | null
+          page_number: number
+          storage_path: string
+          thumbnail_path: string | null
+        }
+        Insert: {
+          bbox?: Json | null
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          document_id: string
+          id?: string
+          image_id: string
+          image_type?: string | null
+          ocr_text?: string | null
+          page_number: number
+          storage_path: string
+          thumbnail_path?: string | null
+        }
+        Update: {
+          bbox?: Json | null
+          caption?: string | null
+          created_at?: string
+          description?: string | null
+          document_id?: string
+          id?: string
+          image_id?: string
+          image_type?: string | null
+          ocr_text?: string | null
+          page_number?: number
+          storage_path?: string
+          thumbnail_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_images_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_tables: {
+        Row: {
+          bbox: Json | null
+          caption: string | null
+          created_at: string
+          document_id: string
+          embedding: string | null
+          id: string
+          markdown: string
+          page_number: number
+          structured_data: Json
+          table_id: string
+        }
+        Insert: {
+          bbox?: Json | null
+          caption?: string | null
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          id?: string
+          markdown: string
+          page_number: number
+          structured_data: Json
+          table_id: string
+        }
+        Update: {
+          bbox?: Json | null
+          caption?: string | null
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          id?: string
+          markdown?: string
+          page_number?: number
+          structured_data?: Json
+          table_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_tables_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_documents: {
         Row: {
+          author: string | null
           content: string
           created_at: string
+          created_date: string | null
+          doc_type: string | null
           error_message: string | null
+          extracted_metadata: Json | null
+          file_hash: string | null
           file_name: string
           file_path: string | null
+          file_size_bytes: number | null
           id: string
           knowledge_type: Database["public"]["Enums"]["knowledge_base_type"]
+          language: string | null
           metadata: Json | null
           progress: number | null
           status: string
           title: string
+          total_pages: number | null
           updated_at: string
         }
         Insert: {
+          author?: string | null
           content: string
           created_at?: string
+          created_date?: string | null
+          doc_type?: string | null
           error_message?: string | null
+          extracted_metadata?: Json | null
+          file_hash?: string | null
           file_name: string
           file_path?: string | null
+          file_size_bytes?: number | null
           id?: string
           knowledge_type: Database["public"]["Enums"]["knowledge_base_type"]
+          language?: string | null
           metadata?: Json | null
           progress?: number | null
           status?: string
           title: string
+          total_pages?: number | null
           updated_at?: string
         }
         Update: {
+          author?: string | null
           content?: string
           created_at?: string
+          created_date?: string | null
+          doc_type?: string | null
           error_message?: string | null
+          extracted_metadata?: Json | null
+          file_hash?: string | null
           file_name?: string
           file_path?: string | null
+          file_size_bytes?: number | null
           id?: string
           knowledge_type?: Database["public"]["Enums"]["knowledge_base_type"]
+          language?: string | null
           metadata?: Json | null
           progress?: number | null
           status?: string
           title?: string
+          total_pages?: number | null
           updated_at?: string
         }
         Relationships: []

@@ -12,6 +12,9 @@ verify_jwt = false
 [functions.process-document]
 verify_jwt = true
 
+[functions.process-structured-document]
+verify_jwt = true
+
 [functions.parse-pdf]
 verify_jwt = true
 
