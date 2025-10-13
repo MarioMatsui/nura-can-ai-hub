@@ -472,8 +472,15 @@ serve(async (req) => {
                 body: { filePath: attachment.file_path }
               });
 
-              if (!pdfError && pdfData?.text) {
+              if (pdfError) {
+                console.error('❌ Error parsing PDF:', pdfError);
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura do PDF)\n`;
+              } else if (!pdfData || !pdfData.text) {
+                console.error('❌ No text returned from PDF parser');
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (nenhum texto extraído)\n`;
+              } else {
                 const fullText = pdfData.text;
+                console.log(`✅ PDF text extracted: ${fullText.length} characters`);
                 textContentLength += fullText.length;
                 
                 // Smart chunking for large documents
@@ -489,12 +496,11 @@ serve(async (req) => {
                   attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}" (${(fullText.length / 1000).toFixed(1)}k caracteres)\n\n`;
                   attachmentContext += `[INÍCIO DO DOCUMENTO]\n${beginning}\n\n[...]\n\n[TRECHO DO MEIO]\n${middle}\n\n[...]\n\n[FINAL DO DOCUMENTO]\n${end}\n`;
                   attachmentContext += `\n💡 Documento grande foi dividido em trechos representativos.\n`;
+                  console.log(`📊 PDF chunked into 3 parts (${chunkSize} chars each)`);
                 } else {
                   attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${fullText}\n`;
+                  console.log(`📊 Full PDF text added to context (${fullText.length} chars)`);
                 }
-              } else {
-                console.error('Error parsing PDF:', pdfError);
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
               }
             } else {
               // For text files, download and read directly
