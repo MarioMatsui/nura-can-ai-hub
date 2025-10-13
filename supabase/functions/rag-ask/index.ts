@@ -6,29 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-
-// Generate embedding for query
-async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: text,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenAI embeddings error: ${await response.text()}`);
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
-}
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -52,42 +30,35 @@ serve(async (req: Request) => {
 
     console.log("RAG Query:", question);
     
-    // Generate embedding for the question
-    const queryEmbedding = await generateEmbedding(question);
-    console.log("Query embedding generated");
-
-    // Search for similar chunks
-    const { data: similarChunks, error: searchError } = await supabaseClient.rpc(
-      'search_similar_chunks',
-      {
-        query_embedding: JSON.stringify(queryEmbedding),
-        knowledge_type_filter: knowledge_type || 'medical',
-        match_count: 8
-      }
-    );
+    // Search using text-based search instead of embeddings
+    const { data: documents, error: searchError } = await supabaseClient
+      .from('knowledge_documents')
+      .select('id, title, content')
+      .eq('knowledge_type', knowledge_type || 'medical')
+      .eq('status', 'ready')
+      .limit(5);
 
     if (searchError) {
       console.error("Search error:", searchError);
       throw searchError;
     }
 
-    console.log(`Found ${similarChunks?.length || 0} similar chunks`);
+    console.log(`Found ${documents?.length || 0} documents`);
 
-    // Build context from similar chunks (max 12k chars)
+    // Build context from documents (max 50k chars for Gemini's large context)
     let context = "";
-    const maxChars = 12000;
+    const maxChars = 50000;
     const citations: any[] = [];
 
-    for (const chunk of similarChunks || []) {
-      if (context.length + chunk.content.length > maxChars) break;
+    for (const doc of documents || []) {
+      if (context.length + doc.content.length > maxChars) break;
       
       citations.push({
-        order: chunk.id,
-        similarity: chunk.similarity,
-        document_title: chunk.document_title,
+        document_id: doc.id,
+        document_title: doc.title,
       });
       
-      context += `\n\n[Documento: ${chunk.document_title}]\n${chunk.content}`;
+      context += `\n\n[Documento: ${doc.title}]\n${doc.content}`;
     }
 
     console.log(`Context built: ${context.length} chars`);
@@ -104,28 +75,28 @@ REGRAS CRÍTICAS:
 TRECHOS DOS DOCUMENTOS:
 ${context}`;
 
-    // Call GPT-4.1-mini for fast, cheap response
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // Call Gemini 2.5 Pro for response
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4.1-mini-2025-04-14",
+        model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: question }
         ],
-        max_completion_tokens: 1000,
+        max_completion_tokens: 8000,
         temperature: 0.3,
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      console.error("OpenAI error:", error);
-      throw new Error(`OpenAI API error: ${error}`);
+      console.error("Lovable AI error:", error);
+      throw new Error(`Lovable AI error: ${error}`);
     }
 
     const data = await response.json();
@@ -135,7 +106,7 @@ ${context}`;
       JSON.stringify({
         answer,
         citations,
-        chunks_used: similarChunks?.length || 0,
+        documents_used: documents?.length || 0,
       }),
       {
         status: 200,

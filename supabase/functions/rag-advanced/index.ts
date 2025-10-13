@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
 interface RagRequest {
   question: string;
@@ -28,30 +28,7 @@ interface Evidence {
   image_data?: any;
 }
 
-// Gerar embedding para a query
-async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-3-small",
-      input: text,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI API error: ${error}`);
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
-}
-
-// Detectar intenção da query
+// Detectar intenção da query usando Gemini
 async function detectIntent(question: string): Promise<{
   type: string;
   needs_table: boolean;
@@ -59,43 +36,55 @@ async function detectIntent(question: string): Promise<{
   needs_comparison: boolean;
   focus_areas: string[];
 }> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Analise a pergunta e identifique:
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-pro",
+        messages: [
+          {
+            role: "system",
+            content: `Analise a pergunta e identifique:
 1. Tipo de consulta: geral, numérica, conformidade, explicação, comparação
 2. Se precisa de tabelas (valores numéricos, comparações)
 3. Se precisa de imagens (gráficos, assinaturas, QR codes)
 4. Se é uma comparação entre documentos
 5. Áreas de foco (ex: THC, CBD, densidade, datas, lotes)
 
-Retorne JSON puro sem markdown.`
-        },
-        {
-          role: "user",
-          content: question
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    }),
-  });
+Retorne apenas JSON puro sem markdown.`
+          },
+          {
+            role: "user",
+            content: question
+          }
+        ],
+        temperature: 0.3,
+        max_completion_tokens: 1000
+      }),
+    });
 
-  const data = await response.json();
-  return JSON.parse(data.choices[0].message.content);
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    return JSON.parse(content.replace(/```json\n?|\n?```/g, ''));
+  } catch (error) {
+    console.error("Intent detection error:", error);
+    // Fallback intent
+    return {
+      type: "geral",
+      needs_table: false,
+      needs_image: false,
+      needs_comparison: false,
+      focus_areas: []
+    };
+  }
 }
 
-// Busca híbrida (vetorial + BM25-like)
+// Busca simplificada (apenas texto e keyword, sem embeddings)
 async function hybridSearch(
-  embedding: number[],
   question: string,
   knowledgeType: string,
   documentId: string | undefined,
@@ -104,77 +93,41 @@ async function hybridSearch(
 ): Promise<Evidence[]> {
   const evidences: Evidence[] = [];
 
-  // 1. Busca semântica em chunks
-  const { data: chunks, error: chunksError } = await supabaseClient.rpc(
-    'search_semantic_chunks',
-    {
-      query_embedding: embedding,
-      knowledge_type_filter: knowledgeType,
-      match_count: 10
-    }
-  );
+  // 1. Busca em documentos completos
+  const { data: documents, error: docsError } = await supabaseClient
+    .from('knowledge_documents')
+    .select('id, title, content')
+    .eq('knowledge_type', knowledgeType)
+    .eq('status', 'ready')
+    .limit(5);
 
-  if (chunksError) {
-    console.error("Error searching chunks:", chunksError);
-  } else if (chunks) {
-    evidences.push(...chunks.map((c: any) => ({
+  if (!docsError && documents) {
+    evidences.push(...documents.map((doc: any) => ({
       type: 'text' as const,
-      content: c.content,
-      page_range: c.page_range,
-      similarity: c.similarity,
-      document_title: c.document_title,
-      section_title: c.section_title
+      content: doc.content.substring(0, 5000),
+      similarity: 0.8,
+      document_title: doc.title
     })));
   }
 
-  // 2. Busca em blocos estruturados
-  const { data: blocks, error: blocksError } = await supabaseClient.rpc(
-    'search_structured_blocks',
-    {
-      query_embedding: embedding,
-      document_id_filter: documentId || null,
-      match_count: 10
-    }
-  );
+  // 2. Busca em tabelas
+  const { data: tablesData, error: tablesError } = await supabaseClient
+    .from('document_tables')
+    .select('*')
+    .limit(5);
 
-  if (blocksError) {
-    console.error("Error searching blocks:", blocksError);
-  } else if (blocks) {
-    evidences.push(...blocks.map((b: any) => ({
-      type: 'text' as const,
-      content: b.content,
-      page_number: b.page_number,
-      similarity: b.similarity,
-      document_title: 'Document',
-      section_title: b.section_title,
-      block_id: b.block_id
-    })));
-  }
-
-  // 3. Busca em tabelas
-  const { data: tablesData, error: tablesError2 } = await supabaseClient.rpc(
-    'search_tables',
-    {
-      query_embedding: embedding,
-      document_id_filter: documentId || null,
-      match_count: 5
-    }
-  );
-
-  if (tablesError2) {
-    console.error("Error searching tables:", tablesError2);
-  } else if (tablesData) {
+  if (!tablesError && tablesData) {
     evidences.push(...tablesData.map((t: any) => ({
       type: 'table' as const,
       content: t.markdown,
       page_number: t.page_number,
-      similarity: t.similarity,
+      similarity: 0.75,
       document_title: 'Document',
       table_data: t.structured_data
     })));
   }
 
-  // 4. Busca em imagens (quando intenção requer análise visual)
+  // 3. Busca em imagens (quando intenção requer análise visual)
   if (intentNeedsImage) {
     console.log("🖼️ Fetching relevant images for visual analysis...");
     
@@ -188,7 +141,7 @@ async function hybridSearch(
         type: 'image' as const,
         content: img.description || img.caption || 'Imagem disponível para análise',
         page_number: img.page_number,
-        similarity: 0.8, // Base score for images
+        similarity: 0.7,
         document_title: img.knowledge_documents?.title || 'Document',
         image_data: {
           image_id: img.image_id,
@@ -200,35 +153,10 @@ async function hybridSearch(
     }
   }
 
-  // 5. BM25-like: busca por palavras-chave
-  const keywords = question.toLowerCase().split(' ')
-    .filter(w => w.length > 3 && !['qual', 'onde', 'como', 'quando', 'para'].includes(w));
-
-  if (keywords.length > 0) {
-    const keywordQuery = keywords.join(' | ');
-    const { data: keywordMatches } = await supabaseClient
-      .from('document_blocks')
-      .select('content, page_number, section_title, block_id')
-      .textSearch('content', keywordQuery, { type: 'websearch' })
-      .limit(5);
-
-    if (keywordMatches) {
-      evidences.push(...keywordMatches.map((k: any) => ({
-        type: 'text' as const,
-        content: k.content,
-        page_number: k.page_number,
-        similarity: 0.7, // Score base para keyword matches
-        document_title: 'Document',
-        section_title: k.section_title,
-        block_id: k.block_id
-      })));
-    }
-  }
-
   return evidences;
 }
 
-// Reranking usando modelo barato
+// Reranking usando Gemini
 async function rerankEvidences(
   question: string,
   evidences: Evidence[],
@@ -239,18 +167,18 @@ async function rerankEvidences(
   // Criar contextos curtos para reranking
   const candidates = evidences.slice(0, 20).map((e, idx) => ({
     index: idx,
-    text: e.content.substring(0, 500) // Apenas primeiros 500 chars
+    text: e.content.substring(0, 500)
   }));
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "google/gemini-2.5-pro",
         messages: [
           {
             role: "system",
@@ -260,28 +188,27 @@ Considere:
 - Informações factuais e específicas
 - Diversidade de fontes
 
-Retorne JSON puro: {"ranked_indices": [0, 3, 1, ...]}`
+Retorne apenas JSON: {"ranked_indices": [0, 3, 1, ...]}`
           },
           {
             role: "user",
             content: `Pergunta: ${question}\n\nTrechos:\n${candidates.map((c, i) => `[${i}] ${c.text}`).join('\n\n')}`
           }
         ],
-        response_format: { type: "json_object" },
         temperature: 0.2,
+        max_completion_tokens: 1000
       }),
     });
 
     const data = await response.json();
-    const result = JSON.parse(data.choices[0].message.content);
+    const content = data.choices[0].message.content;
+    const result = JSON.parse(content.replace(/```json\n?|\n?```/g, ''));
     const rankedIndices = result.ranked_indices || [];
 
-    // Reordenar evidências
     return rankedIndices.slice(0, maxResults).map((idx: number) => evidences[idx]);
 
   } catch (error) {
     console.error("Reranking failed, using similarity order:", error);
-    // Fallback: ordenar por similaridade
     return evidences
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, maxResults);
@@ -339,14 +266,9 @@ const handler = async (req: Request): Promise<Response> => {
     const intent = await detectIntent(question);
     console.log("Intent detected:", intent);
 
-    // 2. Gerar embedding
-    console.log("🔢 Generating embedding...");
-    const embedding = await generateEmbedding(question);
-
-    // 3. Busca híbrida
-    console.log("🔎 Performing hybrid search...");
+    // 2. Busca híbrida (sem embeddings)
+    console.log("🔎 Performing search...");
     const rawEvidences = await hybridSearch(
-      embedding,
       question,
       knowledgeType,
       documentId,

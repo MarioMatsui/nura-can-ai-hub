@@ -7,31 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-
-// Function to generate embeddings using OpenAI
-async function generateQueryEmbedding(text: string): Promise<number[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-ada-002",
-      input: text,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error("OpenAI Embedding API error:", await response.text());
-    throw new Error("Failed to generate embedding");
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
-}
 
 // Map model types to knowledge base types
 function getKnowledgeType(modelType: string): string | null {
@@ -363,42 +339,37 @@ serve(async (req) => {
       });
     }
 
-    // RAG: Retrieve relevant context if available
+    // RAG: Retrieve relevant context if available (text-based, no embeddings)
     let ragContext = "";
     const knowledgeType = getKnowledgeType(modelType);
     
     if (knowledgeType) {
       try {
-        console.log(`Performing RAG search for knowledge type: ${knowledgeType}`);
+        console.log(`Retrieving context for knowledge type: ${knowledgeType}`);
         
-        // Generate embedding for the user's question
-        const queryEmbedding = await generateQueryEmbedding(message);
-        
-        // For specialist model, search all knowledge bases
+        // Simple document retrieval (no embeddings)
         if (knowledgeType === 'all') {
           const knowledgeTypes = ['medical', 'legal', 'veterinary'];
-          let allChunks: any[] = [];
+          let allDocs: any[] = [];
           
           for (const type of knowledgeTypes) {
-            const { data: chunks, error: searchError } = await supabase.rpc(
-              'search_similar_chunks',
-              {
-                query_embedding: queryEmbedding,
-                knowledge_type_filter: type,
-                match_count: 2
-              }
-            );
+            const { data: docs, error: searchError } = await supabase
+              .from('knowledge_documents')
+              .select('title, content')
+              .eq('knowledge_type', type)
+              .eq('status', 'ready')
+              .limit(2);
             
-            if (!searchError && chunks && chunks.length > 0) {
-              allChunks = allChunks.concat(chunks);
+            if (!searchError && docs && docs.length > 0) {
+              allDocs = allDocs.concat(docs);
             }
           }
           
-          if (allChunks.length > 0) {
-            console.log(`Found ${allChunks.length} relevant chunks across all knowledge bases`);
+          if (allDocs.length > 0) {
+            console.log(`Found ${allDocs.length} documents across all knowledge bases`);
             ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
-            allChunks.forEach((chunk: any, index: number) => {
-              ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
+            allDocs.forEach((doc: any, index: number) => {
+              ragContext += `[Documento ${index + 1}: ${doc.title}]\n${doc.content.substring(0, 2000)}...\n\n`;
             });
             ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
           }

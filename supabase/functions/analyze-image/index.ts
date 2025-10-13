@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
 interface AnalyzeImageRequest {
   imageId?: string;
@@ -77,23 +77,23 @@ Seja preciso e factual.`
     ]
   });
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o",
+      model: "google/gemini-2.5-pro",
       messages,
-      max_completion_tokens: 1000,
+      max_completion_tokens: 8000,
       temperature: 0.2,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI Vision API error: ${error}`);
+    throw new Error(`Lovable AI Vision error: ${error}`);
   }
 
   const data = await response.json();
@@ -113,7 +113,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { imageId, storagePath, question, context, bbox }: AnalyzeImageRequest = await req.json();
     
-    console.log("🔍 Analyzing image with GPT-4o Vision");
+    console.log("🔍 Analyzing image with Gemini 2.5 Pro");
 
     let imageUrl = "";
     let imageInfo: any = null;
