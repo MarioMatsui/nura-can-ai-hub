@@ -481,6 +481,7 @@ serve(async (req) => {
               } else {
                 const fullText = pdfData.text;
                 console.log(`✅ PDF text extracted: ${fullText.length} characters`);
+                console.log(`📝 PDF preview (first 500 chars): ${fullText.substring(0, 500)}`);
                 textContentLength += fullText.length;
                 
                 // Smart chunking for large documents - increase chunk size significantly
