@@ -43,27 +43,30 @@ export type Database = {
       }
       document_chunks: {
         Row: {
-          chunk_index: number
+          chunk_order: number
           content: string
           created_at: string
           document_id: string
           embedding: string | null
+          hash: string | null
           id: string
         }
         Insert: {
-          chunk_index: number
+          chunk_order: number
           content: string
           created_at?: string
           document_id: string
           embedding?: string | null
+          hash?: string | null
           id?: string
         }
         Update: {
-          chunk_index?: number
+          chunk_order?: number
           content?: string
           created_at?: string
           document_id?: string
           embedding?: string | null
+          hash?: string | null
           id?: string
         }
         Relationships: [
@@ -80,33 +83,42 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          error_message: string | null
           file_name: string
           file_path: string | null
           id: string
           knowledge_type: Database["public"]["Enums"]["knowledge_base_type"]
           metadata: Json | null
+          progress: number | null
+          status: string
           title: string
           updated_at: string
         }
         Insert: {
           content: string
           created_at?: string
+          error_message?: string | null
           file_name: string
           file_path?: string | null
           id?: string
           knowledge_type: Database["public"]["Enums"]["knowledge_base_type"]
           metadata?: Json | null
+          progress?: number | null
+          status?: string
           title: string
           updated_at?: string
         }
         Update: {
           content?: string
           created_at?: string
+          error_message?: string | null
           file_name?: string
           file_path?: string | null
           id?: string
           knowledge_type?: Database["public"]["Enums"]["knowledge_base_type"]
           metadata?: Json | null
+          progress?: number | null
+          status?: string
           title?: string
           updated_at?: string
         }
@@ -143,6 +155,50 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processing_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          document_id: string
+          error_message: string | null
+          id: string
+          job_type: string
+          progress: number | null
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          document_id: string
+          error_message?: string | null
+          id?: string
+          job_type: string
+          progress?: number | null
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          document_id?: string
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          progress?: number | null
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_jobs_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_documents"
             referencedColumns: ["id"]
           },
         ]
@@ -306,7 +362,7 @@ export type Database = {
       }
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
-        Returns: string
+        Returns: unknown
       }
       search_similar_chunks: {
         Args: {

@@ -14,3 +14,9 @@ verify_jwt = true
 
 [functions.parse-pdf]
 verify_jwt = true
+
+[functions.document-status]
+verify_jwt = true
+
+[functions.rag-ask]
+verify_jwt = true
