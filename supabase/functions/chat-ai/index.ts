@@ -462,12 +462,12 @@ serve(async (req) => {
             });
           }
         } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
-          // For PDFs: Use RAG instead of sending full content
+          // For documents: Read and send to AI directly (they are part of the user's message)
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`📄 PDF detected: ${attachment.file_name} - Using RAG search only`);
+              console.log(`📄 PDF attached: ${attachment.file_name} - Extracting text`);
               
-              // Parse PDF to get searchable text
+              // Parse PDF to get text
               const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
                 body: { filePath: attachment.file_path }
               });
@@ -476,46 +476,29 @@ serve(async (req) => {
                 const fullText = pdfData.text;
                 textContentLength += fullText.length;
                 
-                // Generate embedding for the user's question
-                const queryEmbedding = await generateQueryEmbedding(message);
-                
-                // Also try to extract key terms from the document for better search
-                const documentPreview = fullText.substring(0, 500);
-                const combinedQuery = `${message}\n\nContexto do documento: ${documentPreview}`;
-                const documentEmbedding = await generateQueryEmbedding(combinedQuery);
-                
-                // Search knowledge base with combined query
-                const { data: pdfChunks, error: searchError } = await supabase.rpc(
-                  'search_similar_chunks',
-                  {
-                    query_embedding: documentEmbedding,
-                    knowledge_type_filter: knowledgeType,
-                    match_count: 6 // More chunks for document-specific queries
-                  }
-                );
-                
-                if (!searchError && pdfChunks && pdfChunks.length > 0) {
-                  console.log(`✅ Found ${pdfChunks.length} relevant chunks from knowledge base`);
-                  attachmentContext += `\n\n📄 Informações relevantes sobre "${attachment.file_name}" (via RAG):\n\n`;
-                  pdfChunks.forEach((chunk: any, index: number) => {
-                    attachmentContext += `[Trecho ${index + 1} - ${chunk.document_title}]\n${chunk.content}\n\n`;
-                  });
-                  attachmentContext += `\n---\n`;
+                // Smart chunking for large documents
+                const maxChars = 15000; // ~4k tokens
+                if (fullText.length > maxChars) {
+                  // Take beginning, middle, and end
+                  const chunkSize = Math.floor(maxChars / 3);
+                  const beginning = fullText.substring(0, chunkSize);
+                  const middleStart = Math.floor(fullText.length / 2) - Math.floor(chunkSize / 2);
+                  const middle = fullText.substring(middleStart, middleStart + chunkSize);
+                  const end = fullText.substring(fullText.length - chunkSize);
+                  
+                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}" (${(fullText.length / 1000).toFixed(1)}k caracteres)\n\n`;
+                  attachmentContext += `[INÍCIO DO DOCUMENTO]\n${beginning}\n\n[...]\n\n[TRECHO DO MEIO]\n${middle}\n\n[...]\n\n[FINAL DO DOCUMENTO]\n${end}\n`;
+                  attachmentContext += `\n💡 Documento grande foi dividido em trechos representativos.\n`;
                 } else {
-                  // If no RAG results, use truncated version (last resort)
-                  console.log('⚠️ No RAG results - using truncated document');
-                  const maxLength = 8000; // ~2k tokens - safe limit
-                  const truncatedText = fullText.substring(0, maxLength);
-                  attachmentContext += `\n\n📄 Preview do documento "${attachment.file_name}" (primeiros ${(maxLength / 1000).toFixed(1)}k caracteres):\n${truncatedText}\n`;
-                  attachmentContext += `\n⚠️ Documento analisado via preview. Para análise completa, adicione à Base de Conhecimento em /admin/knowledge.\n`;
+                  attachmentContext += `\n\n📄 Documento anexado: "${attachment.file_name}"\n\n${fullText}\n`;
                 }
               } else {
                 console.error('Error parsing PDF:', pdfError);
                 attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
               }
             } else {
-              // For text files, download and read directly (usually smaller)
-              console.log(`Reading text file: ${attachment.file_name}`);
+              // For text files, download and read directly
+              console.log(`📄 Text file attached: ${attachment.file_name}`);
               
               const { data: fileData, error: downloadError } = await supabase.storage
                 .from('chat-attachments')
@@ -525,14 +508,13 @@ serve(async (req) => {
                 const text = await fileData.text();
                 textContentLength += text.length;
                 
-                // Limit text files too
-                const maxLength = 12000; // ~3k tokens
+                const maxLength = 15000; // ~4k tokens
                 if (text.length > maxLength) {
                   const truncatedText = text.substring(0, maxLength);
-                  attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}" (truncado):\n${truncatedText}\n`;
-                  attachmentContext += `\n⚠️ Documento truncado. Total: ${(text.length / 1000).toFixed(1)}k caracteres.\n`;
+                  attachmentContext += `\n\n📄 Documento "${attachment.file_name}" (truncado - ${(text.length / 1000).toFixed(1)}k caracteres no total):\n${truncatedText}\n`;
+                  attachmentContext += `\n💡 Mostrando primeiros ${(maxLength / 1000).toFixed(1)}k caracteres.\n`;
                 } else {
-                  attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
+                  attachmentContext += `\n\n📄 Documento "${attachment.file_name}":\n${text}\n`;
                 }
               } else {
                 console.error('Error reading text file:', downloadError);
@@ -547,9 +529,9 @@ serve(async (req) => {
       }
 
       if (attachmentContext) {
-        attachmentContext = "\n\n⚠️ DOCUMENTOS ENVIADOS PELO USUÁRIO:\n" + 
+        attachmentContext = "\n\n📎 DOCUMENTOS ANEXADOS PELO USUÁRIO (PRIORIDADE):\n" + 
                           attachmentContext + 
-                          "\n---\nResponda baseado no conteúdo dos documentos acima, usando o conhecimento da base como complemento.\n";
+                          "\n---\n⚠️ IMPORTANTE: Responda SEMPRE com base nos documentos anexados acima. A base de conhecimento (RAG) é apenas suporte complementar.\n";
       }
     }
 
