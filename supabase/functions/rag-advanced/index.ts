@@ -99,6 +99,7 @@ async function hybridSearch(
   question: string,
   knowledgeType: string,
   documentId: string | undefined,
+  intentNeedsImage: boolean,
   supabaseClient: any
 ): Promise<Evidence[]> {
   const evidences: Evidence[] = [];
@@ -151,7 +152,7 @@ async function hybridSearch(
   }
 
   // 3. Busca em tabelas
-  const { data: tables, error: tablesError } = await supabaseClient.rpc(
+  const { data: tablesData, error: tablesError2 } = await supabaseClient.rpc(
     'search_tables',
     {
       query_embedding: embedding,
@@ -160,10 +161,10 @@ async function hybridSearch(
     }
   );
 
-  if (tablesError) {
-    console.error("Error searching tables:", tablesError);
-  } else if (tables) {
-    evidences.push(...tables.map((t: any) => ({
+  if (tablesError2) {
+    console.error("Error searching tables:", tablesError2);
+  } else if (tablesData) {
+    evidences.push(...tablesData.map((t: any) => ({
       type: 'table' as const,
       content: t.markdown,
       page_number: t.page_number,
@@ -173,7 +174,33 @@ async function hybridSearch(
     })));
   }
 
-  // 4. BM25-like: busca por palavras-chave
+  // 4. Busca em imagens (quando intenção requer análise visual)
+  if (intentNeedsImage) {
+    console.log("🖼️ Fetching relevant images for visual analysis...");
+    
+    const { data: images, error: imagesError } = await supabaseClient
+      .from('document_images')
+      .select('*, knowledge_documents(title)')
+      .limit(3);
+
+    if (!imagesError && images) {
+      evidences.push(...images.map((img: any) => ({
+        type: 'image' as const,
+        content: img.description || img.caption || 'Imagem disponível para análise',
+        page_number: img.page_number,
+        similarity: 0.8, // Base score for images
+        document_title: img.knowledge_documents?.title || 'Document',
+        image_data: {
+          image_id: img.image_id,
+          storage_path: img.storage_path,
+          image_type: img.image_type,
+          bbox: img.bbox
+        }
+      })));
+    }
+  }
+
+  // 5. BM25-like: busca por palavras-chave
   const keywords = question.toLowerCase().split(' ')
     .filter(w => w.length > 3 && !['qual', 'onde', 'como', 'quando', 'para'].includes(w));
 
@@ -323,6 +350,7 @@ const handler = async (req: Request): Promise<Response> => {
       question,
       knowledgeType,
       documentId,
+      intent.needs_image,
       supabaseClient
     );
 
