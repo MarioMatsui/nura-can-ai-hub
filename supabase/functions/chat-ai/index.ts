@@ -572,38 +572,20 @@ Forneça uma análise completa e estruturada do documento acima.`;
       }
 
       if (attachmentContext) {
-        // Create super directive header with clear, action-focused instructions
-        const analysisDirective = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 ANÁLISE DE DOCUMENTOS - INSTRUÇÕES OBRIGATÓRIAS 🚨
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        // Prepend clear directive - short and direct
+        attachmentContext = `═══════════════════════════════════════════════════
+📋 DOCUMENTO ANEXADO PELO USUÁRIO
+═══════════════════════════════════════════════════
 
-O usuário anexou documentos para você analisar. O conteúdo completo está abaixo.
+O conteúdo completo está abaixo. Analise e extraia todas as informações solicitadas.
 
-INSTRUÇÕES DE ANÁLISE:
-1. LEIA todo o conteúdo dos documentos fornecidos
-2. LOCALIZE as informações solicitadas (valores de THC, CBD, datas, contaminantes, etc.)
-3. EXTRAIA os valores EXATOS que aparecem no documento
-4. CITE os números, datas e resultados específicos
-5. ORGANIZE a resposta de forma clara e estruturada
+${attachmentContext}
 
-IMPORTANTE:
-- Você tem o documento COMPLETO abaixo
-- EXTRAIA valores reais como "THC: 22.5 mg/g" (não use placeholders)
-- Se o documento menciona "ND" (não detectado), cite "ND"
-- Cite datas exatas que aparecem no documento
-- Liste todos os valores numéricos relevantes
-
-NÃO USE PLACEHOLDERS como "[valor do documento]" - use os VALORES REAIS.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+═══════════════════════════════════════════════════
+Cite valores exatos do documento acima em sua resposta.
+═══════════════════════════════════════════════════
 
 `;
-        
-        attachmentContext = analysisDirective + attachmentContext + 
-                          "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                          "FIM DO DOCUMENTO ANEXADO\n" +
-                          "Use APENAS as informações acima. Cite valores específicos e exatos.\n" +
-                          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
       }
     }
 
@@ -625,12 +607,12 @@ NÃO USE PLACEHOLDERS como "[valor do documento]" - use os VALORES REAIS.
     // Smart model selection based on content type
     let selectedModel = model;
     
-    if (hasImages) {
-      // Always use GPT-4o for images/multimodal
+    if (hasImages || attachmentContext) {
+      // Always use GPT-4o for images/multimodal AND document analysis
       selectedModel = 'gpt-4o';
-      console.log('🖼️ Using GPT-4o for image/multimodal processing');
+      console.log(hasImages ? '🖼️ Using GPT-4o for image/multimodal processing' : '📄 Using GPT-4o for document analysis');
     } else {
-      // Use GPT-4o-mini for all text queries (fast and cheap)
+      // Use GPT-4o-mini for simple text queries (fast and cheap)
       selectedModel = 'gpt-4o-mini';
       console.log(`💬 Using gpt-4o-mini for standard query`);
     }
