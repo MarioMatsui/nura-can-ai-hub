@@ -349,7 +349,7 @@ const Dashboard = () => {
     <SidebarProvider 
       defaultOpen={!isMobile}
       style={{
-        '--sidebar-width-icon': '5.75rem'
+        '--sidebar-width-icon': '5.125rem'
       } as React.CSSProperties}
     >
       <div className="flex h-screen w-full overflow-hidden bg-background">
