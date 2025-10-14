@@ -315,77 +315,96 @@ const Dashboard = () => {
         throw new Error(errorData?.error || 'Failed to get AI response');
       }
 
-      // Process streaming response with character-by-character animation
+      // Process streaming response with immediate animation
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
       let displayedContent = '';
       let buffer = '';
+      let isAnimating = false;
+      let animationQueue: string[] = [];
 
       if (!reader) {
         throw new Error('No response body');
       }
 
-      // First, collect all the content from the stream
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
+      // Animation function that runs in parallel with stream reading
+      const animateFromQueue = async () => {
+        isAnimating = true;
+        const CHARS_PER_UPDATE = 2; // Show 2 characters at a time
+        const DELAY_MS = 30; // 30ms between updates for smooth typing
         
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        while (isAnimating) {
+          if (displayedContent.length < fullContent.length) {
+            // Calculate how many chars to show next
+            const remainingChars = fullContent.length - displayedContent.length;
+            const charsToAdd = Math.min(CHARS_PER_UPDATE, remainingChars);
+            displayedContent = fullContent.slice(0, displayedContent.length + charsToAdd);
+            
+            setMessages(prev => prev.map(msg => 
+              msg.id === tempMessageId 
+                ? { ...msg, content: displayedContent }
+                : msg
+            ));
+            
+            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+          } else {
+            // Wait a bit for more content
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+        }
+      };
 
-        for (const line of lines) {
-          if (!line.trim() || line.startsWith(':')) continue;
+      // Start animation immediately
+      const animationPromise = animateFromQueue();
+
+      // Read stream and update fullContent
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
           
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') continue;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices?.[0]?.delta?.content;
-              
-              if (content) {
-                fullContent += content;
+          for (const line of lines) {
+            if (!line.trim() || line.startsWith(':')) continue;
+            
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content;
+                
+                if (content) {
+                  fullContent += content;
+                }
+              } catch (e) {
+                // Skip invalid JSON
               }
-            } catch (e) {
-              // Skip invalid JSON
             }
           }
         }
-      }
-
-      // Now animate the text character by character
-      const animateText = async () => {
-        const CHARS_PER_UPDATE = 3; // Show 3 characters at a time
-        const DELAY_MS = 20; // 20ms between updates
-        
-        for (let i = 0; i < fullContent.length; i += CHARS_PER_UPDATE) {
-          displayedContent = fullContent.slice(0, i + CHARS_PER_UPDATE);
-          
-          setMessages(prev => prev.map(msg => 
-            msg.id === tempMessageId 
-              ? { ...msg, content: displayedContent }
-              : msg
-          ));
-          
-          // Wait before showing next chunk
-          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      } finally {
+        // Wait for animation to catch up with all content
+        while (displayedContent.length < fullContent.length) {
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
+        isAnimating = false;
+        await animationPromise;
         
-        // Ensure we show the complete content
-        displayedContent = fullContent;
+        // Final update to ensure all content is shown
         setMessages(prev => prev.map(msg => 
           msg.id === tempMessageId 
-            ? { ...msg, content: displayedContent }
+            ? { ...msg, content: fullContent }
             : msg
         ));
-      };
-
-      await animateText();
+      }
 
       // Save the final AI response to database
       const { data: aiMessage, error: aiMsgError } = await supabase
