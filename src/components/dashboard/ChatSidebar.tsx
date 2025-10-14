@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, PanelLeft, LogOut, Moon, Sun } from 'lucide-react';
-import { useTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Conversation } from '@/pages/Dashboard';
@@ -33,6 +32,8 @@ interface ChatSidebarProps {
   onNewConversation: () => void;
   onRenameConversation: (conversationId: string, newTitle: string) => void;
   onDeleteConversation: (conversationId: string) => void;
+  appTheme: 'light' | 'dark';
+  onThemeToggle: () => void;
 }
 
 export const ChatSidebar = ({
@@ -42,6 +43,8 @@ export const ChatSidebar = ({
   onNewConversation,
   onRenameConversation,
   onDeleteConversation,
+  appTheme,
+  onThemeToggle,
 }: ChatSidebarProps) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,7 +54,6 @@ export const ChatSidebar = ({
   const { state, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { theme, setTheme } = useTheme();
 
   const getModelLabel = (modelType: string) => {
     const labels = {
@@ -263,20 +265,20 @@ export const ChatSidebar = ({
         {/* Footer com botões de tema e logout */}
         <div className="border-t border-border p-3 space-y-1">
           <Button
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={onThemeToggle}
             variant="ghost"
             size={state === "collapsed" ? "icon" : "sm"}
             className="w-full transition-smooth"
-            title={theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+            title={appTheme === "dark" ? "Modo Claro" : "Modo Escuro"}
           >
-            {theme === "dark" ? (
+            {appTheme === "dark" ? (
               <Sun className="h-4 w-4" />
             ) : (
               <Moon className="h-4 w-4" />
             )}
             {state === "expanded" && (
               <span className="ml-2">
-                {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+                {appTheme === "dark" ? "Modo Claro" : "Modo Escuro"}
               </span>
             )}
           </Button>

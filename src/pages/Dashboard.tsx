@@ -43,6 +43,24 @@ const Dashboard = () => {
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const isMobile = useIsMobile();
+  const [appTheme, setAppTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('theme:/app');
+    return (saved as 'light' | 'dark') || 'dark';
+  });
+
+  // Apply theme to app container
+  useEffect(() => {
+    const appRoot = document.getElementById('app-root');
+    if (appRoot) {
+      appRoot.setAttribute('data-theme', appTheme);
+    }
+  }, [appTheme]);
+
+  const handleThemeToggle = () => {
+    const newTheme = appTheme === 'dark' ? 'light' : 'dark';
+    setAppTheme(newTheme);
+    localStorage.setItem('theme:/app', newTheme);
+  };
 
   useEffect(() => {
     checkAuth();
@@ -352,7 +370,7 @@ const Dashboard = () => {
         '--sidebar-width-icon': '5.125rem'
       } as React.CSSProperties}
     >
-      <div className="flex h-screen w-full overflow-hidden bg-background">
+      <div id="app-root" data-theme={appTheme} className="flex h-screen w-full overflow-hidden bg-background">
         <ChatSidebar
           conversations={conversations}
           currentConversation={currentConversation}
@@ -360,6 +378,8 @@ const Dashboard = () => {
           onNewConversation={handleNewConversation}
           onRenameConversation={handleRenameConversation}
           onDeleteConversation={handleDeleteConversation}
+          appTheme={appTheme}
+          onThemeToggle={handleThemeToggle}
         />
         
         <ChatArea
