@@ -265,7 +265,7 @@ export const ChatArea = ({
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
       {/* Minimal header with just model dropdown */}
-      <div className="p-4 border-b border-border">
+      <div className="p-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-full sm:w-64 justify-between gap-2 h-10">
