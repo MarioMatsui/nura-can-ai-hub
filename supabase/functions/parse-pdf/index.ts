@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
+import pdf from "https://esm.sh/pdf-parse@1.1.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,19 +40,18 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Convert to ArrayBuffer for parsing
     const arrayBuffer = await fileData.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
+    const buffer = new Uint8Array(arrayBuffer);
 
-    // Use a simple text extraction approach
-    // For production, you'd want to use a proper PDF parsing library
-    const text = new TextDecoder('utf-8', { fatal: false }).decode(uint8Array);
+    // Use pdf-parse library to extract text properly
+    const pdfData = await pdf(buffer);
+    const extractedText = pdfData.text;
     
+    console.log("Text extracted, length:", extractedText.length, "pages:", pdfData.numpages);
+
     // Clean up the extracted text
-    const cleanedText = text
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Remove non-printable characters
+    const cleanedText = extractedText
       .replace(/\s+/g, ' ') // Normalize whitespace
       .trim();
-
-    console.log("Text extracted, length:", cleanedText.length);
 
     // Limit text size to avoid token limits (max ~100k characters = ~25k tokens)
     const maxLength = 100000;
