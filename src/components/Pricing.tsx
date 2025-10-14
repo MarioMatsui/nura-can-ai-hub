@@ -89,7 +89,6 @@ const plans = {
 const Pricing = () => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Calculate average discount percentage
@@ -106,56 +105,13 @@ const Pricing = () => {
   const discountPercentage = calculateAverageDiscount();
 
   useEffect(() => {
-    // Get current user ID and fetch subscription
-    const fetchUserData = async () => {
-      const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] PRICING: Fetching user data...`);
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      console.log(`[${timestamp}] PRICING: Session:`, session?.user?.id, 'Error:', sessionError);
-      const uid = session?.user?.id ?? null;
-      console.log(`[${timestamp}] PRICING: User ID:`, uid);
-      setUserId(uid);
-      
-      if (uid) {
-        const { data: subscription, error: subError } = await supabase
-          .from('user_subscriptions')
-          .select('plan_type, status')
-          .eq('user_id', uid)
-          .eq('status', 'active')
-          .maybeSingle();
-        
-        console.log(`[${timestamp}] PRICING: Subscription data:`, subscription, 'Error:', subError);
-        setCurrentPlan(subscription?.plan_type ?? null);
-        console.log(`[${timestamp}] PRICING: Current plan set to:`, subscription?.plan_type ?? null);
-      } else {
-        console.log(`[${timestamp}] PRICING: No user ID, setting current plan to null`);
-        setCurrentPlan(null);
-      }
-    };
-    
-    fetchUserData();
+    // Get current user ID
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] PRICING: Auth state changed:`, _event);
-      const uid = session?.user?.id ?? null;
-      console.log(`[${timestamp}] PRICING: User ID (auth change):`, uid);
-      setUserId(uid);
-      
-      if (uid) {
-        const { data: userSubscription, error: subError } = await supabase
-          .from('user_subscriptions')
-          .select('plan_type, status')
-          .eq('user_id', uid)
-          .eq('status', 'active')
-          .maybeSingle();
-        
-        console.log(`[${timestamp}] PRICING: Subscription (auth change):`, userSubscription, 'Error:', subError);
-        setCurrentPlan(userSubscription?.plan_type ?? null);
-        console.log(`[${timestamp}] PRICING: Current plan set to:`, userSubscription?.plan_type ?? null);
-      } else {
-        setCurrentPlan(null);
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null);
     });
 
     return () => subscription.unsubscribe();
@@ -214,22 +170,6 @@ const Pricing = () => {
     
     // Redirect to payment page
     window.location.href = paymentUrl;
-  };
-
-  const isPlanCurrent = (planKey: string) => {
-    // Map plan keys to database values
-    const planKeyMap: { [key: string]: string } = {
-      'free': 'free',
-      'medical': 'medical',
-      'legal': 'legal',
-      'veterinary': 'veterinary',
-      'specialist': 'specialist'
-    };
-    
-    const dbPlanType = planKeyMap[planKey];
-    const isCurrent = currentPlan === dbPlanType;
-    console.log(`Checking plan ${planKey}: currentPlan=${currentPlan}, dbPlanType=${dbPlanType}, isCurrent=${isCurrent}`);
-    return isCurrent;
   };
 
   return (
@@ -314,21 +254,15 @@ const Pricing = () => {
 
                 <Button
                   onClick={() => handleSubscribe(plan)}
-                  disabled={plan.monthlyPrice === 0 || isPlanCurrent(key)}
+                  disabled={plan.monthlyPrice === 0}
                   className={`w-full font-semibold transition-smooth ${
-                    isPlanCurrent(key)
-                      ? "bg-muted text-muted-foreground cursor-not-allowed"
-                      : plan.popular
+                    plan.popular
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
                       : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   }`}
                   size="lg"
                 >
-                  {isPlanCurrent(key) 
-                    ? "Plano Atual" 
-                    : plan.monthlyPrice === 0 
-                    ? "Começar Grátis" 
-                    : "Assinar"}
+                  {plan.monthlyPrice === 0 ? "Começar Grátis" : "Assinar"}
                 </Button>
               </CardContent>
             </Card>
