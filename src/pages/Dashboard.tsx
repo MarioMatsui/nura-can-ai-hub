@@ -380,6 +380,9 @@ const Dashboard = () => {
           onDeleteConversation={handleDeleteConversation}
           appTheme={appTheme}
           onThemeToggle={handleThemeToggle}
+          profile={profile}
+          user={user}
+          subscriptions={subscriptions}
         />
         
         <ChatArea

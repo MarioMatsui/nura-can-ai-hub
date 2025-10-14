@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, PanelLeft, LogOut, Moon, Sun } from 'lucide-react';
+import { Plus, Pencil, Trash2, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Conversation } from '@/pages/Dashboard';
@@ -21,9 +21,7 @@ import {
   SidebarHeader,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { supabase } from '@/integrations/supabase/client';
-import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
+import { UserProfileHeader } from './UserProfileHeader';
 
 interface ChatSidebarProps {
   conversations: Conversation[];
@@ -34,6 +32,9 @@ interface ChatSidebarProps {
   onDeleteConversation: (conversationId: string) => void;
   appTheme: 'light' | 'dark';
   onThemeToggle: () => void;
+  profile: any;
+  user: any;
+  subscriptions: any[];
 }
 
 export const ChatSidebar = ({
@@ -45,6 +46,9 @@ export const ChatSidebar = ({
   onDeleteConversation,
   appTheme,
   onThemeToggle,
+  profile,
+  user,
+  subscriptions,
 }: ChatSidebarProps) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,8 +56,6 @@ export const ChatSidebar = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const { state, toggleSidebar } = useSidebar();
-  const navigate = useNavigate();
-  const { toast } = useToast();
 
   const getModelLabel = (modelType: string) => {
     const labels = {
@@ -96,19 +98,6 @@ export const ChatSidebar = ({
     }
     setDeleteDialogOpen(false);
     setConversationToDelete(null);
-  };
-
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível fazer logout',
-        variant: 'destructive',
-      });
-      return;
-    }
-    navigate('/auth/login');
   };
 
   const formatDate = (date: string) => {
@@ -262,37 +251,13 @@ export const ChatSidebar = ({
           ) : null}
         </SidebarContent>
 
-        {/* Footer com botões de tema e logout */}
-        <div className="border-t border-border p-3 space-y-1">
-          <Button
-            onClick={onThemeToggle}
-            variant="ghost"
-            size={state === "collapsed" ? "icon" : "sm"}
-            className="w-full transition-smooth"
-            title={appTheme === "dark" ? "Modo Claro" : "Modo Escuro"}
-          >
-            {appTheme === "dark" ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-            {state === "expanded" && (
-              <span className="ml-2">
-                {appTheme === "dark" ? "Modo Claro" : "Modo Escuro"}
-              </span>
-            )}
-          </Button>
-          <Button
-            onClick={handleLogout}
-            variant="ghost"
-            size={state === "collapsed" ? "icon" : "sm"}
-            className="w-full"
-            title="Sair"
-          >
-            <LogOut className="h-4 w-4" />
-            {state === "expanded" && <span className="ml-2">Sair</span>}
-          </Button>
-        </div>
+        <UserProfileHeader
+          profile={profile}
+          user={user}
+          subscriptions={subscriptions}
+          appTheme={appTheme}
+          onThemeToggle={onThemeToggle}
+        />
       </Sidebar>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
