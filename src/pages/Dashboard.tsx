@@ -48,12 +48,15 @@ const Dashboard = () => {
     return (saved as 'light' | 'dark') || 'dark';
   });
 
-  // Apply theme to app container
+  // Apply theme to app container and body (for portals)
   useEffect(() => {
     const appRoot = document.getElementById('app-root');
     if (appRoot) {
       appRoot.setAttribute('data-theme', appTheme);
     }
+    // Apply theme class to body for portals (modals, popovers)
+    document.body.classList.remove('light', 'dark');
+    document.body.classList.add(appTheme);
   }, [appTheme]);
 
   const handleThemeToggle = () => {
