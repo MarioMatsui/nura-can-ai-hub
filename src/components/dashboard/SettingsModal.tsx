@@ -11,10 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Badge } from '@/components/ui/badge';
 import { LogOut, Loader2, CreditCard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { CancelSubscriptionDialog } from './CancelSubscriptionDialog';
 
 interface SettingsModalProps {
   open: boolean;
@@ -48,6 +50,8 @@ export const SettingsModal = ({
   const [loadingName, setLoadingName] = useState(false);
   const [loadingEmail, setLoadingEmail] = useState(false);
   const [loadingPassword, setLoadingPassword] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [loadingRevert, setLoadingRevert] = useState(false);
 
   const getPlanLabel = () => {
     if (!subscriptions || subscriptions.length === 0) {
@@ -182,6 +186,45 @@ export const SettingsModal = ({
     navigate('/');
   };
 
+  const handleRevertCancellation = async () => {
+    setLoadingRevert(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('revert-cancellation');
+
+      if (error) throw error;
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      toast({
+        title: 'Cancelamento revertido',
+        description: 'Sua assinatura continua ativa',
+      });
+
+      // Refresh the page to update subscription status
+      window.location.reload();
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Não foi possível reverter o cancelamento',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingRevert(false);
+    }
+  };
+
+  const getSubscriptionStatus = () => {
+    if (!subscriptions || subscriptions.length === 0) return null;
+    const activePlan = subscriptions.find(s => s.status === 'active' || s.status === 'pending_cancellation');
+    return activePlan;
+  };
+
+  const currentSubscription = getSubscriptionStatus();
+  const isPendingCancellation = currentSubscription?.status === 'pending_cancellation';
+  const hasActiveSubscription = currentSubscription && currentSubscription.status === 'active';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -280,26 +323,69 @@ export const SettingsModal = ({
             {/* Plano atual */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Plano atual</h3>
-              <div className="flex items-center justify-between p-4 rounded-lg bg-accent/50">
-                <div>
-                  <p className="font-medium">{getPlanLabel()}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {subscriptions?.find(s => s.status === 'active')
-                      ? 'Plano ativo'
-                      : 'Sem assinatura ativa'}
-                  </p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-4 rounded-lg bg-accent/50">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{getPlanLabel()}</p>
+                      {isPendingCancellation && (
+                        <Badge variant="secondary" className="bg-muted">
+                          Cancelamento agendado
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {isPendingCancellation
+                        ? `Ativo até ${currentSubscription?.cancel_at ? new Date(currentSubscription.cancel_at).toLocaleDateString('pt-BR') : ''}`
+                        : subscriptions?.find(s => s.status === 'active')
+                        ? 'Plano ativo'
+                        : 'Sem assinatura ativa'}
+                    </p>
+                  </div>
+                  {hasActiveSubscription && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        navigate('/planos');
+                        onOpenChange(false);
+                      }}
+                    >
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Gerenciar plano
+                    </Button>
+                  )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    navigate('/planos');
-                    onOpenChange(false);
-                  }}
-                >
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Gerenciar plano
-                </Button>
+
+                {/* Cancel subscription link */}
+                {hasActiveSubscription && !isPendingCancellation && (
+                  <button
+                    onClick={() => setShowCancelDialog(true)}
+                    className="text-sm text-destructive hover:underline"
+                  >
+                    Cancelar assinatura
+                  </button>
+                )}
+
+                {/* Revert cancellation button */}
+                {isPendingCancellation && currentSubscription?.cancel_at && new Date() < new Date(currentSubscription.cancel_at) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRevertCancellation}
+                    disabled={loadingRevert}
+                    className="w-full"
+                  >
+                    {loadingRevert ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Processando...
+                      </>
+                    ) : (
+                      'Manter assinatura'
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -351,6 +437,15 @@ export const SettingsModal = ({
             </div>
         </div>
       </DialogContent>
+
+      <CancelSubscriptionDialog
+        open={showCancelDialog}
+        onOpenChange={setShowCancelDialog}
+        onSuccess={() => {
+          // Refresh the page to update subscription status
+          window.location.reload();
+        }}
+      />
     </Dialog>
   );
 };
