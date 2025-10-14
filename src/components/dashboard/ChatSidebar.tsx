@@ -144,17 +144,14 @@ export const ChatSidebar = ({
             )}
           </div>
           {state === "expanded" && (
-            <>
-              <h2 className="text-base font-semibold mb-2">Histórico de Consultas</h2>
-              <Button
-                onClick={onNewConversation}
-                className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
-                size="sm"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Nova Consulta
-              </Button>
-            </>
+            <Button
+              onClick={onNewConversation}
+              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
+              size="sm"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nova Consulta
+            </Button>
           )}
           {state === "collapsed" && (
             <Button
@@ -170,8 +167,12 @@ export const ChatSidebar = ({
 
         <SidebarContent>
           {state === "expanded" ? (
-            <ScrollArea className="flex-1 p-2">
-              {conversations.length === 0 ? (
+            <>
+              <div className="px-4 pt-4 pb-2">
+                <h2 className="text-xs font-medium text-muted-foreground/60">Consultas</h2>
+              </div>
+              <ScrollArea className="flex-1 p-2">
+                {conversations.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8 px-3 text-sm">
                   Nenhuma conversa ainda.
                   <br />
@@ -241,7 +242,8 @@ export const ChatSidebar = ({
                   </div>
                 ))
               )}
-            </ScrollArea>
+              </ScrollArea>
+            </>
           ) : (
             <ScrollArea className="flex-1 p-2">
               {conversations.map((conversation) => (
