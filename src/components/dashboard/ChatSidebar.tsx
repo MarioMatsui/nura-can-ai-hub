@@ -127,6 +127,13 @@ export const ChatSidebar = ({
       <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarHeader className="pt-[21px] px-3 pb-4">
           <div className="flex items-center justify-between mb-2">
+            {state === "expanded" && (
+              <img 
+                src="/src/assets/logo.png" 
+                alt="Nura AI" 
+                className="h-8"
+              />
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -135,13 +142,6 @@ export const ChatSidebar = ({
             >
               <PanelLeft className="h-5 w-5" />
             </Button>
-            {state === "expanded" && (
-              <img 
-                src="/src/assets/logo.png" 
-                alt="Nura AI" 
-                className="h-8"
-              />
-            )}
           </div>
           {state === "expanded" && (
             <Button
