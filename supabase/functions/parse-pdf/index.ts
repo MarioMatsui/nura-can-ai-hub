@@ -8,6 +8,7 @@ const corsHeaders = {
 
 interface ParsePdfRequest {
   filePath: string;
+  bucket?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -21,13 +22,13 @@ const handler = async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     );
 
-    const { filePath }: ParsePdfRequest = await req.json();
-    console.log("Parsing PDF:", filePath);
+    const { filePath, bucket = "knowledge-documents" }: ParsePdfRequest = await req.json();
+    console.log("Parsing PDF from bucket:", bucket, "path:", filePath);
 
     // Download the PDF from storage
     const { data: fileData, error: downloadError } = await supabaseClient
       .storage
-      .from("knowledge-documents")
+      .from(bucket)
       .download(filePath);
 
     if (downloadError || !fileData) {

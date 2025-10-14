@@ -442,7 +442,10 @@ serve(async (req) => {
               console.log(`Parsing PDF: ${attachment.file_name}`);
               
               const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
-                body: { filePath: attachment.file_path }
+                body: { 
+                  filePath: attachment.file_path,
+                  bucket: 'chat-attachments'
+                }
               });
 
               if (!pdfError && pdfData?.text) {
