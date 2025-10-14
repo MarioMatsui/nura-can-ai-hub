@@ -124,7 +124,7 @@ export const ChatSidebar = ({
 
   return (
     <>
-      <Sidebar collapsible="icon" className="border-r border-border data-[state=collapsed]:w-[92px]">
+      <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarHeader className="pt-[21px] px-3 pb-4">
           <div className="flex items-center justify-between mb-2">
             {state === "expanded" && (

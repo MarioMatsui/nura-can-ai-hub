@@ -346,7 +346,12 @@ const Dashboard = () => {
   }
 
   return (
-    <SidebarProvider defaultOpen={!isMobile}>
+    <SidebarProvider 
+      defaultOpen={!isMobile}
+      style={{
+        '--sidebar-width-icon': '5.75rem'
+      } as React.CSSProperties}
+    >
       <div className="flex h-screen w-full overflow-hidden bg-background">
         <ChatSidebar
           conversations={conversations}
