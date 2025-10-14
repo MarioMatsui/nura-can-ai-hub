@@ -120,6 +120,7 @@ const Pricing = () => {
           .eq('status', 'active')
           .maybeSingle();
         
+        console.log('Current subscription:', subscription);
         setCurrentPlan(subscription?.plan_type ?? null);
       }
     };
@@ -138,6 +139,7 @@ const Pricing = () => {
           .eq('status', 'active')
           .maybeSingle();
         
+        console.log('Current subscription (auth change):', userSubscription);
         setCurrentPlan(userSubscription?.plan_type ?? null);
       } else {
         setCurrentPlan(null);
@@ -203,7 +205,19 @@ const Pricing = () => {
   };
 
   const isPlanCurrent = (planKey: string) => {
-    return currentPlan === planKey;
+    // Map plan keys to database values
+    const planKeyMap: { [key: string]: string } = {
+      'free': 'free',
+      'medical': 'medical',
+      'legal': 'legal',
+      'veterinary': 'veterinary',
+      'specialist': 'specialist'
+    };
+    
+    const dbPlanType = planKeyMap[planKey];
+    const isCurrent = currentPlan === dbPlanType;
+    console.log(`Checking plan ${planKey}: currentPlan=${currentPlan}, dbPlanType=${dbPlanType}, isCurrent=${isCurrent}`);
+    return isCurrent;
   };
 
   return (
