@@ -89,6 +89,7 @@ const plans = {
 const Pricing = () => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
   const navigate = useNavigate();
 
   // Calculate average discount percentage
@@ -105,13 +106,42 @@ const Pricing = () => {
   const discountPercentage = calculateAverageDiscount();
 
   useEffect(() => {
-    // Get current user ID
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserId(session?.user?.id ?? null);
-    });
+    // Get current user ID and fetch subscription
+    const fetchUserData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+      
+      if (uid) {
+        const { data: subscription } = await supabase
+          .from('user_subscriptions')
+          .select('plan_type')
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        setCurrentPlan(subscription?.plan_type ?? null);
+      }
+    };
+    
+    fetchUserData();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+      
+      if (uid) {
+        const { data: userSubscription } = await supabase
+          .from('user_subscriptions')
+          .select('plan_type')
+          .eq('user_id', uid)
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        setCurrentPlan(userSubscription?.plan_type ?? null);
+      } else {
+        setCurrentPlan(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -170,6 +200,10 @@ const Pricing = () => {
     
     // Redirect to payment page
     window.location.href = paymentUrl;
+  };
+
+  const isPlanCurrent = (planKey: string) => {
+    return currentPlan === planKey;
   };
 
   return (
@@ -254,15 +288,21 @@ const Pricing = () => {
 
                 <Button
                   onClick={() => handleSubscribe(plan)}
-                  disabled={plan.monthlyPrice === 0}
+                  disabled={plan.monthlyPrice === 0 || isPlanCurrent(key)}
                   className={`w-full font-semibold transition-smooth ${
-                    plan.popular
+                    isPlanCurrent(key)
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
+                      : plan.popular
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
                       : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   }`}
                   size="lg"
                 >
-                  {plan.monthlyPrice === 0 ? "Começar Grátis" : "Assinar"}
+                  {isPlanCurrent(key) 
+                    ? "Plano Atual" 
+                    : plan.monthlyPrice === 0 
+                    ? "Começar Grátis" 
+                    : "Assinar"}
                 </Button>
               </CardContent>
             </Card>
