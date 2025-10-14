@@ -161,6 +161,79 @@ All colors MUST be HSL.
     --shadow-lg: 0 20px 60px -15px hsl(73 98% 50% / 0.25);
     --shadow-card: 0 4px 20px -2px hsl(0 0% 0% / 0.3);
   }
+
+  /* Portal support - apply theme to body */
+  body.light {
+    --background: 0 0% 100%;
+    --foreground: 220 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 15%;
+
+    --primary: 73 98% 50%;
+    --primary-foreground: 220 15% 10%;
+    
+    --secondary: 217 91% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 73 98% 50%;
+    --accent-foreground: 220 15% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 73 98% 50%;
+    
+    --gradient-hero: linear-gradient(135deg, hsl(73 98% 50% / 0.1) 0%, hsl(217 91% 60% / 0.1) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 40% 98%) 100%);
+    
+    --shadow-lg: 0 20px 60px -15px hsl(73 98% 50% / 0.15);
+    --shadow-card: 0 4px 20px -2px hsl(220 15% 15% / 0.08);
+  }
+
+  body.dark {
+    --background: 220 20% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 220 18% 12%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 220 18% 12%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 73 98% 50%;
+    --primary-foreground: 220 15% 10%;
+
+    --secondary: 217 91% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 220 18% 18%;
+    --muted-foreground: 220 10% 65%;
+
+    --accent: 73 98% 50%;
+    --accent-foreground: 220 15% 10%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 18% 18%;
+    --input: 220 18% 18%;
+    --ring: 73 98% 50%;
+    
+    --gradient-hero: linear-gradient(135deg, hsl(73 98% 50% / 0.15) 0%, hsl(217 91% 60% / 0.15) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(220 18% 12%) 0%, hsl(220 18% 14%) 100%);
+    
+    --shadow-lg: 0 20px 60px -15px hsl(73 98% 50% / 0.25);
+    --shadow-card: 0 4px 20px -2px hsl(0 0% 0% / 0.3);
+  }
 }
 
 @layer base {
