@@ -19,12 +19,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarGroupContent,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { supabase } from '@/integrations/supabase/client';
@@ -132,7 +126,7 @@ export const ChatSidebar = ({
     <>
       <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarHeader className="border-b border-border p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <Button
               variant="ghost"
               size="icon"
@@ -150,21 +144,24 @@ export const ChatSidebar = ({
             )}
           </div>
           {state === "expanded" && (
-            <Button
-              onClick={onNewConversation}
-              className="w-full mt-3"
-              size="sm"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Novo chat
-            </Button>
+            <>
+              <h2 className="text-base font-semibold mb-2">Histórico de Consultas</h2>
+              <Button
+                onClick={onNewConversation}
+                className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
+                size="sm"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Consulta
+              </Button>
+            </>
           )}
           {state === "collapsed" && (
             <Button
               onClick={onNewConversation}
               size="icon"
-              className="w-full mt-3"
-              title="Novo chat"
+              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black"
+              title="Nova Consulta"
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -172,96 +169,96 @@ export const ChatSidebar = ({
         </SidebarHeader>
 
         <SidebarContent>
-          <SidebarGroup>
-            {state === "expanded" && (
-              <SidebarGroupLabel className="text-xs text-muted-foreground px-3 py-2">
-                Consultas
-              </SidebarGroupLabel>
-            )}
-            <SidebarGroupContent>
-              <ScrollArea className="h-[calc(100vh-240px)]">
-                <SidebarMenu>
-                  {conversations.length === 0 ? (
-                    state === "expanded" && (
-                      <div className="text-center text-muted-foreground py-8 px-3 text-xs">
-                        Nenhuma conversa ainda.
+          {state === "expanded" ? (
+            <ScrollArea className="flex-1 p-2">
+              {conversations.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8 px-3 text-sm">
+                  Nenhuma conversa ainda.
+                  <br />
+                  Comece uma nova consulta!
+                </div>
+              ) : (
+                conversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    onMouseEnter={() => setHoveredId(conversation.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    className="relative mb-1"
+                  >
+                    <button
+                      onClick={() => onSelectConversation(conversation)}
+                      className={cn(
+                        'w-full text-left p-2.5 rounded-lg transition-colors',
+                        'hover:bg-accent active:bg-accent',
+                        currentConversation?.id === conversation.id && 'bg-accent'
+                      )}
+                    >
+                      {editingId === conversation.id ? (
+                        <Input
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onBlur={() => handleSaveEdit(conversation.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveEdit(conversation.id);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-6 text-sm mb-1"
+                          autoFocus
+                        />
+                      ) : (
+                        <div className="font-medium text-sm mb-0.5 line-clamp-2 pr-16">
+                          {conversation.title}
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground flex items-center justify-between">
+                        <span>{getModelLabel(conversation.model_type)}</span>
+                        <span>{formatDate(conversation.created_at)}</span>
                       </div>
-                    )
-                  ) : (
-                    conversations.map((conversation) => (
-                      <SidebarMenuItem
-                        key={conversation.id}
-                        onMouseEnter={() => setHoveredId(conversation.id)}
-                        onMouseLeave={() => setHoveredId(null)}
-                      >
-                        <SidebarMenuButton
-                          onClick={() => onSelectConversation(conversation)}
-                          isActive={currentConversation?.id === conversation.id}
-                          className={cn(
-                            "relative group py-2",
-                            state === "collapsed" && "justify-center"
-                          )}
-                          title={state === "collapsed" ? conversation.title : undefined}
+                    </button>
+                    
+                    {hoveredId === conversation.id && editingId !== conversation.id && (
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button
+                          onClick={(e) => handleStartEdit(conversation, e)}
+                          className="p-1 rounded hover:bg-background/80 transition-colors"
+                          title="Renomear"
                         >
-                          {state === "expanded" ? (
-                            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                              {editingId === conversation.id ? (
-                                <Input
-                                  value={editTitle}
-                                  onChange={(e) => setEditTitle(e.target.value)}
-                                  onBlur={() => handleSaveEdit(conversation.id)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      handleSaveEdit(conversation.id);
-                                    } else if (e.key === 'Escape') {
-                                      handleCancelEdit();
-                                    }
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-6 text-xs"
-                                  autoFocus
-                                />
-                              ) : (
-                                <>
-                                  <span className="text-sm font-medium truncate pr-16">
-                                    {conversation.title}
-                                  </span>
-                                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                    <span>{getModelLabel(conversation.model_type)}</span>
-                                    <span>{formatDate(conversation.created_at)}</span>
-                                  </div>
-                                </>
-                              )}
-                              {hoveredId === conversation.id && editingId !== conversation.id && (
-                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button
-                                    onClick={(e) => handleStartEdit(conversation, e)}
-                                    className="p-1 rounded hover:bg-background/80 transition-colors"
-                                    title="Renomear"
-                                  >
-                                    <Pencil className="w-3 h-3 text-muted-foreground hover:text-foreground" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => handleDeleteClick(conversation.id, e)}
-                                    className="p-1 rounded hover:bg-background/80 transition-colors"
-                                    title="Deletar"
-                                  >
-                                    <Trash2 className="w-3 h-3 text-muted-foreground hover:text-destructive" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="h-2 w-2 rounded-full bg-muted-foreground" />
-                          )}
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteClick(conversation.id, e)}
+                          className="p-1 rounded hover:bg-background/80 transition-colors"
+                          title="Deletar"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </ScrollArea>
+          ) : (
+            <ScrollArea className="flex-1 p-2">
+              {conversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  onClick={() => onSelectConversation(conversation)}
+                  className={cn(
+                    'w-full p-2 mb-1 rounded-lg transition-colors hover:bg-accent',
+                    currentConversation?.id === conversation.id && 'bg-accent'
                   )}
-                </SidebarMenu>
-              </ScrollArea>
-            </SidebarGroupContent>
-          </SidebarGroup>
+                  title={conversation.title}
+                >
+                  <div className="h-2 w-2 rounded-full bg-foreground/60 mx-auto" />
+                </button>
+              ))}
+            </ScrollArea>
+          )}
         </SidebarContent>
 
         {/* Footer com botão de logout */}
