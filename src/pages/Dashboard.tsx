@@ -4,8 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { ChatSidebar } from '@/components/dashboard/ChatSidebar';
 import { ChatArea } from '@/components/dashboard/ChatArea';
 import { useToast } from '@/hooks/use-toast';
-import { SidebarProvider } from '@/components/ui/sidebar';
+import { SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { PanelLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export interface Conversation {
   id: string;
@@ -347,25 +349,38 @@ const Dashboard = () => {
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
-        <ChatSidebar
-          conversations={conversations}
-          currentConversation={currentConversation}
-          onSelectConversation={handleSelectConversation}
-          onNewConversation={handleNewConversation}
-          onRenameConversation={handleRenameConversation}
-          onDeleteConversation={handleDeleteConversation}
-        />
+      <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+        {/* Global header with sidebar toggle, logo and dropdown area */}
+        <div className="flex items-center gap-4 p-3 border-b border-border">
+          <SidebarTrigger className="h-8 w-8" />
+          <img 
+            src="/src/assets/logo.png" 
+            alt="Nura AI" 
+            className="h-8"
+          />
+          <div className="flex-1" /> {/* Spacer */}
+        </div>
         
-        <ChatArea
-          user={user}
-          profile={profile}
-          messages={messages}
-          subscriptions={subscriptions}
-          currentConversation={currentConversation}
-          onSendMessage={handleSendMessage}
-          onOpenSidebar={() => {}}
-        />
+        <div className="flex flex-1 overflow-hidden">
+          <ChatSidebar
+            conversations={conversations}
+            currentConversation={currentConversation}
+            onSelectConversation={handleSelectConversation}
+            onNewConversation={handleNewConversation}
+            onRenameConversation={handleRenameConversation}
+            onDeleteConversation={handleDeleteConversation}
+          />
+          
+          <ChatArea
+            user={user}
+            profile={profile}
+            messages={messages}
+            subscriptions={subscriptions}
+            currentConversation={currentConversation}
+            onSendMessage={handleSendMessage}
+            onOpenSidebar={() => {}}
+          />
+        </div>
       </div>
     </SidebarProvider>
   );

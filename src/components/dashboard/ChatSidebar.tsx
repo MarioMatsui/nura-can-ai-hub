@@ -126,23 +126,6 @@ export const ChatSidebar = ({
     <>
       <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarHeader className="p-3 pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              className="h-8 w-8"
-            >
-              <PanelLeft className="h-5 w-5" />
-            </Button>
-            {state === "expanded" && (
-              <img 
-                src="/src/assets/logo.png" 
-                alt="Nura AI" 
-                className="h-8"
-              />
-            )}
-          </div>
           {state === "expanded" && (
             <Button
               onClick={onNewConversation}
