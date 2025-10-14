@@ -432,21 +432,30 @@ serve(async (req) => {
           // For PDFs and text files, extract text content
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`Parsing PDF: ${attachment.file_name}`);
+              console.log(`Adding PDF for Gemini processing: ${attachment.file_name}`);
               
-              const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
-                body: { 
-                  filePath: attachment.file_path,
-                  bucket: 'chat-attachments'
-                }
-              });
-
-              if (!pdfError && pdfData?.text) {
-                const truncationNote = pdfData.truncated ? " (primeiros 100.000 caracteres)" : "";
-                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}"${truncationNote}:\n${pdfData.text}\n`;
+              // Get signed URL for the PDF
+              const { data: signedUrlData } = await supabase.storage
+                .from('chat-attachments')
+                .createSignedUrl(attachment.file_path, 3600);
+              
+              if (signedUrlData?.signedUrl) {
+                // Download PDF and convert to base64
+                const pdfResponse = await fetch(signedUrlData.signedUrl);
+                const pdfBuffer = await pdfResponse.arrayBuffer();
+                const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+                
+                messageContent.push({
+                  type: "image_url",
+                  image_url: {
+                    url: `data:application/pdf;base64,${base64Pdf}`
+                  }
+                });
+                
+                attachmentContext += `\n\n📄 Documento PDF "${attachment.file_name}" está anexado para análise.\n`;
               } else {
-                console.error('Error parsing PDF:', pdfError);
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
+                console.error('Error getting signed URL for PDF');
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro no acesso)\n`;
               }
             } else {
               // For text files, download and read directly
