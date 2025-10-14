@@ -319,6 +319,7 @@ const Dashboard = () => {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let accumulatedContent = '';
+      let buffer = '';
 
       if (!reader) {
         throw new Error('No response body');
@@ -328,10 +329,18 @@ const Dashboard = () => {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        // Decode chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete lines
+        const lines = buffer.split('\n');
+        // Keep last partial line in buffer
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
+          // Skip empty lines and SSE comments
+          if (!line.trim() || line.startsWith(':')) continue;
+          
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
             if (data === '[DONE]') continue;
@@ -343,7 +352,7 @@ const Dashboard = () => {
               if (content) {
                 accumulatedContent += content;
                 
-                // Update the temporary message with accumulated content
+                // Update the temporary message with accumulated content immediately
                 setMessages(prev => prev.map(msg => 
                   msg.id === tempMessageId 
                     ? { ...msg, content: accumulatedContent }
@@ -351,8 +360,29 @@ const Dashboard = () => {
                 ));
               }
             } catch (e) {
-              // Skip invalid JSON
+              console.error('Failed to parse SSE data:', e);
             }
+          }
+        }
+      }
+
+      // Process any remaining buffer
+      if (buffer.trim() && buffer.startsWith('data: ')) {
+        const data = buffer.slice(6).trim();
+        if (data !== '[DONE]') {
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              accumulatedContent += content;
+              setMessages(prev => prev.map(msg => 
+                msg.id === tempMessageId 
+                  ? { ...msg, content: accumulatedContent }
+                  : msg
+              ));
+            }
+          } catch (e) {
+            console.error('Failed to parse final SSE data:', e);
           }
         }
       }
