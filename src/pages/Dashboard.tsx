@@ -315,49 +315,29 @@ const Dashboard = () => {
         throw new Error(errorData?.error || 'Failed to get AI response');
       }
 
-      // Process streaming response with throttled updates for smooth typing effect
+      // Process streaming response with character-by-character animation
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let accumulatedContent = '';
+      let fullContent = '';
+      let displayedContent = '';
       let buffer = '';
-      let lastUpdateTime = Date.now();
-      const UPDATE_INTERVAL = 100; // Update UI every 100ms for smooth typing effect
 
       if (!reader) {
         throw new Error('No response body');
       }
 
-      console.log('Starting to read stream...');
-
-      // Function to update message
-      const updateMessage = () => {
-        setMessages(prev => prev.map(msg => 
-          msg.id === tempMessageId 
-            ? { ...msg, content: accumulatedContent }
-            : msg
-        ));
-      };
-
+      // First, collect all the content from the stream
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {
-          console.log('Stream completed');
-          // Final update to ensure all content is shown
-          updateMessage();
-          break;
-        }
+        if (done) break;
 
-        // Decode chunk and add to buffer
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
         
-        // Process complete lines
         const lines = buffer.split('\n');
-        // Keep last partial line in buffer
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          // Skip empty lines and SSE comments
           if (!line.trim() || line.startsWith(':')) continue;
           
           if (line.startsWith('data: ')) {
@@ -369,44 +349,43 @@ const Dashboard = () => {
               const content = parsed.choices?.[0]?.delta?.content;
               
               if (content) {
-                accumulatedContent += content;
-                
-                // Update UI at throttled intervals for smooth typing effect
-                const now = Date.now();
-                if (now - lastUpdateTime >= UPDATE_INTERVAL) {
-                  updateMessage();
-                  lastUpdateTime = now;
-                  // Small delay to ensure browser renders the update
-                  await new Promise(resolve => setTimeout(resolve, 0));
-                }
+                fullContent += content;
               }
             } catch (e) {
-              console.error('Failed to parse SSE data:', e);
+              // Skip invalid JSON
             }
           }
         }
       }
 
-      // Process any remaining buffer
-      if (buffer.trim() && buffer.startsWith('data: ')) {
-        const data = buffer.slice(6).trim();
-        if (data !== '[DONE]') {
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              accumulatedContent += content;
-              setMessages(prev => prev.map(msg => 
-                msg.id === tempMessageId 
-                  ? { ...msg, content: accumulatedContent }
-                  : msg
-              ));
-            }
-          } catch (e) {
-            console.error('Failed to parse final SSE data:', e);
-          }
+      // Now animate the text character by character
+      const animateText = async () => {
+        const CHARS_PER_UPDATE = 3; // Show 3 characters at a time
+        const DELAY_MS = 20; // 20ms between updates
+        
+        for (let i = 0; i < fullContent.length; i += CHARS_PER_UPDATE) {
+          displayedContent = fullContent.slice(0, i + CHARS_PER_UPDATE);
+          
+          setMessages(prev => prev.map(msg => 
+            msg.id === tempMessageId 
+              ? { ...msg, content: displayedContent }
+              : msg
+          ));
+          
+          // Wait before showing next chunk
+          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
         }
-      }
+        
+        // Ensure we show the complete content
+        displayedContent = fullContent;
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempMessageId 
+            ? { ...msg, content: displayedContent }
+            : msg
+        ));
+      };
+
+      await animateText();
 
       // Save the final AI response to database
       const { data: aiMessage, error: aiMsgError } = await supabase
@@ -414,7 +393,7 @@ const Dashboard = () => {
         .insert({
           conversation_id: conversationId,
           role: 'assistant',
-          content: accumulatedContent,
+          content: fullContent,
         })
         .select()
         .single();
