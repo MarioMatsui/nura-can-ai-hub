@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, PanelLeft, LogOut } from 'lucide-react';
+import { Plus, Pencil, Trash2, PanelLeft, LogOut, Moon, Sun } from 'lucide-react';
+import { useTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Conversation } from '@/pages/Dashboard';
@@ -50,6 +51,7 @@ export const ChatSidebar = ({
   const { state, toggleSidebar } = useSidebar();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
 
   const getModelLabel = (modelType: string) => {
     const labels = {
@@ -258,8 +260,26 @@ export const ChatSidebar = ({
           ) : null}
         </SidebarContent>
 
-        {/* Footer com botão de logout */}
-        <div className="border-t border-border p-3">
+        {/* Footer com botões de tema e logout */}
+        <div className="border-t border-border p-3 space-y-1">
+          <Button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            variant="ghost"
+            size={state === "collapsed" ? "icon" : "sm"}
+            className="w-full transition-smooth"
+            title={theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+            {state === "expanded" && (
+              <span className="ml-2">
+                {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+              </span>
+            )}
+          </Button>
           <Button
             onClick={handleLogout}
             variant="ghost"
