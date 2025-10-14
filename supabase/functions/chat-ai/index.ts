@@ -440,10 +440,21 @@ serve(async (req) => {
                 .createSignedUrl(attachment.file_path, 3600);
               
               if (signedUrlData?.signedUrl) {
-                // Download PDF and convert to base64
+                // Download PDF and convert to base64 efficiently
                 const pdfResponse = await fetch(signedUrlData.signedUrl);
                 const pdfBuffer = await pdfResponse.arrayBuffer();
-                const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+                
+                // Convert to base64 in chunks to avoid stack overflow
+                const uint8Array = new Uint8Array(pdfBuffer);
+                let binaryString = '';
+                const chunkSize = 8192;
+                
+                for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                  const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+                  binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+                }
+                
+                const base64Pdf = btoa(binaryString);
                 
                 messageContent.push({
                   type: "image_url",
