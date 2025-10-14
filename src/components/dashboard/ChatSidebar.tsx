@@ -168,7 +168,7 @@ export const ChatSidebar = ({
         <SidebarContent>
           {state === "expanded" ? (
             <>
-              <div className="px-4 pt-4 pb-2">
+              <div className="px-4 pt-4 pb-0">
                 <h2 className="text-xs font-medium text-muted-foreground/60">Consultas</h2>
               </div>
               <ScrollArea className="flex-1 p-2">
