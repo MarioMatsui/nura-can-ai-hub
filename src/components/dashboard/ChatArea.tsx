@@ -10,9 +10,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Message, UserSubscription, Conversation } from '@/pages/Dashboard';
-import { cn, formatMarkdown } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { MarkdownMessage } from './MarkdownMessage';
 
 interface Attachment {
   file_path: string;
@@ -377,9 +378,9 @@ export const ChatArea = ({
                       ))}
                     </div>
                   )}
-                  <div 
-                    className="whitespace-pre-wrap text-sm sm:text-base break-words prose prose-sm max-w-none dark:prose-invert"
-                    dangerouslySetInnerHTML={{ __html: formatMarkdown(message.content) }}
+                  <MarkdownMessage 
+                    content={message.content}
+                    className="text-sm sm:text-base"
                   />
                 </div>
               </div>
