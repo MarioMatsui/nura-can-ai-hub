@@ -267,12 +267,12 @@ const Dashboard = () => {
       attachments: userMessage.attachments as any
     } as Message]);
 
-    // Create temporary assistant message for streaming
+    // Create temporary assistant message with "thinking" indicator
     const tempMessageId = `temp-${Date.now()}`;
     const tempMessage: Message = {
       id: tempMessageId,
       role: 'assistant',
-      content: '',
+      content: '💭 Pensando...',
       created_at: new Date().toISOString(),
     };
 
@@ -348,6 +348,9 @@ const Dashboard = () => {
             ));
             
             await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+          } else if (fullContent.length === 0) {
+            // Still waiting for first content, keep thinking indicator
+            await new Promise(resolve => setTimeout(resolve, 100));
           } else {
             // Wait a bit for more content
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -382,6 +385,15 @@ const Dashboard = () => {
                 const content = parsed.choices?.[0]?.delta?.content;
                 
                 if (content) {
+                  // First content received - clear thinking indicator
+                  if (fullContent.length === 0) {
+                    displayedContent = '';
+                    setMessages(prev => prev.map(msg => 
+                      msg.id === tempMessageId 
+                        ? { ...msg, content: '' }
+                        : msg
+                    ));
+                  }
                   fullContent += content;
                 }
               } catch (e) {
