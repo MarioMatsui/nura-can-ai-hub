@@ -7,30 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-
-// Function to generate embeddings using OpenAI
-async function generateQueryEmbedding(text: string): Promise<number[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-ada-002",
-      input: text,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error("OpenAI Embedding API error:", await response.text());
-    throw new Error("Failed to generate embedding");
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
-}
+const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
 // Map model types to knowledge base types
 function getKnowledgeType(modelType: string): string | null {
@@ -255,9 +232,8 @@ serve(async (req) => {
       });
     }
 
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      console.error('OPENAI_API_KEY not configured');
+    if (!LOVABLE_API_KEY) {
+      console.error('LOVABLE_API_KEY not configured');
       return new Response(JSON.stringify({ error: 'AI service not configured' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -365,26 +341,26 @@ serve(async (req) => {
       try {
         console.log(`Performing RAG search for knowledge type: ${knowledgeType}`);
         
-        // Generate embedding for the user's question
-        const queryEmbedding = await generateQueryEmbedding(message);
-        
-        // For specialist model, search all knowledge bases
+        // Simplified text-based search without embeddings
         if (knowledgeType === 'all') {
           const knowledgeTypes = ['medical', 'legal', 'veterinary'];
           let allChunks: any[] = [];
           
           for (const type of knowledgeTypes) {
-            const { data: chunks, error: searchError } = await supabase.rpc(
-              'search_similar_chunks',
-              {
-                query_embedding: queryEmbedding,
-                knowledge_type_filter: type,
-                match_count: 2
-              }
-            );
+            const { data: chunks, error: searchError } = await supabase
+              .from('document_chunks')
+              .select(`
+                *,
+                knowledge_documents!inner(title, knowledge_type)
+              `)
+              .eq('knowledge_documents.knowledge_type', type)
+              .limit(2);
             
             if (!searchError && chunks && chunks.length > 0) {
-              allChunks = allChunks.concat(chunks);
+              allChunks = allChunks.concat(chunks.map((c: any) => ({
+                ...c,
+                document_title: c.knowledge_documents?.title
+              })));
             }
           }
           
@@ -397,15 +373,15 @@ serve(async (req) => {
             ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
           }
         } else {
-          // Search for similar chunks in the knowledge base for specific type
-          const { data: similarChunks, error: searchError } = await supabase.rpc(
-            'search_similar_chunks',
-            {
-              query_embedding: queryEmbedding,
-              knowledge_type_filter: knowledgeType,
-              match_count: 3
-            }
-          );
+          // Search for chunks in the knowledge base for specific type
+          const { data: similarChunks, error: searchError } = await supabase
+            .from('document_chunks')
+            .select(`
+              *,
+              knowledge_documents!inner(title, knowledge_type)
+            `)
+            .eq('knowledge_documents.knowledge_type', knowledgeType)
+            .limit(3);
 
           if (searchError) {
             console.error('Error searching knowledge base:', searchError);
@@ -415,7 +391,8 @@ serve(async (req) => {
             // Build context from retrieved chunks
             ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
             similarChunks.forEach((chunk: any, index: number) => {
-              ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
+              const docTitle = chunk.knowledge_documents?.title || 'Documento';
+              ragContext += `[Documento ${index + 1}: ${docTitle}]\n${chunk.content}\n\n`;
             });
             ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
           } else {
@@ -428,8 +405,8 @@ serve(async (req) => {
       }
     }
 
-    // Determine model and system prompt
-    const model = 'gpt-4o'; // All models now use gpt-4o for vision support
+    // Use Gemini 2.5 Pro for all processing
+    const model = 'google/gemini-2.5-pro';
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
     // Process attachments (images and documents)
@@ -441,7 +418,7 @@ serve(async (req) => {
       
       for (const attachment of attachments) {
         if (attachment.file_type.startsWith('image/')) {
-          // For images, use GPT-4 Vision
+          // For images, use Gemini 2.5 Pro Vision
           console.log(`Adding image to vision: ${attachment.file_name}`);
           
           // Get signed URL for the image
@@ -505,7 +482,7 @@ serve(async (req) => {
       }
     }
 
-    // Build messages array for OpenAI - attachments have priority over RAG
+    // Build messages array for Gemini - attachments have priority over RAG
     const userMessageContent = messageContent.length > 1 ? messageContent : message;
     
     // If there are attachments, they go first in the system prompt to give them priority
@@ -513,34 +490,47 @@ serve(async (req) => {
       ? systemPrompt + attachmentContext + ragContext
       : systemPrompt + ragContext;
     
-    const openAIMessages = [
+    const geminiMessages = [
       { role: 'system', content: systemContent },
       ...(messages || []).map((m: any) => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessageContent }
     ];
 
-    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}`);
+    console.log(`Sending to Gemini 2.5 Pro, modelType: ${modelType}`);
     console.log(`- Attachments: ${attachments?.length || 0} ${attachmentContext ? '(processed and prioritized)' : ''}`);
     console.log(`- RAG Context: ${ragContext ? 'Yes (as support)' : 'No'}`);
 
-    // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Call Lovable AI Gateway with Gemini 2.5 Pro
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: model,
-        messages: openAIMessages,
-        temperature: 0.7,
-        max_tokens: 2000,
+        messages: geminiMessages,
+        max_tokens: 8000,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', response.status, errorText);
+      console.error('Lovable AI API error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: 'Rate limits exceeded, please try again later.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: 'Payment required, please add funds to your Lovable AI workspace.' }), {
+          status: 402,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
       return new Response(JSON.stringify({ error: 'AI service error' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

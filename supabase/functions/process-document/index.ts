@@ -6,8 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-
 interface ProcessDocumentRequest {
   documentId: string;
 }
@@ -31,29 +29,6 @@ function splitIntoChunks(text: string, chunkSize: number = 800, overlap: number 
   }
 
   return chunks;
-}
-
-// Function to generate embeddings using OpenAI
-async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await fetch("https://api.openai.com/v1/embeddings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "text-embedding-ada-002",
-      input: text,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI API error: ${error}`);
-  }
-
-  const data = await response.json();
-  return data.data[0].embedding;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -101,8 +76,8 @@ const handler = async (req: Request): Promise<Response> => {
     const chunks = splitIntoChunks(textContent);
     console.log(`Created ${chunks.length} chunks`);
 
-    // Process chunks in batches to avoid memory issues
-    const batchSize = 5;
+    // Store chunks without embeddings (we'll use text-based search instead)
+    const batchSize = 10;
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, Math.min(i + batchSize, chunks.length));
       console.log(`Processing batch ${Math.floor(i/batchSize) + 1}, chunks ${i}-${i + batch.length - 1}`);
@@ -113,17 +88,13 @@ const handler = async (req: Request): Promise<Response> => {
           const chunkIndex = i + batchIndex;
           
           try {
-            // Generate embedding
-            const embedding = await generateEmbedding(chunkContent);
-
-            // Store chunk with embedding
+            // Store chunk without embedding (relying on Gemini's understanding)
             const { error: chunkError } = await supabaseClient
               .from("document_chunks")
               .insert({
                 document_id: documentId,
                 chunk_index: chunkIndex,
                 content: chunkContent,
-                embedding: embedding,
               });
 
             if (chunkError) {
@@ -131,18 +102,13 @@ const handler = async (req: Request): Promise<Response> => {
               throw chunkError;
             }
             
-            console.log(`Chunk ${chunkIndex} processed successfully`);
+            console.log(`Chunk ${chunkIndex} stored successfully`);
           } catch (error) {
             console.error(`Failed to process chunk ${chunkIndex}:`, error);
             throw error;
           }
         })
       );
-
-      // Small delay between batches to prevent rate limiting
-      if (i + batchSize < chunks.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
     }
 
     console.log("Document processing completed successfully");
