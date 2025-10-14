@@ -456,10 +456,12 @@ serve(async (req) => {
                 
                 const base64Pdf = btoa(binaryString);
                 
+                // Use inline_data format for PDF (Gemini native format)
                 messageContent.push({
-                  type: "image_url",
-                  image_url: {
-                    url: `data:application/pdf;base64,${base64Pdf}`
+                  type: "inline_data",
+                  inline_data: {
+                    mime_type: "application/pdf",
+                    data: base64Pdf
                   }
                 });
                 
