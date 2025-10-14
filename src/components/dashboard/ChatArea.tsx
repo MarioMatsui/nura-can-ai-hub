@@ -51,7 +51,6 @@ export const ChatArea = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
   // Determine the default model based on active subscriptions
@@ -104,24 +103,6 @@ export const ChatArea = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isProcessing]);
-
-  // Auto-focus textarea on mount, conversation change, and after messages
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [currentConversation, messages.length]);
-
-  // Auto-focus after processing completes
-  useEffect(() => {
-    if (!isProcessing) {
-      const timer = setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isProcessing]);
 
   const hasAccess = (modelType: ModelType): boolean => {
     if (modelType === 'generic') return true;
@@ -477,7 +458,6 @@ export const ChatArea = ({
               <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
             <Textarea
-              ref={textareaRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
