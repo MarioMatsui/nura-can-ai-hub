@@ -108,11 +108,12 @@ const Pricing = () => {
   useEffect(() => {
     // Get current user ID and fetch subscription
     const fetchUserData = async () => {
-      console.log('🔍 Fetching user data...');
+      const timestamp = new Date().toISOString();
+      console.log(`[${timestamp}] PRICING: Fetching user data...`);
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      console.log('📱 Session:', session, 'Error:', sessionError);
+      console.log(`[${timestamp}] PRICING: Session:`, session?.user?.id, 'Error:', sessionError);
       const uid = session?.user?.id ?? null;
-      console.log('👤 User ID:', uid);
+      console.log(`[${timestamp}] PRICING: User ID:`, uid);
       setUserId(uid);
       
       if (uid) {
@@ -123,10 +124,11 @@ const Pricing = () => {
           .eq('status', 'active')
           .maybeSingle();
         
-        console.log('💳 Subscription data:', subscription, 'Error:', subError);
+        console.log(`[${timestamp}] PRICING: Subscription data:`, subscription, 'Error:', subError);
         setCurrentPlan(subscription?.plan_type ?? null);
+        console.log(`[${timestamp}] PRICING: Current plan set to:`, subscription?.plan_type ?? null);
       } else {
-        console.log('❌ No user ID, setting current plan to null');
+        console.log(`[${timestamp}] PRICING: No user ID, setting current plan to null`);
         setCurrentPlan(null);
       }
     };
@@ -134,9 +136,10 @@ const Pricing = () => {
     fetchUserData();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('🔄 Auth state changed:', _event);
+      const timestamp = new Date().toISOString();
+      console.log(`[${timestamp}] PRICING: Auth state changed:`, _event);
       const uid = session?.user?.id ?? null;
-      console.log('👤 User ID (auth change):', uid);
+      console.log(`[${timestamp}] PRICING: User ID (auth change):`, uid);
       setUserId(uid);
       
       if (uid) {
@@ -147,8 +150,9 @@ const Pricing = () => {
           .eq('status', 'active')
           .maybeSingle();
         
-        console.log('💳 Subscription (auth change):', userSubscription, 'Error:', subError);
+        console.log(`[${timestamp}] PRICING: Subscription (auth change):`, userSubscription, 'Error:', subError);
         setCurrentPlan(userSubscription?.plan_type ?? null);
+        console.log(`[${timestamp}] PRICING: Current plan set to:`, userSubscription?.plan_type ?? null);
       } else {
         setCurrentPlan(null);
       }
