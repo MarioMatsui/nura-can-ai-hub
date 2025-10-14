@@ -12,20 +12,5 @@ verify_jwt = false
 [functions.process-document]
 verify_jwt = true
 
-[functions.process-structured-document]
-verify_jwt = true
-
 [functions.parse-pdf]
-verify_jwt = true
-
-[functions.document-status]
-verify_jwt = true
-
-[functions.rag-ask]
-verify_jwt = true
-
-[functions.rag-advanced]
-verify_jwt = true
-
-[functions.analyze-image]
 verify_jwt = true

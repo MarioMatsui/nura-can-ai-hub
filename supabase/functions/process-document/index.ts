@@ -12,16 +12,20 @@ interface ProcessDocumentRequest {
   documentId: string;
 }
 
-// Function to split text into chunks (optimized for TPM)
-function splitIntoChunks(text: string, chunkSize: number = 2000, overlap: number = 200): string[] {
+// Function to split text into chunks
+function splitIntoChunks(text: string, chunkSize: number = 800, overlap: number = 150): string[] {
   const chunks: string[] = [];
   let start = 0;
 
-  while (start < text.length) {
+  // Limit total chunks to avoid memory issues
+  const maxChunks = 50;
+  let chunkCount = 0;
+
+  while (start < text.length && chunkCount < maxChunks) {
     const end = Math.min(start + chunkSize, text.length);
-    const chunk = text.slice(start, end);
-    chunks.push(chunk);
+    chunks.push(text.slice(start, end));
     start = end - overlap;
+    chunkCount++;
     
     if (start >= text.length) break;
   }
@@ -29,14 +33,7 @@ function splitIntoChunks(text: string, chunkSize: number = 2000, overlap: number
   return chunks;
 }
 
-// Generate hash for chunk
-function generateChunkHash(content: string, order: number): string {
-  const prefix = content.substring(0, 200);
-  const hashInput = `${prefix}:${content.length}:${order}`;
-  return btoa(hashInput).substring(0, 40);
-}
-
-// Function to generate embeddings using OpenAI (optimized model)
+// Function to generate embeddings using OpenAI
 async function generateEmbedding(text: string): Promise<number[]> {
   const response = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
@@ -45,7 +42,7 @@ async function generateEmbedding(text: string): Promise<number[]> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "text-embedding-3-small", // Cheaper and faster
+      model: "text-embedding-ada-002",
       input: text,
     }),
   });
@@ -57,58 +54,6 @@ async function generateEmbedding(text: string): Promise<number[]> {
 
   const data = await response.json();
   return data.data[0].embedding;
-}
-
-// Batch processing with TPM control
-async function processBatchWithBackoff(
-  batch: Array<{content: string, order: number}>,
-  documentId: string,
-  supabaseClient: any,
-  batchIndex: number
-): Promise<void> {
-  const MAX_RETRIES = 3;
-  let attempt = 0;
-  
-  while (attempt < MAX_RETRIES) {
-    try {
-      await Promise.all(
-        batch.map(async ({ content, order }) => {
-          const embedding = await generateEmbedding(content);
-          const hash = generateChunkHash(content, order);
-
-          const { error: chunkError } = await supabaseClient
-            .from("document_chunks")
-            .insert({
-              document_id: documentId,
-              chunk_order: order,
-              content: content,
-              embedding: embedding,
-              hash: hash,
-            });
-
-          if (chunkError) {
-            console.error(`Error storing chunk ${order}:`, chunkError);
-            throw chunkError;
-          }
-          
-          console.log(`Chunk ${order} processed successfully`);
-        })
-      );
-      
-      return; // Success, exit retry loop
-    } catch (error: any) {
-      attempt++;
-      if (error.message?.includes("429") || error.message?.includes("rate_limit")) {
-        const backoffTime = Math.pow(2, attempt) * 1000; // Exponential backoff
-        console.log(`Rate limit hit, backing off for ${backoffTime}ms (attempt ${attempt}/${MAX_RETRIES})`);
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
-      } else {
-        throw error; // Non-retryable error
-      }
-    }
-  }
-  
-  throw new Error(`Failed to process batch ${batchIndex} after ${MAX_RETRIES} attempts`);
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -152,55 +97,53 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Document found, content length:", textContent.length);
 
-    // Update status to processing
-    await supabaseClient
-      .from("knowledge_documents")
-      .update({ status: "processing", progress: 10 })
-      .eq("id", documentId);
-
-    // Split document into chunks (2000 tokens ~= 8000 chars)
+    // Split document into chunks
     const chunks = splitIntoChunks(textContent);
     console.log(`Created ${chunks.length} chunks`);
 
-    // Update progress after chunking
-    await supabaseClient
-      .from("knowledge_documents")
-      .update({ progress: 30 })
-      .eq("id", documentId);
-
-    // Process chunks in small batches with TPM control
-    // TPM = 30k, chunk ~2k tokens, safe concurrency = 3-4
-    const batchSize = 3;
-    const totalBatches = Math.ceil(chunks.length / batchSize);
-    
+    // Process chunks in batches to avoid memory issues
+    const batchSize = 5;
     for (let i = 0; i < chunks.length; i += batchSize) {
-      const batchNum = Math.floor(i / batchSize) + 1;
-      const batch = chunks.slice(i, Math.min(i + batchSize, chunks.length))
-        .map((content, idx) => ({ content, order: i + idx }));
+      const batch = chunks.slice(i, Math.min(i + batchSize, chunks.length));
+      console.log(`Processing batch ${Math.floor(i/batchSize) + 1}, chunks ${i}-${i + batch.length - 1}`);
       
-      console.log(`Processing batch ${batchNum}/${totalBatches}, chunks ${i}-${i + batch.length - 1}`);
-      
-      // Process batch with exponential backoff on rate limits
-      await processBatchWithBackoff(batch, documentId, supabaseClient, batchNum);
-      
-      // Update progress
-      const progress = Math.min(30 + Math.floor((batchNum / totalBatches) * 60), 90);
-      await supabaseClient
-        .from("knowledge_documents")
-        .update({ progress })
-        .eq("id", documentId);
-      
-      // Delay between batches to avoid rate limiting (1.5s)
+      // Process batch in parallel
+      await Promise.all(
+        batch.map(async (chunkContent, batchIndex) => {
+          const chunkIndex = i + batchIndex;
+          
+          try {
+            // Generate embedding
+            const embedding = await generateEmbedding(chunkContent);
+
+            // Store chunk with embedding
+            const { error: chunkError } = await supabaseClient
+              .from("document_chunks")
+              .insert({
+                document_id: documentId,
+                chunk_index: chunkIndex,
+                content: chunkContent,
+                embedding: embedding,
+              });
+
+            if (chunkError) {
+              console.error(`Error storing chunk ${chunkIndex}:`, chunkError);
+              throw chunkError;
+            }
+            
+            console.log(`Chunk ${chunkIndex} processed successfully`);
+          } catch (error) {
+            console.error(`Failed to process chunk ${chunkIndex}:`, error);
+            throw error;
+          }
+        })
+      );
+
+      // Small delay between batches to prevent rate limiting
       if (i + batchSize < chunks.length) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
-
-    // Mark as ready
-    await supabaseClient
-      .from("knowledge_documents")
-      .update({ status: "ready", progress: 100 })
-      .eq("id", documentId);
 
     console.log("Document processing completed successfully");
 
@@ -217,28 +160,6 @@ const handler = async (req: Request): Promise<Response> => {
     );
   } catch (error: any) {
     console.error("Error in process-document function:", error);
-    
-    // Update document status to error
-    try {
-      const { documentId } = await req.json();
-      if (documentId) {
-        const supabaseClient = createClient(
-          Deno.env.get("SUPABASE_URL") ?? "",
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-        );
-        await supabaseClient
-          .from("knowledge_documents")
-          .update({ 
-            status: "error", 
-            error_message: error.message,
-            progress: 0
-          })
-          .eq("id", documentId);
-      }
-    } catch (updateError) {
-      console.error("Failed to update error status:", updateError);
-    }
-    
     return new Response(
       JSON.stringify({ error: error.message }),
       {

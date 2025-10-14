@@ -7,7 +7,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
+// Function to generate embeddings using OpenAI
+async function generateQueryEmbedding(text: string): Promise<number[]> {
+  const response = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "text-embedding-ada-002",
+      input: text,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error("OpenAI Embedding API error:", await response.text());
+    throw new Error("Failed to generate embedding");
+  }
+
+  const data = await response.json();
+  return data.data[0].embedding;
+}
 
 // Map model types to knowledge base types
 function getKnowledgeType(modelType: string): string | null {
@@ -84,16 +107,11 @@ Em caso de pergunta claramente fora de escopo, responda com:
 1. Precisão Científica:
 Forneça respostas baseadas em evidências científicas e revisões sistemáticas. Sempre que possível, cite as fontes (ex: "De acordo com um estudo de 2022 publicado no Journal of Clinical Oncology…").
 
-2. Análise de Documentos:
-Quando o usuário enviar documentos (PDFs, COAs, relatórios), você DEVE analisá-los completamente.
-Você TEM ACESSO TOTAL ao conteúdo fornecido e PODE extrair todas as informações necessárias.
-NUNCA diga que "não pode acessar" ou "não consegue analisar" documentos enviados pelo usuário.
-
-3. Linguagem Técnica:
+2. Linguagem Técnica:
 Use terminologia médica, farmacológica e científica adequada para o público profissional.
 Inclua dados sobre farmacocinética, farmacodinâmica, interações medicamentosas, vias de administração, dosagens em estudos clínicos e potenciais efeitos adversos.
 
-4. Escopo Médico:
+3. Escopo Médico:
 Interprete perguntas sobre condições médicas e patologias no contexto da cannabis medicinal, mesmo que não mencionem explicitamente "cannabis". Forneça informações sobre:
 - Aplicações clínicas da cannabis medicinal.
 - Farmacologia e mecanismos de ação de fitocanabinoides.
@@ -102,7 +120,7 @@ Interprete perguntas sobre condições médicas e patologias no contexto da cann
 - Protocolos de pesquisa e ensaios clínicos.
 - Regulação de prescrição, importação e uso medicinal.
 
-5. Aviso de Segurança:
+4. Aviso de Segurança:
 Nunca ofereça aconselhamento direto a pacientes. Deixe claro que suas informações são apenas para fins de educação e suporte à decisão profissional.
 "Esta informação é para fins educacionais e de pesquisa, não substituindo o julgamento clínico profissional."
 
@@ -339,62 +357,69 @@ serve(async (req) => {
       });
     }
 
-    // RAG: Retrieve relevant context if available (text-based, no embeddings)
+    // RAG: Retrieve relevant context if available
     let ragContext = "";
     const knowledgeType = getKnowledgeType(modelType);
     
     if (knowledgeType) {
       try {
-        console.log(`Retrieving context for knowledge type: ${knowledgeType}`);
+        console.log(`Performing RAG search for knowledge type: ${knowledgeType}`);
         
-        // Simple document retrieval (no embeddings)
+        // Generate embedding for the user's question
+        const queryEmbedding = await generateQueryEmbedding(message);
+        
+        // For specialist model, search all knowledge bases
         if (knowledgeType === 'all') {
           const knowledgeTypes = ['medical', 'legal', 'veterinary'];
-          let allDocs: any[] = [];
+          let allChunks: any[] = [];
           
           for (const type of knowledgeTypes) {
-            const { data: docs, error: searchError } = await supabase
-              .from('knowledge_documents')
-              .select('title, content')
-              .eq('knowledge_type', type)
-              .eq('status', 'ready')
-              .limit(2);
+            const { data: chunks, error: searchError } = await supabase.rpc(
+              'search_similar_chunks',
+              {
+                query_embedding: queryEmbedding,
+                knowledge_type_filter: type,
+                match_count: 2
+              }
+            );
             
-            if (!searchError && docs && docs.length > 0) {
-              allDocs = allDocs.concat(docs);
+            if (!searchError && chunks && chunks.length > 0) {
+              allChunks = allChunks.concat(chunks);
             }
           }
           
-          if (allDocs.length > 0) {
-            console.log(`Found ${allDocs.length} documents across all knowledge bases`);
+          if (allChunks.length > 0) {
+            console.log(`Found ${allChunks.length} relevant chunks across all knowledge bases`);
             ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
-            allDocs.forEach((doc: any, index: number) => {
-              ragContext += `[Documento ${index + 1}: ${doc.title}]\n${doc.content.substring(0, 2000)}...\n\n`;
+            allChunks.forEach((chunk: any, index: number) => {
+              ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
             });
             ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
           }
         } else {
-          // Simple document search for specific knowledge type (no embeddings)
-          const { data: docs, error: searchError } = await supabase
-            .from('knowledge_documents')
-            .select('title, content')
-            .eq('knowledge_type', knowledgeType)
-            .eq('status', 'ready')
-            .limit(3);
+          // Search for similar chunks in the knowledge base for specific type
+          const { data: similarChunks, error: searchError } = await supabase.rpc(
+            'search_similar_chunks',
+            {
+              query_embedding: queryEmbedding,
+              knowledge_type_filter: knowledgeType,
+              match_count: 3
+            }
+          );
 
           if (searchError) {
             console.error('Error searching knowledge base:', searchError);
-          } else if (docs && docs.length > 0) {
-            console.log(`Found ${docs.length} relevant documents`);
+          } else if (similarChunks && similarChunks.length > 0) {
+            console.log(`Found ${similarChunks.length} relevant chunks`);
             
-            // Build context from retrieved documents
+            // Build context from retrieved chunks
             ragContext = "\n\n📚 Contexto da Base de Conhecimento:\n\n";
-            docs.forEach((doc: any, index: number) => {
-              ragContext += `[Documento ${index + 1}: ${doc.title}]\n${doc.content.substring(0, 2000)}...\n\n`;
+            similarChunks.forEach((chunk: any, index: number) => {
+              ragContext += `[Documento ${index + 1}: ${chunk.document_title}]\n${chunk.content}\n\n`;
             });
             ragContext += "---\n\nUse o contexto acima para fundamentar sua resposta, citando as fontes quando apropriado.\n\n";
           } else {
-            console.log('No relevant documents found in knowledge base');
+            console.log('No relevant chunks found in knowledge base');
           }
         }
       } catch (ragError) {
@@ -409,8 +434,6 @@ serve(async (req) => {
 
     // Process attachments (images and documents)
     let attachmentContext = "";
-    let hasImages = false;
-    let textContentLength = 0;
     const messageContent: any[] = [{ type: "text", text: message }];
 
     if (attachments && attachments.length > 0) {
@@ -419,7 +442,6 @@ serve(async (req) => {
       for (const attachment of attachments) {
         if (attachment.file_type.startsWith('image/')) {
           // For images, use GPT-4 Vision
-          hasImages = true;
           console.log(`Adding image to vision: ${attachment.file_name}`);
           
           // Get signed URL for the image
@@ -437,49 +459,24 @@ serve(async (req) => {
             });
           }
         } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
-          // For documents: Download and convert to base64 for Lovable AI (Gemini supports PDFs)
+          // For PDFs and text files, extract text content
           try {
             if (attachment.file_type === 'application/pdf') {
-              console.log(`📄 PDF attached: ${attachment.file_name} - Using Lovable AI (Gemini) for analysis`);
+              console.log(`Parsing PDF: ${attachment.file_name}`);
               
-              // Download the PDF file
-              const { data: fileData, error: downloadError } = await supabase.storage
-                .from('chat-attachments')
-                .download(attachment.file_path);
-              
-              if (downloadError || !fileData) {
-                console.error('❌ Error downloading PDF:', downloadError);
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro ao baixar)\n`;
-                continue;
+              const { data: pdfData, error: pdfError } = await supabase.functions.invoke('parse-pdf', {
+                body: { filePath: attachment.file_path }
+              });
+
+              if (!pdfError && pdfData?.text) {
+                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${pdfData.text}\n`;
+              } else {
+                console.error('Error parsing PDF:', pdfError);
+                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
               }
-              
-              // Convert to base64
-              const arrayBuffer = await fileData.arrayBuffer();
-              const bytes = new Uint8Array(arrayBuffer);
-              const base64 = btoa(String.fromCharCode(...bytes));
-              
-              console.log(`✅ PDF converted to base64: ${base64.length} characters`);
-              
-              // Add to message content for Gemini (it supports PDF documents)
-              messageContent.push({
-                type: "text",
-                text: `📄 Documento anexado: "${attachment.file_name}"\nPor favor, analise este documento e extraia todas as informações relevantes.`
-              });
-              
-              messageContent.push({
-                type: "file",
-                file: {
-                  data: base64,
-                  mime_type: "application/pdf",
-                  name: attachment.file_name
-                }
-              });
-              
-              hasImages = true; // Use Gemini for multimodal processing
-              console.log('✅ PDF added to message content for Gemini analysis');
             } else {
               // For text files, download and read directly
-              console.log(`📄 Text file attached: ${attachment.file_name}`);
+              console.log(`Reading text file: ${attachment.file_name}`);
               
               const { data: fileData, error: downloadError } = await supabase.storage
                 .from('chat-attachments')
@@ -487,16 +484,7 @@ serve(async (req) => {
               
               if (!downloadError && fileData) {
                 const text = await fileData.text();
-                textContentLength += text.length;
-                
-                const maxLength = 15000; // ~4k tokens
-                if (text.length > maxLength) {
-                  const truncatedText = text.substring(0, maxLength);
-                  attachmentContext += `\n\n📄 Documento "${attachment.file_name}" (truncado - ${(text.length / 1000).toFixed(1)}k caracteres no total):\n${truncatedText}\n`;
-                  attachmentContext += `\n💡 Mostrando primeiros ${(maxLength / 1000).toFixed(1)}k caracteres.\n`;
-                } else {
-                  attachmentContext += `\n\n📄 Documento "${attachment.file_name}":\n${text}\n`;
-                }
+                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${text}\n`;
               } else {
                 console.error('Error reading text file:', downloadError);
                 attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
@@ -510,31 +498,20 @@ serve(async (req) => {
       }
 
       if (attachmentContext) {
-        // Prepend clear directive - short and direct
-        attachmentContext = `═══════════════════════════════════════════════════
-📋 DOCUMENTO ANEXADO PELO USUÁRIO
-═══════════════════════════════════════════════════
-
-O conteúdo completo está abaixo. Analise e extraia todas as informações solicitadas.
-
-${attachmentContext}
-
-═══════════════════════════════════════════════════
-Cite valores exatos do documento acima em sua resposta.
-═══════════════════════════════════════════════════
-
-`;
+        attachmentContext = "\n\n⚠️ PRIORIDADE MÁXIMA - DOCUMENTOS ENVIADOS PELO USUÁRIO:\n" + 
+                          attachmentContext + 
+                          "\n---\n**IMPORTANTE**: Os documentos acima foram enviados AGORA pelo usuário e devem ser o FOCO PRINCIPAL da sua resposta. " +
+                          "Responda baseado PRIMEIRO no conteúdo destes documentos. Use o conhecimento do RAG apenas como complemento se necessário.\n";
       }
     }
 
-    // Build messages array for OpenAI - attachments have ABSOLUTE priority
+    // Build messages array for OpenAI - attachments have priority over RAG
     const userMessageContent = messageContent.length > 1 ? messageContent : message;
     
-    // CRITICAL: When there are attachments, the directive must come AFTER the base prompt
-    // This ensures the model sees the override instructions last (recency bias)
+    // If there are attachments, they go first in the system prompt to give them priority
     const systemContent = attachmentContext 
-      ? systemPrompt + "\n\n" + attachmentContext + (ragContext ? "\n\n" + ragContext : "")
-      : systemPrompt + (ragContext ? "\n\n" + ragContext : "");
+      ? systemPrompt + attachmentContext + ragContext
+      : systemPrompt + ragContext;
     
     const openAIMessages = [
       { role: 'system', content: systemContent },
@@ -542,47 +519,22 @@ Cite valores exatos do documento acima em sua resposta.
       { role: 'user', content: userMessageContent }
     ];
 
-    // Smart model selection based on content type
-    let selectedModel = model;
-    let useGemini = false;
-    
-    if (hasImages || attachmentContext) {
-      // Use Gemini 2.5 Pro for documents and multimodal (best for PDFs)
-      selectedModel = 'google/gemini-2.5-pro';
-      useGemini = true;
-      console.log('📄 Using Gemini 2.5 Pro for document/multimodal processing');
-    } else {
-      // Use GPT-4o-mini for simple text queries (fast and cheap)
-      selectedModel = 'gpt-4o-mini';
-      console.log(`💬 Using gpt-4o-mini for standard query`);
-    }
-
-    console.log(`Sending to ${useGemini ? 'Lovable AI (Gemini)' : 'OpenAI'} with model: ${selectedModel}, modelType: ${modelType}`);
+    console.log(`Sending to OpenAI with model: ${model}, modelType: ${modelType}`);
     console.log(`- Attachments: ${attachments?.length || 0} ${attachmentContext ? '(processed and prioritized)' : ''}`);
     console.log(`- RAG Context: ${ragContext ? 'Yes (as support)' : 'No'}`);
-    console.log(`- Total system content length: ${systemContent.length} chars`);
-    if (attachmentContext) {
-      console.log(`- Attachment context length: ${attachmentContext.length} chars`);
-    }
 
-    // Call AI API (Gemini for documents, OpenAI for text)
-    const apiUrl = useGemini 
-      ? 'https://ai.gateway.lovable.dev/v1/chat/completions'
-      : 'https://api.openai.com/v1/chat/completions';
-    
-    const apiKey = useGemini ? LOVABLE_API_KEY : OPENAI_API_KEY;
-    
-    const response = await fetch(apiUrl, {
+    // Call OpenAI API
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: selectedModel,
+        model: model,
         messages: openAIMessages,
         temperature: 0.7,
-        max_tokens: 8000, // Increased for complete document analysis
+        max_tokens: 2000,
       }),
     });
 

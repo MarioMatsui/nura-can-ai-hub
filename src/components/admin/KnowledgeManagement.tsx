@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Upload, FileText, Trash2 } from "lucide-react";
-import { DocumentProcessingProgress } from "./DocumentProcessingProgress";
 
 type KnowledgeType = "medical" | "legal" | "veterinary";
 
@@ -30,8 +29,6 @@ interface Document {
   file_name: string;
   knowledge_type: KnowledgeType;
   created_at: string;
-  status: string;
-  progress: number;
 }
 
 const KnowledgeManagement = () => {
@@ -113,24 +110,24 @@ const KnowledgeManagement = () => {
           content: extractedText.trim(),
           knowledge_type: knowledgeType,
           file_path: null,
-          status: "queued",
-          progress: 0,
         })
         .select()
         .single();
 
       if (insertError) throw insertError;
 
-      toast.success("Documento salvo! Iniciando processamento assíncrono...");
+      toast.success("Documento salvo! Processando embeddings...");
 
-      // Start async processing (non-blocking)
-      supabase.functions.invoke("process-document", {
+      const { error: processError } = await supabase.functions.invoke("process-document", {
         body: { documentId: document.id },
-      }).then(({ error }) => {
-        if (error) {
-          console.error("Error processing document:", error);
-        }
       });
+
+      if (processError) {
+        console.error("Error processing document:", processError);
+        toast.error("Documento salvo, mas houve erro ao processar embeddings.");
+      } else {
+        toast.success("Documento processado com sucesso!");
+      }
 
       setTitle("");
       setContent("");
@@ -272,36 +269,26 @@ const KnowledgeManagement = () => {
               {documents.map((doc) => (
                 <div
                   key={doc.id}
-                  className="flex flex-col gap-3 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                  className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                 >
-                  <div className="flex items-start gap-3">
-                    <FileText className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium truncate">{doc.title}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {getKnowledgeTypeLabel(doc.knowledge_type)} • {doc.file_name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(doc.created_at).toLocaleDateString("pt-BR")}
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(doc.id)}
-                      className="flex-shrink-0"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                  <FileText className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium truncate">{doc.title}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {getKnowledgeTypeLabel(doc.knowledge_type)} • {doc.file_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(doc.created_at).toLocaleDateString("pt-BR")}
+                    </p>
                   </div>
-                  
-                  {/* Show progress if not ready */}
-                  {doc.status !== "ready" && (
-                    <DocumentProcessingProgress 
-                      documentId={doc.id}
-                      onComplete={loadDocuments}
-                    />
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDelete(doc.id)}
+                    className="flex-shrink-0"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                 </div>
               ))}
             </div>
