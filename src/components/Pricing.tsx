@@ -322,7 +322,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                 </Button>
               </CardContent>
             </Card>
-          )))}
+          ))}
         </div>
 
         {/* Additional Info */}
