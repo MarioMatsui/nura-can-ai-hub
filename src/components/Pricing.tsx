@@ -88,7 +88,11 @@ const plans = {
 
 type PlanKey = 'free' | 'medical' | 'legal' | 'veterinary' | 'specialist';
 
-const Pricing = () => {
+interface PricingProps {
+  showFree?: boolean;
+}
+
+const Pricing = ({ showFree = true }: PricingProps) => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<PlanKey | null>(null);
@@ -259,8 +263,10 @@ const Pricing = () => {
         </div>
 
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto">
-          {Object.entries(plans).map(([key, plan]) => (
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${showFree ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto`}>
+          {Object.entries(plans)
+            .filter(([key]) => showFree || key !== 'free')
+            .map(([key, plan]) => (
             <Card
               key={key}
               className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
@@ -316,7 +322,7 @@ const Pricing = () => {
                 </Button>
               </CardContent>
             </Card>
-          ))}
+          )))}
         </div>
 
         {/* Additional Info */}
