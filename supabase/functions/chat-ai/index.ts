@@ -519,7 +519,7 @@ serve(async (req) => {
     console.log(`- Attachments: ${attachments?.length || 0} ${attachmentContext ? '(processed and prioritized)' : ''}`);
     console.log(`- RAG Context: ${ragContext ? 'Yes (as support)' : 'No'}`);
 
-    // Call Lovable AI Gateway with Gemini 2.5 Pro with streaming enabled
+    // Call Lovable AI Gateway with Gemini 2.5 Pro
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -530,7 +530,6 @@ serve(async (req) => {
         model: model,
         messages: geminiMessages,
         max_tokens: 8000,
-        stream: true,
       }),
     });
 
@@ -557,14 +556,12 @@ serve(async (req) => {
       });
     }
 
-    // Return the stream directly to the client
-    return new Response(response.body, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
+    const data = await response.json();
+    const aiResponse = data.choices[0].message.content;
+
+    return new Response(JSON.stringify({ response: aiResponse }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
