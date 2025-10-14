@@ -51,6 +51,45 @@ export const ChatArea = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // Determine the default model based on active subscriptions
+  const getDefaultModelFromSubscriptions = (): ModelType => {
+    const activeSubs = subscriptions.filter(sub => sub.status === 'active');
+    
+    // Priority: specialist > medical > legal > veterinary > free/generic
+    if (activeSubs.some(sub => sub.plan_type === 'specialist')) return 'specialist';
+    if (activeSubs.some(sub => sub.plan_type === 'medical')) return 'medical';
+    if (activeSubs.some(sub => sub.plan_type === 'legal')) return 'legal';
+    if (activeSubs.some(sub => sub.plan_type === 'veterinary')) return 'veterinary';
+    
+    return 'generic';
+  };
+
+  // Initialize model selection with priority logic
+  useEffect(() => {
+    // Priority 1: Model from current conversation
+    if (currentConversation?.model_type && currentConversation.model_type !== 'generic') {
+      setSelectedModel(currentConversation.model_type);
+      return;
+    }
+
+    // Priority 2: Last used model from localStorage
+    const lastUsedModel = localStorage.getItem('lastUsedModel') as ModelType | null;
+    if (lastUsedModel && lastUsedModel !== 'generic') {
+      setSelectedModel(lastUsedModel);
+      return;
+    }
+
+    // Priority 3: Model from active subscription (if not generic)
+    const defaultModel = getDefaultModelFromSubscriptions();
+    if (defaultModel !== 'generic') {
+      setSelectedModel(defaultModel);
+      return;
+    }
+
+    // Fallback: Use subscription model even if generic
+    setSelectedModel(defaultModel);
+  }, [currentConversation, subscriptions]);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -251,7 +290,13 @@ export const ChatArea = ({
               return (
                 <DropdownMenuItem
                   key={model.type}
-                  onClick={() => accessible && setSelectedModel(model.type)}
+                  onClick={() => {
+                    if (accessible) {
+                      setSelectedModel(model.type);
+                      // Save to localStorage as user preference
+                      localStorage.setItem('lastUsedModel', model.type);
+                    }
+                  }}
                   disabled={!accessible}
                   className={cn(
                     'flex items-center gap-3 cursor-pointer py-3 px-3',
