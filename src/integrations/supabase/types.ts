@@ -633,6 +633,10 @@ export type Database = {
         Args: { "": unknown[] }
         Returns: number
       }
+      validate_cpf: {
+        Args: { cpf_input: string }
+        Returns: boolean
+      }
       vector_avg: {
         Args: { "": number[] }
         Returns: string

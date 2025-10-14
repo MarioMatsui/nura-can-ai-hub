@@ -44,7 +44,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { documentId }: ProcessDocumentRequest = await req.json();
 
-    console.log("Processing document:", documentId);
+    console.log("Starting document processing");
 
     // Get document
     const { data: document, error: docError } = await supabaseClient

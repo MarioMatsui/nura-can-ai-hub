@@ -40,7 +40,40 @@ const signUpSchema = z.object({
       return age >= 18 && age <= 120;
     }, "Você deve ter pelo menos 18 anos"),
   cpf: z.string()
-    .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/, "CPF inválido (use formato 000.000.000-00 ou 00000000000)"),
+    .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/, "CPF inválido (use formato 000.000.000-00 ou 00000000000)")
+    .refine((cpf) => {
+      // Remove formatting
+      const cleanCpf = cpf.replace(/\D/g, '');
+      
+      // Check if has 11 digits
+      if (cleanCpf.length !== 11) return false;
+      
+      // Check for known invalid CPFs (all same digits)
+      if (/^(\d)\1{10}$/.test(cleanCpf)) return false;
+      
+      // Validate check digits
+      let sum = 0;
+      let remainder;
+      
+      // First check digit
+      for (let i = 1; i <= 9; i++) {
+        sum += parseInt(cleanCpf.substring(i - 1, i)) * (11 - i);
+      }
+      remainder = (sum * 10) % 11;
+      if (remainder === 10 || remainder === 11) remainder = 0;
+      if (remainder !== parseInt(cleanCpf.substring(9, 10))) return false;
+      
+      // Second check digit
+      sum = 0;
+      for (let i = 1; i <= 10; i++) {
+        sum += parseInt(cleanCpf.substring(i - 1, i)) * (12 - i);
+      }
+      remainder = (sum * 10) % 11;
+      if (remainder === 10 || remainder === 11) remainder = 0;
+      if (remainder !== parseInt(cleanCpf.substring(10, 11))) return false;
+      
+      return true;
+    }, "CPF inválido - verifique os dígitos"),
   crmCrv: z.string().optional(),
   password: z.string()
     .min(8, "Senha deve ter no mínimo 8 caracteres")
@@ -108,8 +141,7 @@ const SignUp = () => {
 
       // Add contact to Brevo
       try {
-        console.log("Enviando contato para Brevo:", data.email);
-        const { data: brevoData, error: brevoError } = await supabase.functions.invoke("add-brevo-contact", {
+        const { error: brevoError } = await supabase.functions.invoke("add-brevo-contact", {
           body: {
             email: data.email,
             fullName: data.fullName,
@@ -121,13 +153,12 @@ const SignUp = () => {
         });
 
         if (brevoError) {
-          console.error("Erro ao adicionar contato na Brevo:", brevoError);
-        } else {
-          console.log("Contato adicionado na Brevo com sucesso:", brevoData);
+          // Log error without sensitive data
+          console.error("Failed to sync contact to mailing list");
         }
       } catch (brevoError) {
-        console.error("Exceção ao adicionar contato na Brevo:", brevoError);
         // Don't block signup if Brevo fails
+        console.error("Mailing list sync failed");
       }
 
       toast.success("Cadastro realizado com sucesso! Você já pode fazer login.");

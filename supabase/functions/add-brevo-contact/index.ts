@@ -25,7 +25,7 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { email, fullName, phone, birthDate, cpf, crmCrv }: BrevoContactRequest = await req.json();
 
-    console.log("Adding contact to Brevo:", email);
+    console.log("Processing contact sync request");
 
     const brevoPayload: {
       email: string;
@@ -71,11 +71,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error("Brevo API error:", errorData);
+      console.error("API sync failed with status:", response.status);
       
       // If contact already exists (HTTP 400), consider it a success
       if (response.status === 400 && errorData.includes("already exist")) {
-        console.log("Contact already exists in Brevo, continuing...");
+        console.log("Contact already exists, sync skipped");
         return new Response(
           JSON.stringify({ success: true, message: "Contact already exists" }),
           {
@@ -85,20 +85,20 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
       
-      throw new Error(`Brevo API error: ${errorData}`);
+      throw new Error(`API sync error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log("Contact added to Brevo successfully:", data);
+    console.log("Contact sync completed successfully");
 
     return new Response(JSON.stringify({ success: true, data }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (error: any) {
-    console.error("Error in add-brevo-contact function:", error);
+    console.error("Contact sync operation failed");
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: "Sync failed" }),
       {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders },

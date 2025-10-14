@@ -276,8 +276,7 @@ serve(async (req) => {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      console.log(`Checking daily limit for user ${userId}`);
-      console.log(`Today: ${today.toISOString()}, Tomorrow: ${tomorrow.toISOString()}`);
+      console.log('Checking daily usage limit');
 
       // Count user messages across all conversations for today
       const { data: todayMessages, error: countError } = await supabase
@@ -289,16 +288,12 @@ serve(async (req) => {
         .lt('created_at', tomorrow.toISOString());
 
       if (countError) {
-        console.error('Error counting messages:', countError);
+        console.error('Error counting messages');
       } else {
-        console.log(`Found ${todayMessages?.length || 0} messages for user ${userId} today`);
-        
-        if (todayMessages && todayMessages.length > 0) {
-          console.log('Sample messages:', todayMessages.slice(0, 3));
-        }
+        console.log(`Daily message count: ${todayMessages?.length || 0}`);
         
         if (todayMessages && todayMessages.length >= 5) {
-          console.log(`User ${userId} has reached daily limit: ${todayMessages.length} messages`);
+          console.log('Daily limit reached');
           // Return 200 with error in JSON so frontend can access it
           return new Response(JSON.stringify({ 
             error: 'limite_diario',

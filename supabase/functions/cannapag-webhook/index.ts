@@ -45,7 +45,7 @@ serve(async (req) => {
     }
 
     const payload: CannapagWebhookPayload = await req.json();
-    console.log('Received webhook payload:', JSON.stringify(payload, null, 2));
+    console.log('Processing webhook event:', payload.event);
 
     // Only process payment confirmation events
     if (payload.event !== 'payment.confirmed' && payload.event !== 'subscription.activated') {
@@ -81,7 +81,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Processing subscription for user ${externalReference}, plan: ${planType}`);
+    console.log('Processing subscription activation');
 
     // Handle Specialist plan - deactivate individual plans
     if (planType === 'specialist') {
