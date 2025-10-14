@@ -108,38 +108,46 @@ const Pricing = () => {
   useEffect(() => {
     // Get current user ID and fetch subscription
     const fetchUserData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      console.log('🔍 Fetching user data...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('📱 Session:', session, 'Error:', sessionError);
       const uid = session?.user?.id ?? null;
+      console.log('👤 User ID:', uid);
       setUserId(uid);
       
       if (uid) {
-        const { data: subscription } = await supabase
+        const { data: subscription, error: subError } = await supabase
           .from('user_subscriptions')
-          .select('plan_type')
+          .select('plan_type, status')
           .eq('user_id', uid)
           .eq('status', 'active')
           .maybeSingle();
         
-        console.log('Current subscription:', subscription);
+        console.log('💳 Subscription data:', subscription, 'Error:', subError);
         setCurrentPlan(subscription?.plan_type ?? null);
+      } else {
+        console.log('❌ No user ID, setting current plan to null');
+        setCurrentPlan(null);
       }
     };
     
     fetchUserData();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('🔄 Auth state changed:', _event);
       const uid = session?.user?.id ?? null;
+      console.log('👤 User ID (auth change):', uid);
       setUserId(uid);
       
       if (uid) {
-        const { data: userSubscription } = await supabase
+        const { data: userSubscription, error: subError } = await supabase
           .from('user_subscriptions')
-          .select('plan_type')
+          .select('plan_type, status')
           .eq('user_id', uid)
           .eq('status', 'active')
           .maybeSingle();
         
-        console.log('Current subscription (auth change):', userSubscription);
+        console.log('💳 Subscription (auth change):', userSubscription, 'Error:', subError);
         setCurrentPlan(userSubscription?.plan_type ?? null);
       } else {
         setCurrentPlan(null);
