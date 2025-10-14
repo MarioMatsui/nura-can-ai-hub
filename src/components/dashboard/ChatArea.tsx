@@ -403,7 +403,7 @@ export const ChatArea = ({
         )}
       </ScrollArea>
 
-      <div className="p-3 border-t border-border">
+      <div className="pt-2 px-3 pb-3 border-t border-border">
         <div className="max-w-4xl mx-auto">
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
