@@ -124,7 +124,7 @@ export const ChatSidebar = ({
 
   return (
     <>
-      <Sidebar collapsible="icon" className="border-r border-border">
+      <Sidebar collapsible="icon" className="border-r border-border data-[state=collapsed]:w-[72px]">
         <SidebarHeader className="pt-[21px] px-3 pb-4">
           <div className="flex items-center justify-between mb-2">
             {state === "expanded" && (
@@ -244,23 +244,7 @@ export const ChatSidebar = ({
               )}
               </ScrollArea>
             </>
-          ) : (
-            <ScrollArea className="flex-1 p-2">
-              {conversations.map((conversation) => (
-                <button
-                  key={conversation.id}
-                  onClick={() => onSelectConversation(conversation)}
-                  className={cn(
-                    'w-full p-2 mb-1 rounded-lg transition-colors hover:bg-accent',
-                    currentConversation?.id === conversation.id && 'bg-accent'
-                  )}
-                  title={conversation.title}
-                >
-                  <div className="h-2 w-2 rounded-full bg-foreground/60 mx-auto" />
-                </button>
-              ))}
-            </ScrollArea>
-          )}
+          ) : null}
         </SidebarContent>
 
         {/* Footer com botão de logout */}
