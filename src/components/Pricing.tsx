@@ -32,8 +32,8 @@ const plans = {
       "Acesso a banco de dados médico",
       "Respostas baseadas em evidências científicas",
     ],
-    monthlyPrice: 49.9,
-    annualPrice: 478.8,
+    monthlyPrice: 69.9,
+    annualPrice: 718.8,
     monthlyLink: "https://gateway.cannapag.com/pagamento/e68ce176-b2b0-4013-817c-a02d29419176",
     annualLink: "https://gateway.cannapag.com/pagamento/0c4d0af3-b48d-4ed7-b59b-d8b76eb6e538",
     popular: false,
@@ -47,8 +47,8 @@ const plans = {
       "Acesso a banco de dados jurídico",
       "Informações sobre regulamentação",
     ],
-    monthlyPrice: 49.9,
-    annualPrice: 478.8,
+    monthlyPrice: 59.9,
+    annualPrice: 598.8,
     monthlyLink: "https://gateway.cannapag.com/pagamento/9dbfd8f1-3edf-46ed-a6d7-50de12176ed3",
     annualLink: "https://gateway.cannapag.com/pagamento/ed2d1e63-4fb8-4cfb-9cb7-b26710ce979b",
     popular: false,
@@ -62,8 +62,8 @@ const plans = {
       "Acesso a banco de dados veterinário",
       "Evidências científicas em medicina veterinária",
     ],
-    monthlyPrice: 39.9,
-    annualPrice: 358.8,
+    monthlyPrice: 49.9,
+    annualPrice: 478.8,
     monthlyLink: "https://gateway.cannapag.com/pagamento/8a33c660-b08f-44b2-84d1-c5f9c907d912",
     annualLink: "https://gateway.cannapag.com/pagamento/9b779179-68b7-4f03-9862-991a14c426f9",
     popular: false,
@@ -78,8 +78,8 @@ const plans = {
       "Máxima flexibilidade profissional",
       "Melhor custo-benefício",
     ],
-    monthlyPrice: 99.9,
-    annualPrice: 1078.8,
+    monthlyPrice: 119.9,
+    annualPrice: 1188,
     monthlyLink: "https://gateway.cannapag.com/pagamento/4e8284a1-3f3d-4ac1-b7fb-aa1102922539",
     annualLink: "https://gateway.cannapag.com/pagamento/9082ff5d-4283-441f-a395-2b045b746192",
     popular: true,
@@ -90,6 +90,19 @@ const Pricing = () => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Calculate average discount percentage
+  const calculateAverageDiscount = () => {
+    const paidPlans = Object.values(plans).filter(p => p.monthlyPrice > 0);
+    const totalDiscount = paidPlans.reduce((sum, plan) => {
+      const monthlyTotal = plan.monthlyPrice * 12;
+      const discount = ((monthlyTotal - plan.annualPrice) / monthlyTotal) * 100;
+      return sum + discount;
+    }, 0);
+    return Math.round(totalDiscount / paidPlans.length);
+  };
+
+  const discountPercentage = calculateAverageDiscount();
 
   useEffect(() => {
     // Get current user ID
@@ -195,7 +208,7 @@ const Pricing = () => {
             >
               Anual
               <span className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full" style={{ backgroundColor: 'rgba(149, 199, 0, 0.1)', color: '#95c700' }}>
-                -20%
+                -{discountPercentage}%
               </span>
             </span>
           </div>
