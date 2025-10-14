@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Lock, Menu, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { Send, Lock, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -264,19 +264,8 @@ export const ChatArea = ({
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
-      <div className="p-3 pb-[9px] border-b border-border flex flex-col justify-end min-h-[100px]">
-        <div className="flex items-center gap-3 mb-[5px]">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onOpenSidebar}
-            className="lg:hidden"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <h1 className="text-xl sm:text-2xl font-bold">Nura AI</h1>
-        </div>
-        
+      {/* Minimal header with just model dropdown */}
+      <div className="p-4 border-b border-border">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-full sm:w-64 justify-between gap-2 h-10">

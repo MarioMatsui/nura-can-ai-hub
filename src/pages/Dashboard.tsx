@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { ConversationSidebar } from '@/components/dashboard/ConversationSidebar';
+import { ChatSidebar } from '@/components/dashboard/ChatSidebar';
 import { ChatArea } from '@/components/dashboard/ChatArea';
-import { MobileSidebar } from '@/components/dashboard/MobileSidebar';
 import { useToast } from '@/hooks/use-toast';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export interface Conversation {
   id: string;
@@ -41,7 +42,7 @@ const Dashboard = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     checkAuth();
@@ -138,7 +139,6 @@ const Dashboard = () => {
   const handleSelectConversation = async (conversation: Conversation) => {
     setCurrentConversation(conversation);
     await fetchMessages(conversation.id);
-    setSidebarOpen(false); // Close mobile sidebar
   };
 
   const handleNewConversation = () => {
@@ -346,10 +346,9 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Desktop Sidebar */}
-      <div className="hidden lg:block">
-        <ConversationSidebar
+    <SidebarProvider defaultOpen={!isMobile}>
+      <div className="flex h-screen w-full overflow-hidden bg-background">
+        <ChatSidebar
           conversations={conversations}
           currentConversation={currentConversation}
           onSelectConversation={handleSelectConversation}
@@ -357,30 +356,18 @@ const Dashboard = () => {
           onRenameConversation={handleRenameConversation}
           onDeleteConversation={handleDeleteConversation}
         />
+        
+        <ChatArea
+          user={user}
+          profile={profile}
+          messages={messages}
+          subscriptions={subscriptions}
+          currentConversation={currentConversation}
+          onSendMessage={handleSendMessage}
+          onOpenSidebar={() => {}}
+        />
       </div>
-
-      {/* Mobile Sidebar */}
-      <MobileSidebar
-        conversations={conversations}
-        currentConversation={currentConversation}
-        onSelectConversation={handleSelectConversation}
-        onNewConversation={handleNewConversation}
-        onRenameConversation={handleRenameConversation}
-        onDeleteConversation={handleDeleteConversation}
-        open={sidebarOpen}
-        onOpenChange={setSidebarOpen}
-      />
-
-      <ChatArea
-        user={user}
-        profile={profile}
-        messages={messages}
-        subscriptions={subscriptions}
-        currentConversation={currentConversation}
-        onSendMessage={handleSendMessage}
-        onOpenSidebar={() => setSidebarOpen(true)}
-      />
-    </div>
+    </SidebarProvider>
   );
 };
 
