@@ -86,9 +86,12 @@ const plans = {
   },
 };
 
+type PlanKey = 'free' | 'medical' | 'legal' | 'veterinary' | 'specialist';
+
 const Pricing = () => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<PlanKey | null>(null);
   const navigate = useNavigate();
 
   // Calculate average discount percentage
@@ -105,13 +108,54 @@ const Pricing = () => {
   const discountPercentage = calculateAverageDiscount();
 
   useEffect(() => {
-    // Get current user ID
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserId(session?.user?.id ?? null);
-    });
+    const fetchUserData = async () => {
+      // Get current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id ?? null;
+      setUserId(currentUserId);
+
+      // If user is logged in, fetch their active subscription
+      if (currentUserId) {
+        const { data: subscription } = await supabase
+          .from('user_subscriptions')
+          .select('plan_type, status')
+          .eq('user_id', currentUserId)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (subscription?.plan_type) {
+          setCurrentPlan(subscription.plan_type as PlanKey);
+        } else {
+          setCurrentPlan('free');
+        }
+      } else {
+        setCurrentPlan(null);
+      }
+    };
+
+    fetchUserData();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
+      const currentUserId = session?.user?.id ?? null;
+      setUserId(currentUserId);
+      
+      if (currentUserId) {
+        supabase
+          .from('user_subscriptions')
+          .select('plan_type, status')
+          .eq('user_id', currentUserId)
+          .eq('status', 'active')
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data?.plan_type) {
+              setCurrentPlan(data.plan_type as PlanKey);
+            } else {
+              setCurrentPlan('free');
+            }
+          });
+      } else {
+        setCurrentPlan(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -254,15 +298,21 @@ const Pricing = () => {
 
                 <Button
                   onClick={() => handleSubscribe(plan)}
-                  disabled={plan.monthlyPrice === 0}
+                  disabled={plan.monthlyPrice === 0 || currentPlan === key}
                   className={`w-full font-semibold transition-smooth ${
-                    plan.popular
+                    currentPlan === key
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
+                      : plan.popular
                       ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
                       : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
                   }`}
                   size="lg"
                 >
-                  {plan.monthlyPrice === 0 ? "Começar Grátis" : "Assinar"}
+                  {currentPlan === key
+                    ? "Plano Atual"
+                    : plan.monthlyPrice === 0
+                    ? "Começar Grátis"
+                    : "Assinar"}
                 </Button>
               </CardContent>
             </Card>
