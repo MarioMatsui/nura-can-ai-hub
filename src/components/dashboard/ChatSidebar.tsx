@@ -146,7 +146,7 @@ export const ChatSidebar = ({
           {state === "expanded" && (
             <Button
               onClick={onNewConversation}
-              className="w-full h-10 bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
+              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
               size="sm"
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -157,7 +157,7 @@ export const ChatSidebar = ({
             <Button
               onClick={onNewConversation}
               size="icon"
-              className="w-10 h-10 bg-[#9EFF00] hover:bg-[#8EEF00] text-black"
+              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black"
               title="Nova Consulta"
             >
               <Plus className="h-4 w-4" />
@@ -244,7 +244,23 @@ export const ChatSidebar = ({
               )}
               </ScrollArea>
             </>
-          ) : null}
+          ) : (
+            <ScrollArea className="flex-1 p-2">
+              {conversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  onClick={() => onSelectConversation(conversation)}
+                  className={cn(
+                    'w-full p-2 mb-1 rounded-lg transition-colors hover:bg-accent',
+                    currentConversation?.id === conversation.id && 'bg-accent'
+                  )}
+                  title={conversation.title}
+                >
+                  <div className="h-2 w-2 rounded-full bg-foreground/60 mx-auto" />
+                </button>
+              ))}
+            </ScrollArea>
+          )}
         </SidebarContent>
 
         {/* Footer com botão de logout */}
