@@ -125,7 +125,7 @@ export const ChatSidebar = ({
   return (
     <>
       <Sidebar collapsible="icon" className="border-r border-border">
-        <SidebarHeader className="pt-4 px-3 pb-4">
+        <SidebarHeader className="pt-[19px] px-3 pb-4">
           <div className="flex items-center justify-between mb-2">
             <Button
               variant="ghost"
