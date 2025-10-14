@@ -325,12 +325,19 @@ const Dashboard = () => {
         throw new Error('No response body');
       }
 
+      console.log('Starting to read stream...');
+
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log('Stream completed');
+          break;
+        }
 
         // Decode chunk and add to buffer
-        buffer += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        buffer += chunk;
+        console.log('Received chunk, buffer length:', buffer.length);
         
         // Process complete lines
         const lines = buffer.split('\n');
@@ -343,13 +350,17 @@ const Dashboard = () => {
           
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
-            if (data === '[DONE]') continue;
+            if (data === '[DONE]') {
+              console.log('Received [DONE]');
+              continue;
+            }
 
             try {
               const parsed = JSON.parse(data);
               const content = parsed.choices?.[0]?.delta?.content;
               
               if (content) {
+                console.log('New content chunk:', content.substring(0, 50));
                 accumulatedContent += content;
                 
                 // Update the temporary message with accumulated content immediately
@@ -360,7 +371,7 @@ const Dashboard = () => {
                 ));
               }
             } catch (e) {
-              console.error('Failed to parse SSE data:', e);
+              console.error('Failed to parse SSE data:', e, 'Line:', line.substring(0, 100));
             }
           }
         }
