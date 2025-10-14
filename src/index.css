@@ -176,6 +176,23 @@ All colors MUST be HSL.
   h1, h2, h3, h4, h5, h6 {
     @apply font-bold tracking-tight;
   }
+
+  /* App-specific text colors for better visibility */
+  #app-root[data-theme="dark"] {
+    color: hsl(var(--foreground));
+  }
+
+  #app-root[data-theme="dark"] * {
+    border-color: hsl(var(--border));
+  }
+
+  #app-root[data-theme="light"] {
+    color: hsl(var(--foreground));
+  }
+
+  #app-root[data-theme="light"] * {
+    border-color: hsl(var(--border));
+  }
 }
 
 @layer utilities {
