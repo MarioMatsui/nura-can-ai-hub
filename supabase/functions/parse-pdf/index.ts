@@ -53,15 +53,24 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Text extracted, length:", cleanedText.length);
 
-    if (cleanedText.length < 100) {
+    // Limit text size to avoid token limits (max ~100k characters = ~25k tokens)
+    const maxLength = 100000;
+    let finalText = cleanedText;
+    if (cleanedText.length > maxLength) {
+      console.log(`Text too long (${cleanedText.length} chars), truncating to ${maxLength} chars`);
+      finalText = cleanedText.substring(0, maxLength) + "\n\n[...documento truncado devido ao tamanho...]";
+    }
+
+    if (finalText.length < 100) {
       throw new Error("Could not extract meaningful text from PDF. The file may be image-based or corrupted.");
     }
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        text: cleanedText,
-        length: cleanedText.length
+        text: finalText,
+        length: finalText.length,
+        truncated: cleanedText.length > maxLength
       }),
       {
         status: 200,

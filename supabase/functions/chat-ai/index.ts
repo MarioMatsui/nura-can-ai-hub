@@ -449,7 +449,8 @@ serve(async (req) => {
               });
 
               if (!pdfError && pdfData?.text) {
-                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}":\n${pdfData.text}\n`;
+                const truncationNote = pdfData.truncated ? " (primeiros 100.000 caracteres)" : "";
+                attachmentContext += `\n\n📄 Conteúdo do documento "${attachment.file_name}"${truncationNote}:\n${pdfData.text}\n`;
               } else {
                 console.error('Error parsing PDF:', pdfError);
                 attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
