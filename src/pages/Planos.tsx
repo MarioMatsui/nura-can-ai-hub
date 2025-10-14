@@ -8,7 +8,7 @@ const Planos = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="pt-20">
-        <Pricing showFreePlan={false} />
+        <Pricing />
         <FAQ />
       </main>
       <Footer />

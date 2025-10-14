@@ -86,11 +86,7 @@ const plans = {
   },
 };
 
-interface PricingProps {
-  showFreePlan?: boolean;
-}
-
-const Pricing = ({ showFreePlan = true }: PricingProps) => {
+const Pricing = () => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -219,10 +215,8 @@ const Pricing = ({ showFreePlan = true }: PricingProps) => {
         </div>
 
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto">
-          {Object.entries(plans)
-            .filter(([key]) => showFreePlan || key !== 'free')
-            .map(([key, plan]) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto">
+          {Object.entries(plans).map(([key, plan]) => (
             <Card
               key={key}
               className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
