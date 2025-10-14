@@ -49,6 +49,7 @@ export const ChatArea = ({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -91,11 +92,17 @@ export const ChatArea = ({
     setSelectedModel(defaultModel);
   }, [currentConversation, subscriptions]);
 
+  // Scroll to bottom function
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 100);
+  };
+
+  // Scroll when messages change or when processing state changes
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, isProcessing]);
 
   const hasAccess = (modelType: ModelType): boolean => {
     if (modelType === 'generic') return true;
@@ -206,6 +213,9 @@ export const ChatArea = ({
     const attachmentsToSend = [...attachments];
     setInputValue('');
     setAttachments([]);
+    
+    // Scroll to bottom after sending
+    scrollToBottom();
     
     try {
       await onSendMessage(messageToSend, selectedModel, attachmentsToSend);
@@ -398,6 +408,8 @@ export const ChatArea = ({
                 </div>
               </div>
             )}
+            {/* Invisible element to scroll to */}
+            <div ref={messagesEndRef} />
           </div>
         )}
       </ScrollArea>
