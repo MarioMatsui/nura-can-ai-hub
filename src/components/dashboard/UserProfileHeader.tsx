@@ -83,7 +83,7 @@ export const UserProfileHeader = ({
             </Button>
           </PopoverTrigger>
           <PopoverContent 
-            className="w-64 p-2 bg-popover/95 backdrop-blur-sm rounded-xl shadow-lg border"
+            className="w-64 p-2 rounded-xl shadow-lg"
             align="end"
             side="right"
             sideOffset={8}
@@ -179,7 +179,7 @@ export const UserProfileHeader = ({
           </button>
         </PopoverTrigger>
         <PopoverContent 
-          className="w-64 p-2 bg-popover/95 backdrop-blur-sm rounded-xl shadow-lg border"
+          className="w-64 p-2 rounded-xl shadow-lg"
           align="start"
           side="top"
           sideOffset={8}
