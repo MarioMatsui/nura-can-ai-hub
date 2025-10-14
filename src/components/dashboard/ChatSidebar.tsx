@@ -126,43 +126,32 @@ export const ChatSidebar = ({
     <>
       <Sidebar collapsible="icon" className="border-r border-border">
         <SidebarHeader className="pt-[21px] px-3 pb-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-col gap-2">
             {state === "expanded" && (
               <img 
                 src="/src/assets/logo.png" 
                 alt="Nura AI" 
-                className="h-8"
+                className="h-8 mb-1"
               />
             )}
             <Button
-              variant="ghost"
-              size="icon"
               onClick={toggleSidebar}
-              className="h-8 w-8"
+              size="icon"
+              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black h-10"
+              title={state === "collapsed" ? "Expandir" : "Recolher"}
             >
               <PanelLeft className="h-5 w-5" />
             </Button>
-          </div>
-          {state === "expanded" && (
-            <Button
-              onClick={onNewConversation}
-              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
-              size="sm"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Consulta
-            </Button>
-          )}
-          {state === "collapsed" && (
             <Button
               onClick={onNewConversation}
               size="icon"
-              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black"
+              className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black h-10"
               title="Nova Consulta"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-5 w-5" />
+              {state === "expanded" && <span className="ml-2">Nova Consulta</span>}
             </Button>
-          )}
+          </div>
         </SidebarHeader>
 
         <SidebarContent>
