@@ -315,11 +315,13 @@ const Dashboard = () => {
         throw new Error(errorData?.error || 'Failed to get AI response');
       }
 
-      // Process streaming response
+      // Process streaming response with throttled updates for smooth typing effect
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let accumulatedContent = '';
       let buffer = '';
+      let lastUpdateTime = Date.now();
+      const UPDATE_INTERVAL = 100; // Update UI every 100ms for smooth typing effect
 
       if (!reader) {
         throw new Error('No response body');
@@ -327,17 +329,27 @@ const Dashboard = () => {
 
       console.log('Starting to read stream...');
 
+      // Function to update message
+      const updateMessage = () => {
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempMessageId 
+            ? { ...msg, content: accumulatedContent }
+            : msg
+        ));
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
           console.log('Stream completed');
+          // Final update to ensure all content is shown
+          updateMessage();
           break;
         }
 
         // Decode chunk and add to buffer
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
-        console.log('Received chunk, buffer length:', buffer.length);
         
         // Process complete lines
         const lines = buffer.split('\n');
@@ -350,28 +362,26 @@ const Dashboard = () => {
           
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
-            if (data === '[DONE]') {
-              console.log('Received [DONE]');
-              continue;
-            }
+            if (data === '[DONE]') continue;
 
             try {
               const parsed = JSON.parse(data);
               const content = parsed.choices?.[0]?.delta?.content;
               
               if (content) {
-                console.log('New content chunk:', content.substring(0, 50));
                 accumulatedContent += content;
                 
-                // Update the temporary message with accumulated content immediately
-                setMessages(prev => prev.map(msg => 
-                  msg.id === tempMessageId 
-                    ? { ...msg, content: accumulatedContent }
-                    : msg
-                ));
+                // Update UI at throttled intervals for smooth typing effect
+                const now = Date.now();
+                if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+                  updateMessage();
+                  lastUpdateTime = now;
+                  // Small delay to ensure browser renders the update
+                  await new Promise(resolve => setTimeout(resolve, 0));
+                }
               }
             } catch (e) {
-              console.error('Failed to parse SSE data:', e, 'Line:', line.substring(0, 100));
+              console.error('Failed to parse SSE data:', e);
             }
           }
         }
