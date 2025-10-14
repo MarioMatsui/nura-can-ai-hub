@@ -12,10 +12,10 @@ const plans = {
     name: "Gratuito",
     description: "",
     features: [
-      "Acesso à IA genérica",
+      "Acesso à IA generalista",
       "Até 5 consultas por dia",
-      "Sem acesso a bancos de dados especializados",
-      "Respostas básicas",
+      "Não suporta documentos/anexos",
+      "Respostas mais diretas",
     ],
     monthlyPrice: 0,
     annualPrice: 0,
