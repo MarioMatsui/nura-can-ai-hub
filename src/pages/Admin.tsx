@@ -5,16 +5,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import UserManagement from "@/components/admin/UserManagement";
 import KnowledgeManagement from "@/components/admin/KnowledgeManagement";
-import { CancellationRequests } from "@/components/admin/CancellationRequests";
 
 const Admin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isLoading, setIsLoading] = useState(true);
   
-  const activeTab = location.pathname === "/admin/knowledge" ? "knowledge" 
-                   : location.pathname === "/admin/cancellations" ? "cancellations"
-                   : "users";
+  const activeTab = location.pathname === "/admin/knowledge" ? "knowledge" : "users";
 
   useEffect(() => {
     checkAdmin();
@@ -51,8 +48,6 @@ const Admin = () => {
   const handleTabChange = (value: string) => {
     if (value === "knowledge") {
       navigate("/admin/knowledge");
-    } else if (value === "cancellations") {
-      navigate("/admin/cancellations");
     } else {
       navigate("/admin");
     }
@@ -83,7 +78,6 @@ const Admin = () => {
           <TabsList className="mb-6">
             <TabsTrigger value="users">Gestão de Usuários</TabsTrigger>
             <TabsTrigger value="knowledge">Base de Conhecimento</TabsTrigger>
-            <TabsTrigger value="cancellations">Cancelamentos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">
@@ -92,10 +86,6 @@ const Admin = () => {
 
           <TabsContent value="knowledge">
             <KnowledgeManagement />
-          </TabsContent>
-
-          <TabsContent value="cancellations">
-            <CancellationRequests />
           </TabsContent>
         </Tabs>
       </div>

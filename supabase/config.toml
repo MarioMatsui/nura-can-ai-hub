@@ -11,9 +11,3 @@ verify_jwt = false
 
 [functions.process-document]
 verify_jwt = true
-
-[functions.send-cancellation-email]
-verify_jwt = false
-
-[functions.finalize-cancellations]
-verify_jwt = false
