@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { cn } from '@/lib/utils';
 
 interface MarkdownMessageProps {
@@ -12,6 +13,7 @@ export const MarkdownMessage = ({ content, className }: MarkdownMessageProps) =>
     <div className={cn('markdown-content', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
         components={{
         // Cabeçalhos
         h1: ({ children }) => (
