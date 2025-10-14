@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { LogOut, Loader2, CreditCard } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -190,12 +189,7 @@ export const SettingsModal = ({
           <DialogTitle className="text-2xl font-semibold">Configurações</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="account" className="w-full">
-          <TabsList className="grid w-full grid-cols-1">
-            <TabsTrigger value="account">Conta</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="account" className="space-y-6 pt-4">
+        <div className="space-y-6 pt-4">
             {/* Informações da conta */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Informações da conta</h3>
@@ -355,8 +349,7 @@ export const SettingsModal = ({
                 Sair da conta
               </Button>
             </div>
-          </TabsContent>
-        </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );
