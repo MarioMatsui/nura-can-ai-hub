@@ -215,8 +215,8 @@ export const ChatSidebar = ({
                           autoFocus
                         />
                       ) : (
-                        <div className="font-medium text-sm mb-0.5 line-clamp-2 pr-16 transition-colors">
-                          <span className="hover:text-foreground">{conversation.title}</span>
+                        <div className="font-medium text-sm mb-0.5 line-clamp-2 pr-16 group-hover:text-black dark:group-hover:text-white transition-colors">
+                          {conversation.title}
                         </div>
                       )}
                       <div className="text-xs text-muted-foreground flex items-center justify-between">
