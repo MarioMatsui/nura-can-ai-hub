@@ -262,7 +262,7 @@ export const CancellationRequests = () => {
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {request.effective_cancel_at
-                              ? format(new Date(request.effective_cancel_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                              ? format(new Date(request.effective_cancel_at), "dd/MM/yyyy", { locale: ptBR })
                               : "Selecionar data"}
                           </Button>
                         </PopoverTrigger>
