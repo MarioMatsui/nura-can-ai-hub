@@ -67,10 +67,10 @@ serve(async (req) => {
       );
     }
 
-    // Update cancellation request status - check both 'pending' and 'processed' statuses
+    // Delete cancellation request - check both 'pending' and 'processed' statuses
     const { error: cancelReqError } = await supabase
       .from("cancellation_requests")
-      .update({ status: "completed", processed_at: new Date().toISOString() })
+      .delete()
       .eq("subscription_id", subscription.id)
       .in("status", ["pending", "processed"]);
 
