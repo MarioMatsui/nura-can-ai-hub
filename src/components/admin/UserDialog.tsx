@@ -30,10 +30,11 @@ interface UserSubscription {
   id: string;
   user_id: string;
   plan_type: string;
-  status: "active" | "inactive" | "cancelled" | "expired" | "scheduled_cancellation";
+  status: "active" | "inactive" | "cancelled" | "expired" | "scheduled_cancellation" | "canceled" | "pending_cancellation";
   billing_period: string | null;
   started_at: string;
   expires_at: string | null;
+  cancel_at?: string | null;
 }
 
 interface PlanForm {
@@ -61,8 +62,21 @@ const UserDialog = ({ user, open, onOpenChange, onUpdate }: UserDialogProps) => 
 
   useEffect(() => {
     if (user?.subscriptions && user.subscriptions.length > 0) {
+      // Filter out canceled plans and plans with past cancellation dates
+      const activePlans = user.subscriptions.filter((sub) => {
+        // Exclude canceled or cancelled subscriptions
+        if (sub.status === 'canceled' || sub.status === 'cancelled') return false;
+        
+        // Exclude subscriptions with cancellation date in the past
+        if ((sub.status === 'pending_cancellation' || sub.status === 'scheduled_cancellation') && sub.cancel_at) {
+          return new Date(sub.cancel_at) > new Date();
+        }
+        
+        return true;
+      });
+
       setPlans(
-        user.subscriptions.map((sub) => ({
+        activePlans.map((sub) => ({
           id: sub.id,
           plan_type: sub.plan_type as PlanForm["plan_type"],
           status: sub.status as PlanForm["status"],
