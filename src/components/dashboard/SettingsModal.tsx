@@ -76,8 +76,12 @@ export const SettingsModal = ({
     return labels[planType] || 'Plano Gratuito';
   };
 
-  const activePlans = subscriptions?.filter(s => s.status === 'active') || [];
-  const hasSpecialist = activePlans.some(s => s.plan_type === 'specialist');
+  const activePlans = subscriptions?.filter(s => 
+    s.status === 'active' || s.status === 'scheduled_cancellation'
+  ) || [];
+  const hasSpecialist = activePlans.some(s => 
+    s.plan_type === 'specialist' && s.status === 'active'
+  );
 
   const handleUpdateName = async () => {
     if (!fullName.trim()) {
@@ -198,28 +202,33 @@ export const SettingsModal = ({
   const handleResumeSubscription = async () => {
     setLoadingRevert(true);
     try {
-      if (!currentSubscription) throw new Error('Assinatura não encontrada');
+      const response = await supabase.functions.invoke('revert-cancellation');
 
-      // Delete the cancellation request
-      const { error: deleteError } = await supabase
-        .from('cancellation_requests')
-        .delete()
-        .eq('subscription_id', currentSubscription.id)
-        .in('status', ['pending', 'processed']);
+      if (response.error) {
+        let errorMessage = 'Não foi possível retomar a assinatura';
+        
+        try {
+          if (response.error.context?.body) {
+            const errorBody = response.error.context.body;
+            if (typeof errorBody === 'string') {
+              const parsed = JSON.parse(errorBody);
+              errorMessage = parsed.error || errorMessage;
+            } else if (errorBody.error) {
+              errorMessage = errorBody.error;
+            }
+          } else if (response.error.message) {
+            errorMessage = response.error.message;
+          }
+        } catch (e) {
+          console.error('Error parsing error response:', e);
+        }
+        
+        throw new Error(errorMessage);
+      }
 
-      if (deleteError) throw deleteError;
-
-      // Update subscription to remove cancel_at
-      const { error: updateError } = await supabase
-        .from('user_subscriptions')
-        .update({
-          status: 'active',
-          cancel_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', currentSubscription.id);
-
-      if (updateError) throw updateError;
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
 
       toast({
         title: 'Assinatura retomada',
@@ -385,50 +394,28 @@ export const SettingsModal = ({
               ) : (
                 <div className="space-y-3">
                   {activePlans.map((sub) => {
-                    const isPending = sub.status === 'pending_cancellation';
+                    const isScheduledCancellation = sub.status === 'scheduled_cancellation';
                     return (
                       <div key={sub.id} className="p-4 rounded-lg bg-accent/50 border border-border">
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <p className="font-medium">{getPlanLabel(sub.plan_type)}</p>
-                              {isPending && (
+                              {isScheduledCancellation && (
                                 <Badge variant="secondary" className="bg-muted">
                                   Cancelamento agendado
                                 </Badge>
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground mt-1">
-                              {isPending && sub.cancel_at
+                              {isScheduledCancellation && sub.cancel_at
                                 ? `Ativo até ${new Date(sub.cancel_at).toLocaleDateString('pt-BR')}`
                                 : 'Plano ativo'}
                             </p>
                           </div>
                           
                           <div className="flex flex-col items-end gap-2">
-                            {!isPending ? (
-                              hasPendingCancellation && sub.id === currentSubscription?.id ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setShowResumeDialog(true);
-                                  }}
-                                  className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
-                                >
-                                  Retomar
-                                </Button>
-                              ) : (
-                                <button
-                                  onClick={() => {
-                                    setShowCancelDialog(true);
-                                  }}
-                                  className="text-sm text-destructive hover:underline"
-                                >
-                                  Cancelar
-                                </button>
-                              )
-                            ) : (
+                            {isScheduledCancellation ? (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -437,6 +424,15 @@ export const SettingsModal = ({
                               >
                                 Retomar
                               </Button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setShowCancelDialog(true);
+                                }}
+                                className="text-sm text-destructive hover:underline"
+                              >
+                                Cancelar
+                              </button>
                             )}
                           </div>
                         </div>

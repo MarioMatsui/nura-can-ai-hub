@@ -797,7 +797,12 @@ export type Database = {
         | "legal"
         | "veterinary"
         | "specialist"
-      subscription_status: "active" | "inactive" | "cancelled"
+      subscription_status:
+        | "active"
+        | "inactive"
+        | "cancelled"
+        | "scheduled_cancellation"
+        | "expired"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -942,7 +947,13 @@ export const Constants = {
         "veterinary",
         "specialist",
       ],
-      subscription_status: ["active", "inactive", "cancelled"],
+      subscription_status: [
+        "active",
+        "inactive",
+        "cancelled",
+        "scheduled_cancellation",
+        "expired",
+      ],
     },
   },
 } as const

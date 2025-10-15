@@ -76,6 +76,8 @@ serve(async (req) => {
         provider: "cannapag",
         provider_subscription_id: subscription.id,
         plan_code: subscription.plan_type,
+        plan_type_requested: subscription.plan_type,
+        cancellation_reason: "solicitacao_usuario",
         status: "pending",
         effective_cancel_at: effectiveCancelAt,
       })
@@ -84,10 +86,11 @@ serve(async (req) => {
 
     if (cancelError) throw cancelError;
 
-    // Update subscription cancel_at date (status remains active until effective cancellation)
+    // Update subscription cancel_at date and status
     const { error: updateError } = await supabase
       .from("user_subscriptions")
       .update({
+        status: "scheduled_cancellation",
         cancel_at: effectiveCancelAt,
         updated_at: new Date().toISOString(),
       })

@@ -29,12 +29,12 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
-    // Get pending cancellation subscription
+    // Get scheduled cancellation subscription
     const { data: subscriptions, error: subError } = await supabase
       .from("user_subscriptions")
       .select("*")
       .eq("user_id", user.id)
-      .eq("status", "pending_cancellation")
+      .eq("status", "scheduled_cancellation")
       .not("cancel_at", "is", null)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -58,10 +58,10 @@ serve(async (req) => {
       );
     }
 
-    // Update cancellation request to reverted
+    // Update cancellation request to completed
     const { error: cancelReqError } = await supabase
       .from("cancellation_requests")
-      .update({ status: "reverted", processed_at: new Date().toISOString() })
+      .update({ status: "completed", processed_at: new Date().toISOString() })
       .eq("subscription_id", subscription.id)
       .eq("status", "pending");
 
