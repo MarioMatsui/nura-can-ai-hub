@@ -55,7 +55,14 @@ export const ChatArea = ({
 
   // Determine the default model based on active subscriptions
   const getDefaultModelFromSubscriptions = (): ModelType => {
-    const activeSubs = subscriptions.filter(sub => sub.status === 'active');
+    // Filter subscriptions that are active OR scheduled for cancellation but still within valid period
+    const activeSubs = subscriptions.filter(sub => {
+      if (sub.status === 'active') return true;
+      if (sub.status === 'scheduled_cancellation' && sub.cancel_at) {
+        return new Date(sub.cancel_at) > new Date();
+      }
+      return false;
+    });
     
     // Priority: specialist > medical > legal > veterinary > free/generic
     if (activeSubs.some(sub => sub.plan_type === 'specialist')) return 'specialist';
@@ -107,14 +114,22 @@ export const ChatArea = ({
   const hasAccess = (modelType: ModelType): boolean => {
     if (modelType === 'generic') return true;
     
+    // Check for specialist plan (active or scheduled cancellation within valid period)
     const hasSpecialist = subscriptions.some(
-      sub => sub.plan_type === 'specialist' && sub.status === 'active'
+      sub => sub.plan_type === 'specialist' && (
+        sub.status === 'active' || 
+        (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date())
+      )
     );
     
     if (hasSpecialist) return true;
 
+    // Check for specific model type plan (active or scheduled cancellation within valid period)
     return subscriptions.some(
-      sub => sub.plan_type === modelType && sub.status === 'active'
+      sub => sub.plan_type === modelType && (
+        sub.status === 'active' ||
+        (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date())
+      )
     );
   };
 
@@ -257,9 +272,12 @@ export const ChatArea = ({
   const selectedModelData = models.find(m => m.type === selectedModel);
   const SelectedIcon = selectedModelData?.icon || Sparkles;
   
-  // Check if user has any active paid subscription
+  // Check if user has any active paid subscription (including scheduled cancellations within valid period)
   const hasActivePaidPlan = subscriptions.some(
-    sub => sub.plan_type !== 'free' && sub.status === 'active'
+    sub => sub.plan_type !== 'free' && (
+      sub.status === 'active' ||
+      (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date())
+    )
   );
 
   return (

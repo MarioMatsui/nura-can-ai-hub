@@ -53,7 +53,13 @@ export const UserProfileHeader = ({
     if (!subscriptions || subscriptions.length === 0) {
       return 'Plano Gratuito';
     }
-    const activePlan = subscriptions.find(s => s.status === 'active');
+    
+    // Find active plan or scheduled cancellation within valid period
+    const activePlan = subscriptions.find(s => 
+      s.status === 'active' || 
+      (s.status === 'scheduled_cancellation' && s.cancel_at && new Date(s.cancel_at) > new Date())
+    );
+    
     if (!activePlan) return 'Plano Gratuito';
     
     const labels: Record<string, string> = {
