@@ -107,10 +107,10 @@ export const ConversationSidebar = ({
               <div
                 key={conversation.id}
                 className="relative mb-1"
+                onMouseEnter={() => setHoveredId(conversation.id)}
+                onMouseLeave={() => setHoveredId(null)}
               >
                 <button
-                  onMouseEnter={() => setHoveredId(conversation.id)}
-                  onMouseLeave={() => setHoveredId(null)}
                   onClick={() => onSelectConversation(conversation)}
                   className={cn(
                     'w-full text-left p-2.5 rounded-lg transition-colors',
