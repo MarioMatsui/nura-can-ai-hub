@@ -168,17 +168,17 @@ export const ConversationSidebar = ({
                   >
                     <button
                       onClick={(e) => handleStartEdit(conversation, e)}
-                      className="p-2 rounded hover:bg-background/80 transition-colors"
+                      className="p-2 rounded transition-colors"
                       title="Renomear"
                     >
-                      <Pencil className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                      <Pencil className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
                     </button>
                     <button
                       onClick={(e) => handleDeleteClick(conversation.id, e)}
-                      className="p-2 rounded hover:bg-background/80 transition-colors"
+                      className="p-2 rounded transition-colors"
                       title="Deletar"
                     >
-                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive transition-colors" />
                     </button>
                   </div>
                 )}
