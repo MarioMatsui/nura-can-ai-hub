@@ -82,10 +82,17 @@ export type Database = {
       }
       cancellation_requests: {
         Row: {
+          cancellation_reason:
+            | Database["public"]["Enums"]["cancellation_reason"]
+            | null
           created_at: string
           effective_cancel_at: string
           id: string
+          notes: string | null
           plan_code: string
+          plan_type_requested:
+            | Database["public"]["Enums"]["subscription_plan"]
+            | null
           processed_at: string | null
           provider: string
           provider_subscription_id: string | null
@@ -95,10 +102,17 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          cancellation_reason?:
+            | Database["public"]["Enums"]["cancellation_reason"]
+            | null
           created_at?: string
           effective_cancel_at: string
           id?: string
+          notes?: string | null
           plan_code: string
+          plan_type_requested?:
+            | Database["public"]["Enums"]["subscription_plan"]
+            | null
           processed_at?: string | null
           provider: string
           provider_subscription_id?: string | null
@@ -108,10 +122,17 @@ export type Database = {
           user_id: string
         }
         Update: {
+          cancellation_reason?:
+            | Database["public"]["Enums"]["cancellation_reason"]
+            | null
           created_at?: string
           effective_cancel_at?: string
           id?: string
+          notes?: string | null
           plan_code?: string
+          plan_type_requested?:
+            | Database["public"]["Enums"]["subscription_plan"]
+            | null
           processed_at?: string | null
           provider?: string
           provider_subscription_id?: string | null
@@ -790,6 +811,10 @@ export type Database = {
         | "specialist"
       app_role: "admin" | "user"
       billing_period: "monthly" | "annual"
+      cancellation_reason:
+        | "solicitacao_usuario"
+        | "upgrade_para_especialista"
+        | "outros"
       knowledge_base_type: "medical" | "legal" | "veterinary"
       subscription_plan:
         | "free"
@@ -939,6 +964,11 @@ export const Constants = {
       ],
       app_role: ["admin", "user"],
       billing_period: ["monthly", "annual"],
+      cancellation_reason: [
+        "solicitacao_usuario",
+        "upgrade_para_especialista",
+        "outros",
+      ],
       knowledge_base_type: ["medical", "legal", "veterinary"],
       subscription_plan: [
         "free",
