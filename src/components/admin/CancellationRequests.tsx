@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle2, Calendar as CalendarIcon } from 'lucide-react';
+import { Loader2, CheckCircle2, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -14,13 +14,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
@@ -52,6 +54,8 @@ export const CancellationRequests = () => {
   const [editingDateId, setEditingDateId] = useState<string | null>(null);
   const [newDate, setNewDate] = useState<Date | undefined>();
   const [savingDate, setSavingDate] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const fetchRequests = async () => {
     try {
@@ -209,6 +213,56 @@ export const CancellationRequests = () => {
     }
   };
 
+  const handleDeleteRequest = async () => {
+    if (!deletingId) return;
+
+    try {
+      const request = requests.find(r => r.id === deletingId);
+      
+      // Delete the cancellation request
+      const { error } = await supabase
+        .from('cancellation_requests')
+        .delete()
+        .eq('id', deletingId);
+
+      if (error) throw error;
+
+      // If subscription exists, revert it back to active status
+      if (request?.subscription_id) {
+        await supabase
+          .from('user_subscriptions')
+          .update({
+            status: 'active',
+            cancel_at: null,
+          })
+          .eq('id', request.subscription_id);
+      }
+
+      // Delete related admin notifications
+      await supabase
+        .from('admin_notifications')
+        .delete()
+        .eq('type', 'subscription_cancellation_request')
+        .contains('payload', { cancellation_request_id: deletingId });
+
+      toast({
+        title: 'Sucesso',
+        description: 'Solicitação de cancelamento excluída',
+      });
+
+      fetchRequests();
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingId(null);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -310,22 +364,35 @@ export const CancellationRequests = () => {
                     </TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell>
-                      {request.status === 'pending' && (
+                      <div className="flex items-center gap-2">
+                        {request.status === 'pending' && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleMarkProcessed(request.id)}
+                            disabled={processingId === request.id}
+                          >
+                            {processingId === request.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                Marcar como processado
+                              </>
+                            )}
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          onClick={() => handleMarkProcessed(request.id)}
-                          disabled={processingId === request.id}
+                          variant="ghost"
+                          onClick={() => {
+                            setDeletingId(request.id);
+                            setDeleteDialogOpen(true);
+                          }}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
-                          {processingId === request.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-4 w-4 mr-2" />
-                              Marcar como processado
-                            </>
-                          )}
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -334,6 +401,29 @@ export const CancellationRequests = () => {
           </div>
         )}
       </CardContent>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta solicitação de cancelamento? 
+              Esta ação não pode ser desfeita e a assinatura será reativada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeletingId(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteRequest}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };
