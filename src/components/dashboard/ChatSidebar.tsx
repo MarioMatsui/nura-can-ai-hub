@@ -208,7 +208,7 @@ export const ChatSidebar = ({
                 conversations.map((conversation) => (
                   <div
                     key={conversation.id}
-                    className="relative mb-1"
+                    className="relative mb-1 group"
                     onMouseEnter={() => setHoveredId(conversation.id)}
                     onMouseLeave={() => setHoveredId(null)}
                   >
@@ -216,7 +216,7 @@ export const ChatSidebar = ({
                       onClick={() => onSelectConversation(conversation)}
                       className={cn(
                         'w-full text-left p-2.5 rounded-lg transition-colors',
-                        'hover:bg-accent active:bg-accent',
+                        'group-hover:bg-accent',
                         currentConversation?.id === conversation.id && 'bg-accent'
                       )}
                     >
