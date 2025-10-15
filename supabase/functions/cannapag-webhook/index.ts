@@ -180,7 +180,18 @@ serve(async (req) => {
     }
 
     const { plan_type, billing_cycle } = planMapping;
-    console.log('Processing subscription activation for user:', user.id, 'plan:', plan_type, 'billing:', billing_cycle);
+    
+    // Audit log
+    console.log('Processing subscription activation:', {
+      user_id: user.id,
+      payer_email: payerEmail,
+      reference,
+      event_id: eventId,
+      charge_id: payload.data.charge_id,
+      plan_type,
+      billing_cycle,
+      status: payload.data.status,
+    });
 
     // Record payment
     await supabase.from('payments').insert({
@@ -196,12 +207,12 @@ serve(async (req) => {
     });
 
     // Check for specialist plan to deactivate individual plans
-    if (plan_type === 'specialist') {
+    if (plan_type === 'especialista') {
       await supabase
         .from('user_subscriptions')
         .update({ status: 'inactive' })
         .eq('user_id', user.id)
-        .in('plan_type', ['medical', 'legal', 'veterinary']);
+        .in('plan_type', ['medico', 'juridico', 'veterinario']);
       
       console.log('Individual plans deactivated for specialist upgrade');
     } else {
@@ -210,15 +221,22 @@ serve(async (req) => {
         .from('user_subscriptions')
         .select('id')
         .eq('user_id', user.id)
-        .eq('plan_type', 'specialist')
+        .eq('plan_type', 'especialista')
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
 
       if (specialistSub) {
         console.log('User already has specialist plan, skipping individual plan activation');
+        
+        // Mark webhook as processed
+        await supabase
+          .from('webhook_events')
+          .update({ processed: true })
+          .eq('event_id', eventId);
+        
         return new Response(JSON.stringify({ 
           message: 'User already has specialist plan',
-          plan_type: 'specialist'
+          plan_type: 'especialista'
         }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -238,6 +256,23 @@ serve(async (req) => {
           status: 'review_needed',
         }).eq('provider_payment_id', eventId);
 
+        // Create admin notification
+        await supabase.from('admin_notifications').insert({
+          type: 'payment_review_needed',
+          payload: {
+            email: payerEmail,
+            user_id: user.id,
+            plan_type,
+            message: 'Usuário atingiu limite de 3 planos ativos',
+          },
+        });
+
+        // Mark webhook as processed
+        await supabase
+          .from('webhook_events')
+          .update({ processed: true })
+          .eq('event_id', eventId);
+
         return new Response(JSON.stringify({ 
           message: 'Maximum active plans limit reached',
           requires_manual_review: true
@@ -254,8 +289,10 @@ serve(async (req) => {
       .select('*')
       .eq('user_id', user.id)
       .eq('plan_type', plan_type)
-      .single();
+      .maybeSingle();
 
+    const now = new Date().toISOString();
+    
     if (existingSub) {
       // Update existing subscription
       await supabase
@@ -263,13 +300,13 @@ serve(async (req) => {
         .update({
           status: 'active',
           billing_period: billing_cycle,
-          started_at: new Date().toISOString(),
-          expires_at: null,
-          updated_at: new Date().toISOString(),
+          started_at: now,
+          expires_at: null, // Set to null or use current_period_end from payload if available
+          updated_at: now,
         })
         .eq('id', existingSub.id);
 
-      console.log('Subscription updated successfully');
+      console.log('Subscription updated successfully for user:', user.id);
     } else {
       // Create new subscription
       await supabase
@@ -279,10 +316,11 @@ serve(async (req) => {
           plan_type: plan_type,
           billing_period: billing_cycle,
           status: 'active',
-          started_at: new Date().toISOString(),
+          started_at: now,
+          expires_at: null, // Set to null or use current_period_end from payload if available
         });
 
-      console.log('Subscription created successfully');
+      console.log('Subscription created successfully for user:', user.id);
     }
 
     // Mark webhook event as processed
@@ -315,23 +353,36 @@ serve(async (req) => {
   }
 });
 
+// Normalize plan type names (PT/EN compatibility)
+function normalizePlanType(planType: string): string {
+  return planType
+    .toLowerCase()
+    .replace('veterinary', 'veterinario')
+    .replace('juridical', 'juridico')
+    .replace('legal', 'juridico')
+    .replace('medical', 'medico');
+}
+
 function mapReferenceToPlan(reference?: string): { plan_type: string; billing_cycle: string } | null {
   if (!reference) return null;
 
-  const planMapping: Record<string, { plan_type: string; billing_cycle: string }> = {
-    // Medical
-    'PLAN_MEDICO_MENSAL': { plan_type: 'medical', billing_cycle: 'monthly' },
-    'PLAN_MEDICO_ANUAL': { plan_type: 'medical', billing_cycle: 'annual' },
-    // Legal
-    'PLAN_JURIDICO_MENSAL': { plan_type: 'legal', billing_cycle: 'monthly' },
-    'PLAN_JURIDICO_ANUAL': { plan_type: 'legal', billing_cycle: 'annual' },
-    // Veterinary
-    'PLAN_VETERINARIO_MENSAL': { plan_type: 'veterinary', billing_cycle: 'monthly' },
-    'PLAN_VETERINARIO_ANUAL': { plan_type: 'veterinary', billing_cycle: 'annual' },
-    // Specialist
-    'PLAN_ESPECIALISTA_MENSAL': { plan_type: 'specialist', billing_cycle: 'monthly' },
-    'PLAN_ESPECIALISTA_ANUAL': { plan_type: 'specialist', billing_cycle: 'annual' },
+  const PLAN_MAP: Record<string, { plan_type: string; billing_cycle: string }> = {
+    'PLAN_MEDICO_MENSAL': { plan_type: 'medico', billing_cycle: 'mensal' },
+    'PLAN_JURIDICO_MENSAL': { plan_type: 'juridico', billing_cycle: 'mensal' },
+    'PLAN_VETERINARIO_MENSAL': { plan_type: 'veterinario', billing_cycle: 'mensal' },
+    'PLAN_ESPECIALISTA_MENSAL': { plan_type: 'especialista', billing_cycle: 'mensal' },
+    'PLAN_MEDICO_ANUAL': { plan_type: 'medico', billing_cycle: 'anual' },
+    'PLAN_JURIDICO_ANUAL': { plan_type: 'juridico', billing_cycle: 'anual' },
+    'PLAN_VETERINARIO_ANUAL': { plan_type: 'veterinario', billing_cycle: 'anual' },
+    'PLAN_ESPECIALISTA_ANUAL': { plan_type: 'especialista', billing_cycle: 'anual' },
   };
 
-  return planMapping[reference.toUpperCase()] || null;
+  const mapping = PLAN_MAP[reference.toUpperCase()];
+  if (!mapping) return null;
+
+  // Normalize plan_type if needed
+  return {
+    plan_type: normalizePlanType(mapping.plan_type),
+    billing_cycle: mapping.billing_cycle,
+  };
 }
