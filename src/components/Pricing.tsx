@@ -240,15 +240,9 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       return;
     }
 
-    // Check if user already has 3 active plans (excluding specialist)
-    if (planKey !== 'specialist' && activePlans.length >= 3) {
+    // Check if user already has 3 active plans
+    if (activePlans.length >= 3) {
       toast.error('Limite de 3 planos por usuário atingido');
-      return;
-    }
-
-    // Check if trying to add individual plan when specialist is active
-    if (planKey !== 'specialist' && hasSpecialist) {
-      toast.error('Não é possível adicionar planos individuais quando o plano Especialista está ativo');
       return;
     }
 
@@ -314,8 +308,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               const planKey = key as PlanKey;
               const isActive = activePlans.includes(planKey);
               const isScheduled = scheduledCancellations.has(planKey);
-              const isIncluded = hasSpecialist && ['medical', 'legal', 'veterinary'].includes(planKey);
-              const isDisabled = plan.monthlyPrice === 0 || isActive || isIncluded || (activePlans.length >= 3 && !hasSpecialist);
+              const isDisabled = plan.monthlyPrice === 0 || isActive || (activePlans.length >= 3);
               
               let buttonText = "Assinar";
               let tooltipText = "";
@@ -325,10 +318,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               } else if (isActive) {
                 buttonText = "Plano Ativo";
                 tooltipText = "Você já possui este plano";
-              } else if (isIncluded) {
-                buttonText = "Incluso";
-                tooltipText = "Incluso no seu plano Especialista";
-              } else if (activePlans.length >= 3 && !hasSpecialist && planKey !== 'specialist') {
+              } else if (activePlans.length >= 3 && planKey !== 'specialist') {
                 buttonText = "Assinar";
                 tooltipText = "Limite de 3 planos atingido";
               }
@@ -347,9 +337,9 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                     </div>
                   )}
 
-                  {(isActive || isIncluded || isScheduled) && (
+                  {(isActive || isScheduled) && (
                     <div className="absolute -top-3 right-4 px-3 py-1 bg-accent text-accent-foreground rounded-full text-xs font-semibold">
-                      {isActive ? "Ativo" : isIncluded ? "Incluso" : "Cancelamento agendado"}
+                      {isActive ? "Ativo" : "Cancelamento agendado"}
                     </div>
                   )}
 

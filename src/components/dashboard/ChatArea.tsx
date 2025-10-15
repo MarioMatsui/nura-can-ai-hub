@@ -114,16 +114,6 @@ export const ChatArea = ({
   const hasAccess = (modelType: ModelType): boolean => {
     if (modelType === 'generic') return true;
     
-    // Check for specialist plan (active or scheduled cancellation within valid period)
-    const hasSpecialist = subscriptions.some(
-      sub => sub.plan_type === 'specialist' && (
-        sub.status === 'active' || 
-        (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date())
-      )
-    );
-    
-    if (hasSpecialist) return true;
-
     // Check for specific model type plan (active or scheduled cancellation within valid period)
     return subscriptions.some(
       sub => sub.plan_type === modelType && (

@@ -398,14 +398,6 @@ export const SettingsModal = ({
             {/* Planos ativos */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Seus planos</h3>
-              
-              {hasSpecialist && (
-                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 mb-4">
-                  <p className="text-sm text-primary">
-                    Seu plano Especialista inclui acesso a Médico, Jurídico e Veterinário.
-                  </p>
-                </div>
-              )}
 
               {activePlans.length === 0 ? (
                 <div className="p-4 rounded-lg bg-muted/50 text-center">
@@ -460,7 +452,7 @@ export const SettingsModal = ({
               )}
 
               {/* Add plan button - only show if can add more plans */}
-              {!hasSpecialist && activePlans.length < 3 && (
+              {activePlans.length < 3 && (
                 <Button
                   variant="outline"
                   className="w-full"
