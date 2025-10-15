@@ -120,6 +120,9 @@ serve(async (req) => {
 
     // Extract payer email
     const payerEmail = payload.data.payer?.email;
+    console.log('Payload received:', JSON.stringify(payload, null, 2));
+    console.log('Payer email extracted:', payerEmail);
+    
     if (!payerEmail) {
       console.error('No payer email found in webhook payload');
       return new Response(JSON.stringify({ error: 'No payer email provided' }), {
@@ -129,8 +132,11 @@ serve(async (req) => {
     }
 
     // Find user by email (case-insensitive)
+    console.log('Looking for user with email:', payerEmail);
     const { data: authUser, error: userError } = await supabase.auth.admin.listUsers();
     const user = authUser?.users.find(u => u.email?.toLowerCase() === payerEmail.toLowerCase());
+    
+    console.log('User found:', user ? `ID: ${user.id}, Email: ${user.email}` : 'NOT FOUND');
     
     if (!user) {
       console.warn('User not found for email:', payerEmail);
@@ -168,11 +174,19 @@ serve(async (req) => {
     }
 
     // Map reference to plan_type and billing_cycle
-    const reference = payload.data.reference || payload.data.external_reference;
+    // Extract reference using regex to get only the final tag (PLAN_VETERINARIO_MENSAL, etc)
+    const rawRef = payload.data.reference || payload.data.external_reference || '';
+    console.log('Raw reference from payload:', rawRef);
+    
+    const match = rawRef.match(/PLAN_[A-Z_]+$/);
+    const reference = match ? match[0] : undefined;
+    console.log('Extracted reference via regex:', reference);
+    
     const planMapping = mapReferenceToPlan(reference);
+    console.log('Plan mapping result:', planMapping);
     
     if (!planMapping) {
-      console.error('Could not determine plan from reference:', reference);
+      console.error('Could not determine plan from reference:', reference, 'Raw ref:', rawRef);
       return new Response(JSON.stringify({ error: 'Invalid plan reference' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -194,7 +208,15 @@ serve(async (req) => {
     });
 
     // Record payment
-    await supabase.from('payments').insert({
+    console.log('Recording payment:', {
+      user_id: user.id,
+      provider: 'cannapag',
+      plan_type,
+      billing_cycle,
+      amount: payload.data.amount,
+    });
+    
+    const { data: paymentData, error: paymentError } = await supabase.from('payments').insert({
       user_id: user.id,
       provider: 'cannapag',
       provider_payment_id: eventId,
@@ -204,17 +226,30 @@ serve(async (req) => {
       status: 'paid',
       payer_email: payerEmail,
       payload_raw: payload,
-    });
+    }).select();
+    
+    if (paymentError) {
+      console.error('Error recording payment:', paymentError);
+    } else {
+      console.log('Payment recorded successfully:', paymentData);
+    }
 
     // Check for specialist plan to deactivate individual plans
     if (plan_type === 'especialista') {
-      await supabase
+      console.log('Deactivating individual plans for specialist upgrade');
+      
+      const { data: deactivatedPlans, error: deactivateError } = await supabase
         .from('user_subscriptions')
         .update({ status: 'inactive' })
         .eq('user_id', user.id)
-        .in('plan_type', ['medico', 'juridico', 'veterinario']);
+        .in('plan_type', ['medico', 'juridico', 'veterinario'])
+        .select();
       
-      console.log('Individual plans deactivated for specialist upgrade');
+      if (deactivateError) {
+        console.error('Error deactivating individual plans:', deactivateError);
+      } else {
+        console.log('Individual plans deactivated:', deactivatedPlans);
+      }
     } else {
       // Check if user already has specialist active
       const { data: specialistSub } = await supabase
@@ -295,7 +330,9 @@ serve(async (req) => {
     
     if (existingSub) {
       // Update existing subscription
-      await supabase
+      console.log('Updating existing subscription:', existingSub.id);
+      
+      const { data: updatedSub, error: updateError } = await supabase
         .from('user_subscriptions')
         .update({
           status: 'active',
@@ -304,12 +341,19 @@ serve(async (req) => {
           expires_at: null, // Set to null or use current_period_end from payload if available
           updated_at: now,
         })
-        .eq('id', existingSub.id);
+        .eq('id', existingSub.id)
+        .select();
 
-      console.log('Subscription updated successfully for user:', user.id);
+      if (updateError) {
+        console.error('Error updating subscription:', updateError);
+      } else {
+        console.log('Subscription updated successfully:', updatedSub);
+      }
     } else {
       // Create new subscription
-      await supabase
+      console.log('Creating new subscription for user:', user.id);
+      
+      const { data: newSub, error: insertError } = await supabase
         .from('user_subscriptions')
         .insert({
           user_id: user.id,
@@ -318,9 +362,14 @@ serve(async (req) => {
           status: 'active',
           started_at: now,
           expires_at: null, // Set to null or use current_period_end from payload if available
-        });
+        })
+        .select();
 
-      console.log('Subscription created successfully for user:', user.id);
+      if (insertError) {
+        console.error('Error creating subscription:', insertError);
+      } else {
+        console.log('Subscription created successfully:', newSub);
+      }
     }
 
     // Mark webhook event as processed
