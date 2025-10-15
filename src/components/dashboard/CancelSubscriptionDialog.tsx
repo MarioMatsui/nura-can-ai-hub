@@ -30,16 +30,37 @@ export const CancelSubscriptionDialog = ({
   const handleConfirm = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('request-cancellation');
+      const response = await supabase.functions.invoke('request-cancellation');
 
-      // Check for HTTP errors first
-      if (error) {
-        throw error;
+      // Check for HTTP errors
+      if (response.error) {
+        // Try to parse error from response
+        let errorMessage = 'Não foi possível processar sua solicitação';
+        
+        try {
+          // The error body might be in different places
+          if (response.error.context?.body) {
+            const errorBody = response.error.context.body;
+            if (typeof errorBody === 'string') {
+              const parsed = JSON.parse(errorBody);
+              errorMessage = parsed.error || errorMessage;
+            } else if (errorBody.error) {
+              errorMessage = errorBody.error;
+            }
+          } else if (response.error.message) {
+            errorMessage = response.error.message;
+          }
+        } catch (e) {
+          // If parsing fails, use the default message
+          console.error('Error parsing error response:', e);
+        }
+        
+        throw new Error(errorMessage);
       }
 
-      // Check for application errors in the response
-      if (data?.error) {
-        throw new Error(data.error);
+      // Check for application errors in the response data
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
       toast({
@@ -50,20 +71,9 @@ export const CancelSubscriptionDialog = ({
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
-      // Extract meaningful error message
-      let errorMessage = 'Não foi possível processar sua solicitação';
-      
-      // Try different ways to get the error message
-      if (error?.context?.body?.error) {
-        // Error from edge function response body
-        errorMessage = error.context.body.error;
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-
       toast({
         title: 'Erro',
-        description: errorMessage,
+        description: error.message || 'Não foi possível processar sua solicitação',
         variant: 'destructive',
       });
     } finally {
