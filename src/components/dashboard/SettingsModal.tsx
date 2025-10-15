@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { LogOut, Loader2, CreditCard } from 'lucide-react';
+import { LogOut, Loader2, CreditCard, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -446,6 +446,19 @@ export const SettingsModal = ({
                     )}
                   </Button>
                 )}
+
+                {/* Add plan button */}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    navigate('/planos');
+                    onOpenChange(false);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar plano
+                </Button>
               </div>
             </div>
 
