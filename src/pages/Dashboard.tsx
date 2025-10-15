@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { ChatSidebar } from '@/components/dashboard/ChatSidebar';
 import { ChatArea } from '@/components/dashboard/ChatArea';
+import { SearchModal } from '@/components/dashboard/SearchModal';
 import { useToast } from '@/hooks/use-toast';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -43,6 +44,7 @@ const Dashboard = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const isMobile = useIsMobile();
   const [appTheme, setAppTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme:/app');
@@ -65,6 +67,19 @@ const Dashboard = () => {
     setAppTheme(newTheme);
     localStorage.setItem('theme:/app', newTheme);
   };
+
+  // Atalho global Ctrl/⌘ + K para abrir busca
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchModalOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     checkAuth();
@@ -231,6 +246,28 @@ const Dashboard = () => {
     });
   };
 
+  const handleNavigateToChat = async (chatId: string, messageId?: string) => {
+    const conversation = conversations.find(c => c.id === chatId);
+    if (!conversation) return;
+
+    await handleSelectConversation(conversation);
+
+    // Scroll para a mensagem específica se fornecida
+    if (messageId) {
+      setTimeout(() => {
+        const messageElement = document.getElementById(`message-${messageId}`);
+        if (messageElement) {
+          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Adiciona destaque temporário
+          messageElement.classList.add('ring-2', 'ring-primary', 'rounded-lg');
+          setTimeout(() => {
+            messageElement.classList.remove('ring-2', 'ring-primary', 'rounded-lg');
+          }, 2000);
+        }
+      }, 100);
+    }
+  };
+
   const handleSendMessage = async (
     content: string, 
     modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist',
@@ -391,6 +428,7 @@ const Dashboard = () => {
           profile={profile}
           user={user}
           subscriptions={subscriptions}
+          onOpenSearch={() => setSearchModalOpen(true)}
         />
         
         <ChatArea
@@ -401,6 +439,15 @@ const Dashboard = () => {
           currentConversation={currentConversation}
           onSendMessage={handleSendMessage}
           onOpenSidebar={() => {}}
+        />
+
+        <SearchModal
+          open={searchModalOpen}
+          onOpenChange={setSearchModalOpen}
+          conversations={conversations}
+          currentConversationId={currentConversation?.id || null}
+          userId={user?.id || null}
+          onNavigateToChat={handleNavigateToChat}
         />
       </div>
     </SidebarProvider>

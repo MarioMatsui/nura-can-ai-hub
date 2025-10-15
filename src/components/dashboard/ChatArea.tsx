@@ -367,9 +367,10 @@ export const ChatArea = ({
           <div className="space-y-3 sm:space-y-4 max-w-4xl mx-auto">
             {messages.map((message) => (
               <div
+                id={`message-${message.id}`}
                 key={message.id}
                 className={cn(
-                  'flex',
+                  'flex transition-all',
                   message.role === 'user' ? 'justify-end' : 'justify-start'
                 )}
               >

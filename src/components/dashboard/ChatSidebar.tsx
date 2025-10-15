@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, PanelLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, PanelLeft, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Conversation } from '@/pages/Dashboard';
@@ -35,6 +35,7 @@ interface ChatSidebarProps {
   profile: any;
   user: any;
   subscriptions: any[];
+  onOpenSearch: () => void;
 }
 
 export const ChatSidebar = ({
@@ -49,6 +50,7 @@ export const ChatSidebar = ({
   profile,
   user,
   subscriptions,
+  onOpenSearch,
 }: ChatSidebarProps) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -145,6 +147,16 @@ export const ChatSidebar = ({
                 <Plus className="mr-2 h-4 w-4" />
                 Nova Consulta
               </Button>
+              <Button
+                onClick={onOpenSearch}
+                variant="ghost"
+                className="w-full"
+                size="sm"
+                aria-label="Buscar em chats"
+              >
+                <Search className="mr-2 h-4 w-4" />
+                Buscar em chats
+              </Button>
             </>
           ) : (
             <div className="flex flex-col gap-2">
@@ -164,6 +176,16 @@ export const ChatSidebar = ({
                 title="Nova Consulta"
               >
                 <Plus className="h-5 w-5" />
+              </Button>
+              <Button
+                onClick={onOpenSearch}
+                variant="ghost"
+                size="icon"
+                className="w-full h-10"
+                title="Buscar em chats"
+                aria-label="Buscar em chats"
+              >
+                <Search className="h-5 w-5" />
               </Button>
             </div>
           )}
