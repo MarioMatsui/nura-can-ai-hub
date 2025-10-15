@@ -10,11 +10,17 @@ interface CannapagWebhookPayload {
   event: string;
   data: {
     id: string;
+    charge_id?: string;
     status: string;
+    reference?: string;
     external_reference?: string;
-    plan_id?: string;
+    link_id?: string;
+    product_id?: string;
     amount: number;
-    payment_method?: string;
+    payer?: {
+      email: string;
+      name?: string;
+    };
   };
 }
 
@@ -81,68 +87,164 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Check for idempotency - prevent duplicate processing
-    const webhookId = payload.data.id;
-    if (webhookId) {
-      const { data: existingWebhook } = await supabase
-        .from('processed_webhooks')
+    const eventId = payload.data.charge_id || payload.data.id;
+    if (eventId) {
+      const { data: existingEvent } = await supabase
+        .from('webhook_events')
         .select('id')
-        .eq('webhook_id', webhookId)
+        .eq('event_id', eventId)
         .single();
 
-      if (existingWebhook) {
-        console.log('Webhook already processed:', webhookId);
+      if (existingEvent) {
+        console.log('Webhook already processed:', eventId);
         return new Response(JSON.stringify({ 
           message: 'Webhook already processed',
-          webhook_id: webhookId 
+          event_id: eventId 
         }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Record this webhook as processed
+      // Record this webhook event
       await supabase
-        .from('processed_webhooks')
+        .from('webhook_events')
         .insert({
-          webhook_id: webhookId,
+          event_id: eventId,
           event_type: payload.event,
+          provider: 'cannapag',
+          payload: payload,
+          processed: false,
         });
     }
 
-    const externalReference = payload.data.external_reference;
-    if (!externalReference) {
-      console.error('No external_reference found in webhook payload');
-      return new Response(JSON.stringify({ error: 'No external_reference provided' }), {
+    // Extract payer email
+    const payerEmail = payload.data.payer?.email;
+    if (!payerEmail) {
+      console.error('No payer email found in webhook payload');
+      return new Response(JSON.stringify({ error: 'No payer email provided' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Determine plan type based on payment link or amount
-    const planType = determinePlanType(payload.data);
+    // Find user by email (case-insensitive)
+    const { data: authUser, error: userError } = await supabase.auth.admin.listUsers();
+    const user = authUser?.users.find(u => u.email?.toLowerCase() === payerEmail.toLowerCase());
     
-    if (!planType) {
-      console.error('Could not determine plan type from webhook data');
-      return new Response(JSON.stringify({ error: 'Invalid plan type' }), {
+    if (!user) {
+      console.warn('User not found for email:', payerEmail);
+      
+      // Record payment for manual review
+      await supabase.from('payments').insert({
+        user_id: '00000000-0000-0000-0000-000000000000', // Placeholder
+        provider: 'cannapag',
+        provider_payment_id: eventId,
+        plan_type: 'medical', // Default
+        amount: payload.data.amount,
+        status: 'review_needed',
+        payer_email: payerEmail,
+        payload_raw: payload,
+      });
+
+      // Create admin notification
+      await supabase.from('admin_notifications').insert({
+        type: 'payment_review_needed',
+        payload: {
+          email: payerEmail,
+          amount: payload.data.amount,
+          reference: payload.data.reference,
+          message: 'Pagamento recebido mas usuário não encontrado no sistema',
+        },
+      });
+
+      return new Response(JSON.stringify({ 
+        message: 'Payment recorded for review',
+        requires_manual_review: true 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Map reference to plan_type and billing_cycle
+    const reference = payload.data.reference || payload.data.external_reference;
+    const planMapping = mapReferenceToPlan(reference);
+    
+    if (!planMapping) {
+      console.error('Could not determine plan from reference:', reference);
+      return new Response(JSON.stringify({ error: 'Invalid plan reference' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log('Processing subscription activation');
+    const { plan_type, billing_cycle } = planMapping;
+    console.log('Processing subscription activation for user:', user.id, 'plan:', plan_type, 'billing:', billing_cycle);
 
-    // Handle Specialist plan - deactivate individual plans
-    if (planType === 'specialist') {
-      const { error: deactivateError } = await supabase
+    // Record payment
+    await supabase.from('payments').insert({
+      user_id: user.id,
+      provider: 'cannapag',
+      provider_payment_id: eventId,
+      plan_type: plan_type,
+      billing_cycle: billing_cycle,
+      amount: payload.data.amount,
+      status: 'paid',
+      payer_email: payerEmail,
+      payload_raw: payload,
+    });
+
+    // Check for specialist plan to deactivate individual plans
+    if (plan_type === 'specialist') {
+      await supabase
         .from('user_subscriptions')
         .update({ status: 'inactive' })
-        .eq('user_id', externalReference)
+        .eq('user_id', user.id)
         .in('plan_type', ['medical', 'legal', 'veterinary']);
+      
+      console.log('Individual plans deactivated for specialist upgrade');
+    } else {
+      // Check if user already has specialist active
+      const { data: specialistSub } = await supabase
+        .from('user_subscriptions')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('plan_type', 'specialist')
+        .eq('status', 'active')
+        .single();
 
-      if (deactivateError) {
-        console.error('Error deactivating individual plans:', deactivateError);
-      } else {
-        console.log('Individual plans deactivated for specialist upgrade');
+      if (specialistSub) {
+        console.log('User already has specialist plan, skipping individual plan activation');
+        return new Response(JSON.stringify({ 
+          message: 'User already has specialist plan',
+          plan_type: 'specialist'
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Check active plans limit (max 3)
+      const { data: activePlans } = await supabase
+        .from('user_subscriptions')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+
+      if (activePlans && activePlans.length >= 3) {
+        console.warn('User has reached maximum of 3 active plans');
+        await supabase.from('payments').update({
+          status: 'review_needed',
+        }).eq('provider_payment_id', eventId);
+
+        return new Response(JSON.stringify({ 
+          message: 'Maximum active plans limit reached',
+          requires_manual_review: true
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
     }
 
@@ -150,55 +252,50 @@ serve(async (req) => {
     const { data: existingSub } = await supabase
       .from('user_subscriptions')
       .select('*')
-      .eq('user_id', externalReference)
-      .eq('plan_type', planType)
+      .eq('user_id', user.id)
+      .eq('plan_type', plan_type)
       .single();
 
     if (existingSub) {
       // Update existing subscription
-      const { error: updateError } = await supabase
+      await supabase
         .from('user_subscriptions')
         .update({
           status: 'active',
+          billing_period: billing_cycle,
+          started_at: new Date().toISOString(),
+          expires_at: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingSub.id);
 
-      if (updateError) {
-        console.error('Error updating subscription:', updateError);
-        return new Response(JSON.stringify({ error: 'Failed to update subscription' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
       console.log('Subscription updated successfully');
     } else {
       // Create new subscription
-      const { error: insertError } = await supabase
+      await supabase
         .from('user_subscriptions')
         .insert({
-          user_id: externalReference,
-          plan_type: planType,
+          user_id: user.id,
+          plan_type: plan_type,
+          billing_period: billing_cycle,
           status: 'active',
+          started_at: new Date().toISOString(),
         });
-
-      if (insertError) {
-        console.error('Error creating subscription:', insertError);
-        return new Response(JSON.stringify({ error: 'Failed to create subscription' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
 
       console.log('Subscription created successfully');
     }
 
+    // Mark webhook event as processed
+    await supabase
+      .from('webhook_events')
+      .update({ processed: true })
+      .eq('event_id', eventId);
+
     return new Response(JSON.stringify({ 
       success: true,
       message: 'Subscription processed successfully',
-      user_id: externalReference,
-      plan_type: planType 
+      user_id: user.id,
+      plan_type: plan_type 
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -218,39 +315,23 @@ serve(async (req) => {
   }
 });
 
-function determinePlanType(data: CannapagWebhookPayload['data']): string | null {
-  // Map plan IDs or payment link IDs to plan types
-  const planMapping: Record<string, string> = {
+function mapReferenceToPlan(reference?: string): { plan_type: string; billing_cycle: string } | null {
+  if (!reference) return null;
+
+  const planMapping: Record<string, { plan_type: string; billing_cycle: string }> = {
     // Medical
-    'e68ce176-b2b0-4013-817c-a02d29419176': 'medical',
-    '0c4d0af3-b48d-4ed7-b59b-d8b76eb6e538': 'medical',
+    'PLAN_MEDICO_MENSAL': { plan_type: 'medical', billing_cycle: 'monthly' },
+    'PLAN_MEDICO_ANUAL': { plan_type: 'medical', billing_cycle: 'annual' },
     // Legal
-    '9dbfd8f1-3edf-46ed-a6d7-50de12176ed3': 'legal',
-    'ed2d1e63-4fb8-4cfb-9cb7-b26710ce979b': 'legal',
+    'PLAN_JURIDICO_MENSAL': { plan_type: 'legal', billing_cycle: 'monthly' },
+    'PLAN_JURIDICO_ANUAL': { plan_type: 'legal', billing_cycle: 'annual' },
     // Veterinary
-    '8a33c660-b08f-44b2-84d1-c5f9c907d912': 'veterinary',
-    '9b779179-68b7-4f03-9862-991a14c426f9': 'veterinary',
+    'PLAN_VETERINARIO_MENSAL': { plan_type: 'veterinary', billing_cycle: 'monthly' },
+    'PLAN_VETERINARIO_ANUAL': { plan_type: 'veterinary', billing_cycle: 'annual' },
     // Specialist
-    '4e8284a1-3f3d-4ac1-b7fb-aa1102922539': 'specialist',
-    '9082ff5d-4283-441f-a395-2b045b746192': 'specialist',
+    'PLAN_ESPECIALISTA_MENSAL': { plan_type: 'specialist', billing_cycle: 'monthly' },
+    'PLAN_ESPECIALISTA_ANUAL': { plan_type: 'specialist', billing_cycle: 'annual' },
   };
 
-  // Try to determine from plan_id if provided
-  if (data.plan_id && planMapping[data.plan_id]) {
-    return planMapping[data.plan_id];
-  }
-
-  // Try to determine from amount
-  // Medical/Legal/Veterinary: R$ 69.90 monthly or R$ 718.80 annual
-  // Specialist: R$ 159.90 monthly or R$ 1798.80 annual
-  if (data.amount === 159.90 || data.amount === 1798.80) {
-    return 'specialist';
-  } else if (data.amount === 69.90 || data.amount === 718.80) {
-    // Cannot distinguish between medical/legal/veterinary by amount alone
-    // Would need additional context from the payment link
-    console.warn('Cannot determine specific plan type from amount alone');
-    return null;
-  }
-
-  return null;
+  return planMapping[reference.toUpperCase()] || null;
 }

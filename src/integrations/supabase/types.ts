@@ -485,6 +485,51 @@ export type Database = {
           },
         ]
       }
+      payments: {
+        Row: {
+          amount: number
+          billing_cycle: Database["public"]["Enums"]["billing_period"] | null
+          created_at: string
+          id: string
+          payer_email: string | null
+          payload_raw: Json | null
+          plan_type: Database["public"]["Enums"]["subscription_plan"]
+          provider: string
+          provider_payment_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          billing_cycle?: Database["public"]["Enums"]["billing_period"] | null
+          created_at?: string
+          id?: string
+          payer_email?: string | null
+          payload_raw?: Json | null
+          plan_type: Database["public"]["Enums"]["subscription_plan"]
+          provider?: string
+          provider_payment_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          billing_cycle?: Database["public"]["Enums"]["billing_period"] | null
+          created_at?: string
+          id?: string
+          payer_email?: string | null
+          payload_raw?: Json | null
+          plan_type?: Database["public"]["Enums"]["subscription_plan"]
+          provider?: string
+          provider_payment_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       processed_webhooks: {
         Row: {
           created_at: string
@@ -646,6 +691,36 @@ export type Database = {
           status?: Database["public"]["Enums"]["subscription_status"]
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      webhook_events: {
+        Row: {
+          created_at: string
+          event_id: string
+          event_type: string
+          id: string
+          payload: Json
+          processed: boolean | null
+          provider: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          event_type: string
+          id?: string
+          payload: Json
+          processed?: boolean | null
+          provider?: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          processed?: boolean | null
+          provider?: string
         }
         Relationships: []
       }
