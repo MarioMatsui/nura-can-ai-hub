@@ -3,254 +3,431 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, http_cp_access_token',
 };
 
-interface CannapagWebhookPayload {
-  event: string;
-  data: {
-    id: string;
-    status: string;
-    external_reference?: string;
-    plan_id?: string;
-    amount: number;
-    payment_method?: string;
-  };
-}
+// Mapa de planos conforme documentação
+const PLAN_MAP: Record<string, { type: string; billing: string }> = {
+  PLAN_MEDICO_MENSAL:       { type: "medico",       billing: "mensal" },
+  PLAN_JURIDICO_MENSAL:     { type: "juridico",     billing: "mensal" },
+  PLAN_VETERINARIO_MENSAL:  { type: "veterinario",  billing: "mensal" },
+  PLAN_ESPECIALISTA_MENSAL: { type: "especialista", billing: "mensal" },
+  PLAN_MEDICO_ANUAL:        { type: "medico",       billing: "anual"  },
+  PLAN_JURIDICO_ANUAL:      { type: "juridico",     billing: "anual"  },
+  PLAN_VETERINARIO_ANUAL:   { type: "veterinario",  billing: "anual"  },
+  PLAN_ESPECIALISTA_ANUAL:  { type: "especialista", billing: "anual"  },
+};
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const requestId = crypto.randomUUID();
+  console.log(`[cannapag][${requestId}] Webhook received`);
+
   try {
     const WEBHOOK_TOKEN = Deno.env.get('CANNAPAG_WEBHOOK_TOKEN');
     if (!WEBHOOK_TOKEN) {
-      console.error('CANNAPAG_WEBHOOK_TOKEN not configured');
+      console.error(`[cannapag][${requestId}] CANNAPAG_WEBHOOK_TOKEN not configured`);
       return new Response(JSON.stringify({ error: 'Webhook token not configured' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Get request body as text for HMAC verification
+    // Parse body
     const rawBody = await req.text();
+    const body = JSON.parse(rawBody);
+    const data = body.data || {};
+
+    // Validar token do header HTTP_CP_ACCESS_TOKEN
+    const receivedToken = req.headers.get('http_cp_access_token') || req.headers.get('HTTP_CP_ACCESS_TOKEN');
+    const validToken = receivedToken === WEBHOOK_TOKEN;
     
-    // Verify webhook authenticity with token
-    const receivedToken = req.headers.get('x-webhook-token');
-    if (receivedToken !== WEBHOOK_TOKEN) {
-      console.error('Invalid webhook token');
-      return new Response(JSON.stringify({ error: 'Invalid webhook token' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!validToken) {
+      console.warn(`[cannapag][${requestId}] token=fail - Invalid token received`);
     }
 
-    // Validate timestamp to prevent replay attacks (5 minute window)
-    const timestamp = req.headers.get('x-webhook-timestamp');
-    if (timestamp) {
-      const requestTime = new Date(timestamp).getTime();
-      const currentTime = Date.now();
-      const fiveMinutes = 5 * 60 * 1000;
-      
-      if (Math.abs(currentTime - requestTime) > fiveMinutes) {
-        console.error('Webhook timestamp outside acceptable window');
-        return new Response(JSON.stringify({ error: 'Request timestamp too old or too far in future' }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
+    // Extrair campos do payload com fallbacks
+    const event = body.event || "";
+    const status = (data.status || body.status || "").toLowerCase();
+    const rawRef = data.reference || body.reference || data.external_reference || body.external_reference || "";
+    const chargeId = data.charge_id || body.charge_id || data.id || body.id || "";
+    const payerEmail = (data.payer?.email || body.payer?.email || "").trim().toLowerCase();
+    
+    // Extrair referência usando regex
+    const match = rawRef.match(/PLAN_[A-Z_]+$/);
+    const reference = match ? match[0] : null;
 
-    const payload: CannapagWebhookPayload = JSON.parse(rawBody);
-    console.log('Processing webhook event:', payload.event);
+    console.log(`[cannapag][${requestId}] token=${validToken ? 'ok' : 'fail'} charge=${chargeId} email=${payerEmail} ref=${reference} status=${status} rawRef=${rawRef}`);
 
-    // Only process payment confirmation events
-    if (payload.event !== 'payment.confirmed' && payload.event !== 'subscription.activated') {
-      console.log('Ignoring non-confirmation event:', payload.event);
-      return new Response(JSON.stringify({ message: 'Event ignored' }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Initialize Supabase client
+    // Initialize Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Check for idempotency - prevent duplicate processing
-    const webhookId = payload.data.id;
-    if (webhookId) {
-      const { data: existingWebhook } = await supabase
-        .from('processed_webhooks')
-        .select('id')
-        .eq('webhook_id', webhookId)
+    // Gravar evento no webhook_events (idempotência)
+    let eventRecord;
+    try {
+      const { data: existing } = await supabase
+        .from('webhook_events')
+        .select('id, processed')
+        .eq('charge_id', chargeId)
         .single();
 
-      if (existingWebhook) {
-        console.log('Webhook already processed:', webhookId);
+      if (existing) {
+        console.log(`[cannapag][${requestId}] idemp=skip - Webhook already processed`);
         return new Response(JSON.stringify({ 
           message: 'Webhook already processed',
-          webhook_id: webhookId 
+          request_id: requestId 
         }), {
           status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      // Record this webhook as processed
-      await supabase
-        .from('processed_webhooks')
+      const { data: newEvent, error: insertError } = await supabase
+        .from('webhook_events')
         .insert({
-          webhook_id: webhookId,
-          event_type: payload.event,
-        });
-    }
-
-    const externalReference = payload.data.external_reference;
-    if (!externalReference) {
-      console.error('No external_reference found in webhook payload');
-      return new Response(JSON.stringify({ error: 'No external_reference provided' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Determine plan type based on payment link or amount
-    const planType = determinePlanType(payload.data);
-    
-    if (!planType) {
-      console.error('Could not determine plan type from webhook data');
-      return new Response(JSON.stringify({ error: 'Invalid plan type' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('Processing subscription activation');
-
-    // Handle Specialist plan - deactivate individual plans
-    if (planType === 'specialist') {
-      const { error: deactivateError } = await supabase
-        .from('user_subscriptions')
-        .update({ status: 'inactive' })
-        .eq('user_id', externalReference)
-        .in('plan_type', ['medical', 'legal', 'veterinary']);
-
-      if (deactivateError) {
-        console.error('Error deactivating individual plans:', deactivateError);
-      } else {
-        console.log('Individual plans deactivated for specialist upgrade');
-      }
-    }
-
-    // Check if subscription already exists
-    const { data: existingSub } = await supabase
-      .from('user_subscriptions')
-      .select('*')
-      .eq('user_id', externalReference)
-      .eq('plan_type', planType)
-      .single();
-
-    if (existingSub) {
-      // Update existing subscription
-      const { error: updateError } = await supabase
-        .from('user_subscriptions')
-        .update({
-          status: 'active',
-          updated_at: new Date().toISOString(),
+          event_id: body.event_id || null,
+          event_type: event,
+          charge_id: chargeId,
+          status: status,
+          reference: reference,
+          external_reference: rawRef,
+          payer_email: payerEmail,
+          valid_token: validToken,
+          provider: 'cannapag',
+          payload: body,
+          processed: false,
+          request_id: requestId,
         })
-        .eq('id', existingSub.id);
+        .select()
+        .single();
 
-      if (updateError) {
-        console.error('Error updating subscription:', updateError);
-        return new Response(JSON.stringify({ error: 'Failed to update subscription' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      console.log('Subscription updated successfully');
-    } else {
-      // Create new subscription
-      const { error: insertError } = await supabase
-        .from('user_subscriptions')
-        .insert({
-          user_id: externalReference,
-          plan_type: planType,
-          status: 'active',
-        });
-
-      if (insertError) {
-        console.error('Error creating subscription:', insertError);
-        return new Response(JSON.stringify({ error: 'Failed to create subscription' }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      console.log('Subscription created successfully');
+      if (insertError) throw insertError;
+      eventRecord = newEvent;
+      console.log(`[cannapag][${requestId}] idemp=apply - New webhook event recorded`);
+    } catch (error) {
+      console.error(`[cannapag][${requestId}] Error recording webhook event:`, error);
+      // Ainda retorna 200 para não quebrar reenvios
+      return new Response(JSON.stringify({ 
+        message: 'Error processing webhook',
+        request_id: requestId 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    // Retorna 200 imediatamente e processa async
+    const processingPromise = processWebhookAsync(
+      supabase,
+      requestId,
+      eventRecord.id,
+      status,
+      reference,
+      payerEmail,
+      chargeId,
+      body,
+      validToken
+    );
+
+    // Não espera o processamento - processa em background
+    processingPromise.catch(err => 
+      console.error(`[cannapag][${requestId}] Background processing error:`, err)
+    );
 
     return new Response(JSON.stringify({ 
       success: true,
-      message: 'Subscription processed successfully',
-      user_id: externalReference,
-      plan_type: planType 
+      message: 'Webhook received and processing',
+      request_id: requestId
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    const requestId = crypto.randomUUID();
-    console.error(`[${requestId}] Error processing webhook:`, error);
-    // Return generic error to client, log details server-side only
+    console.error(`[cannapag][${requestId}] Error:`, error);
     return new Response(JSON.stringify({ 
-      error: 'Erro ao processar webhook. Por favor, tente novamente.',
+      error: 'Erro ao processar webhook',
       request_id: requestId
     }), {
-      status: 500,
+      status: 200, // Ainda retorna 200 para não quebrar reenvios
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
 
-function determinePlanType(data: CannapagWebhookPayload['data']): string | null {
-  // Map plan IDs or payment link IDs to plan types
-  const planMapping: Record<string, string> = {
-    // Medical
-    'e68ce176-b2b0-4013-817c-a02d29419176': 'medical',
-    '0c4d0af3-b48d-4ed7-b59b-d8b76eb6e538': 'medical',
-    // Legal
-    '9dbfd8f1-3edf-46ed-a6d7-50de12176ed3': 'legal',
-    'ed2d1e63-4fb8-4cfb-9cb7-b26710ce979b': 'legal',
-    // Veterinary
-    '8a33c660-b08f-44b2-84d1-c5f9c907d912': 'veterinary',
-    '9b779179-68b7-4f03-9862-991a14c426f9': 'veterinary',
-    // Specialist
-    '4e8284a1-3f3d-4ac1-b7fb-aa1102922539': 'specialist',
-    '9082ff5d-4283-441f-a395-2b045b746192': 'specialist',
-  };
+async function processWebhookAsync(
+  supabase: any,
+  requestId: string,
+  eventId: string,
+  status: string,
+  reference: string | null,
+  payerEmail: string,
+  chargeId: string,
+  payload: any,
+  validToken: boolean
+) {
+  try {
+    console.log(`[cannapag][${requestId}] Starting async processing`);
 
-  // Try to determine from plan_id if provided
-  if (data.plan_id && planMapping[data.plan_id]) {
-    return planMapping[data.plan_id];
+    // Só processa se status for confirmado e reference válido
+    const confirmedStatuses = ['pago', 'aprovado', 'paid', 'approved'];
+    if (!confirmedStatuses.includes(status)) {
+      console.log(`[cannapag][${requestId}] Status ${status} não é confirmado - ignorando`);
+      await supabase
+        .from('webhook_events')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', eventId);
+      return;
+    }
+
+    if (!reference || !PLAN_MAP[reference]) {
+      console.error(`[cannapag][${requestId}] Referência inválida: ${reference}`);
+      await supabase
+        .from('webhook_events')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', eventId);
+      return;
+    }
+
+    if (!validToken) {
+      console.warn(`[cannapag][${requestId}] Token inválido - não processando ativação`);
+      await supabase
+        .from('webhook_events')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', eventId);
+      return;
+    }
+
+    // Buscar usuário por email
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+    
+    if (authError) {
+      console.error(`[cannapag][${requestId}] Error listing users:`, authError);
+      throw authError;
+    }
+
+    const user = authUsers.users.find((u: any) => 
+      u.email?.toLowerCase() === payerEmail
+    );
+
+    if (!user) {
+      console.warn(`[cannapag][${requestId}] Usuário não encontrado para email: ${payerEmail}`);
+      
+      // Registrar pagamento como review_needed
+      await supabase
+        .from('payments')
+        .insert({
+          user_id: '00000000-0000-0000-0000-000000000000', // UUID nulo para indicar sem usuário
+          provider: 'cannapag',
+          charge_id: chargeId,
+          reference: reference,
+          plan_type: PLAN_MAP[reference].type,
+          billing_cycle: PLAN_MAP[reference].billing,
+          amount: payload.data?.amount || 0,
+          status: 'review_needed',
+          payer_email: payerEmail,
+          payload_raw: payload,
+          request_id: requestId,
+        });
+
+      await supabase
+        .from('webhook_events')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', eventId);
+      return;
+    }
+
+    console.log(`[cannapag][${requestId}] Usuário encontrado: ${user.id}`);
+
+    // Registrar/atualizar pagamento
+    const { error: paymentError } = await supabase
+      .from('payments')
+      .upsert({
+        user_id: user.id,
+        provider: 'cannapag',
+        charge_id: chargeId,
+        reference: reference,
+        plan_type: PLAN_MAP[reference].type,
+        billing_cycle: PLAN_MAP[reference].billing,
+        amount: payload.data?.amount || 0,
+        status: 'paid',
+        payer_email: payerEmail,
+        payload_raw: payload,
+        request_id: requestId,
+      }, {
+        onConflict: 'charge_id',
+      });
+
+    if (paymentError) {
+      console.error(`[cannapag][${requestId}] Error upserting payment:`, paymentError);
+    } else {
+      console.log(`[cannapag][${requestId}] Payment recorded`);
+    }
+
+    // Ativar plano
+    const planInfo = PLAN_MAP[reference];
+    const planType = planInfo.type;
+    const billingCycle = planInfo.billing;
+
+    console.log(`[cannapag][${requestId}] Activating plan: ${planType} (${billingCycle})`);
+
+    if (planType === 'especialista') {
+      // Desativar planos individuais
+      const { error: deactivateError } = await supabase
+        .from('user_subscriptions')
+        .update({ status: 'inactive' })
+        .eq('user_id', user.id)
+        .in('plan_type', ['medico', 'juridico', 'veterinario']);
+
+      if (deactivateError) {
+        console.error(`[cannapag][${requestId}] Error deactivating individual plans:`, deactivateError);
+      } else {
+        console.log(`[cannapag][${requestId}] Individual plans deactivated`);
+      }
+
+      // Ativar/atualizar plano especialista
+      const { data: existingSub } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('plan_type', 'especialista')
+        .single();
+
+      if (existingSub) {
+        await supabase
+          .from('user_subscriptions')
+          .update({
+            status: 'active',
+            billing_period: billingCycle,
+            started_at: new Date().toISOString(),
+            expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingSub.id);
+        console.log(`[cannapag][${requestId}] Specialist plan updated`);
+      } else {
+        await supabase
+          .from('user_subscriptions')
+          .insert({
+            user_id: user.id,
+            plan_type: 'especialista',
+            status: 'active',
+            billing_period: billingCycle,
+            started_at: new Date().toISOString(),
+            expires_at: null,
+          });
+        console.log(`[cannapag][${requestId}] Specialist plan created`);
+      }
+    } else {
+      // Plano individual
+      // Verificar se já tem plano especialista
+      const { data: specialistSub } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('plan_type', 'especialista')
+        .eq('status', 'active')
+        .single();
+
+      if (specialistSub) {
+        console.warn(`[cannapag][${requestId}] User has active specialist plan - skipping individual plan activation`);
+        await supabase
+          .from('webhook_events')
+          .update({ processed: true, processed_at: new Date().toISOString() })
+          .eq('id', eventId);
+        return;
+      }
+
+      // Verificar limite de 3 planos ativos
+      const { data: activePlans, error: countError } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .neq('plan_type', planType); // Não contar o próprio plano
+
+      if (countError) {
+        console.error(`[cannapag][${requestId}] Error counting active plans:`, countError);
+      } else if (activePlans && activePlans.length >= 3) {
+        console.warn(`[cannapag][${requestId}] User has 3 active plans - marking payment as review_needed`);
+        
+        await supabase
+          .from('payments')
+          .update({ status: 'review_needed' })
+          .eq('charge_id', chargeId);
+
+        await supabase
+          .from('admin_notifications')
+          .insert({
+            type: 'subscription_limit_exceeded',
+            payload: {
+              user_id: user.id,
+              payer_email: payerEmail,
+              plan_type: planType,
+              charge_id: chargeId,
+              reference: reference,
+            },
+            status: 'unread',
+          });
+
+        await supabase
+          .from('webhook_events')
+          .update({ processed: true, processed_at: new Date().toISOString() })
+          .eq('id', eventId);
+        return;
+      }
+
+      // Ativar/atualizar plano individual
+      const { data: existingSub } = await supabase
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('plan_type', planType)
+        .single();
+
+      if (existingSub) {
+        await supabase
+          .from('user_subscriptions')
+          .update({
+            status: 'active',
+            billing_period: billingCycle,
+            started_at: new Date().toISOString(),
+            expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingSub.id);
+        console.log(`[cannapag][${requestId}] Individual plan ${planType} updated`);
+      } else {
+        await supabase
+          .from('user_subscriptions')
+          .insert({
+            user_id: user.id,
+            plan_type: planType,
+            status: 'active',
+            billing_period: billingCycle,
+            started_at: new Date().toISOString(),
+            expires_at: null,
+          });
+        console.log(`[cannapag][${requestId}] Individual plan ${planType} created`);
+      }
+    }
+
+    // Marcar webhook como processado
+    await supabase
+      .from('webhook_events')
+      .update({ processed: true, processed_at: new Date().toISOString() })
+      .eq('id', eventId);
+
+    console.log(`[cannapag][${requestId}] Processing completed successfully`);
+
+  } catch (error) {
+    console.error(`[cannapag][${requestId}] Error in async processing:`, error);
+    // Não marcar como processado em caso de erro para tentar novamente
   }
-
-  // Try to determine from amount
-  // Medical/Legal/Veterinary: R$ 69.90 monthly or R$ 718.80 annual
-  // Specialist: R$ 159.90 monthly or R$ 1798.80 annual
-  if (data.amount === 159.90 || data.amount === 1798.80) {
-    return 'specialist';
-  } else if (data.amount === 69.90 || data.amount === 718.80) {
-    // Cannot distinguish between medical/legal/veterinary by amount alone
-    // Would need additional context from the payment link
-    console.warn('Cannot determine specific plan type from amount alone');
-    return null;
-  }
-
-  return null;
 }
