@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_notifications: {
+        Row: {
+          created_at: string
+          id: string
+          payload: Json
+          processed_at: string | null
+          read_at: string | null
+          status: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          read_at?: string | null
+          status?: string
+          type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          read_at?: string | null
+          status?: string
+          type?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -49,6 +79,56 @@ export type Database = {
           timestamp?: string
         }
         Relationships: []
+      }
+      cancellation_requests: {
+        Row: {
+          created_at: string
+          effective_cancel_at: string
+          id: string
+          plan_code: string
+          processed_at: string | null
+          provider: string
+          provider_subscription_id: string | null
+          reason: string | null
+          status: string
+          subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_cancel_at: string
+          id?: string
+          plan_code: string
+          processed_at?: string | null
+          provider: string
+          provider_subscription_id?: string | null
+          reason?: string | null
+          status?: string
+          subscription_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_cancel_at?: string
+          id?: string
+          plan_code?: string
+          processed_at?: string | null
+          provider?: string
+          provider_subscription_id?: string | null
+          reason?: string | null
+          status?: string
+          subscription_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cancellation_requests_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversations: {
         Row: {
@@ -488,6 +568,7 @@ export type Database = {
       user_subscriptions: {
         Row: {
           billing_period: Database["public"]["Enums"]["billing_period"] | null
+          cancel_at: string | null
           created_at: string
           expires_at: string | null
           id: string
@@ -499,6 +580,7 @@ export type Database = {
         }
         Insert: {
           billing_period?: Database["public"]["Enums"]["billing_period"] | null
+          cancel_at?: string | null
           created_at?: string
           expires_at?: string | null
           id?: string
@@ -510,6 +592,7 @@ export type Database = {
         }
         Update: {
           billing_period?: Database["public"]["Enums"]["billing_period"] | null
+          cancel_at?: string | null
           created_at?: string
           expires_at?: string | null
           id?: string
