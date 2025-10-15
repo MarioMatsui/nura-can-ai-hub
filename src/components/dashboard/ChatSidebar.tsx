@@ -186,14 +186,14 @@ export const ChatSidebar = ({
                 conversations.map((conversation) => (
                   <div
                     key={conversation.id}
-                    onMouseEnter={() => setHoveredId(conversation.id)}
-                    onMouseLeave={() => setHoveredId(null)}
                     className="relative mb-1"
                   >
                     <button
+                      onMouseEnter={() => setHoveredId(conversation.id)}
+                      onMouseLeave={() => setHoveredId(null)}
                       onClick={() => onSelectConversation(conversation)}
                       className={cn(
-                        'w-full text-left p-2.5 rounded-lg transition-colors group',
+                        'w-full text-left p-2.5 rounded-lg transition-colors',
                         'hover:bg-accent active:bg-accent',
                         currentConversation?.id === conversation.id && 'bg-accent'
                       )}
@@ -215,7 +215,10 @@ export const ChatSidebar = ({
                           autoFocus
                         />
                       ) : (
-                        <div className="font-medium text-sm mb-0.5 line-clamp-2 pr-16 transition-colors duration-200 dark:group-hover:text-black">
+                        <div className={cn(
+                          "font-medium text-sm mb-0.5 line-clamp-2 pr-16 transition-colors duration-200",
+                          hoveredId === conversation.id && "dark:text-black"
+                        )}>
                           {conversation.title}
                         </div>
                       )}
