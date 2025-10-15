@@ -62,6 +62,7 @@ export const CancellationRequests = () => {
       const { data, error } = await supabase
         .from('cancellation_requests')
         .select('*')
+        .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
       if (error) throw error;

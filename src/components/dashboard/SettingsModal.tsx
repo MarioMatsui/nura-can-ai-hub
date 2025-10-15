@@ -78,7 +78,7 @@ export const SettingsModal = ({
   };
 
   const activePlans = subscriptions?.filter(s => 
-    s.status === 'active' || s.status === 'scheduled_cancellation'
+    (s.status === 'active' || s.status === 'scheduled_cancellation') && s.status !== 'canceled'
   ) || [];
   const hasSpecialist = activePlans.some(s => 
     s.plan_type === 'specialist' && s.status === 'active'
