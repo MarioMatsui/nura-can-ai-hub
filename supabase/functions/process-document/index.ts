@@ -93,7 +93,7 @@ const handler = async (req: Request): Promise<Response> => {
               .from("document_chunks")
               .insert({
                 document_id: documentId,
-                chunk_index: chunkIndex,
+                chunk_order: chunkIndex,
                 content: chunkContent,
               });
 
