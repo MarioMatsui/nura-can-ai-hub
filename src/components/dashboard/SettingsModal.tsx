@@ -17,6 +17,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { CancelSubscriptionDialog } from './CancelSubscriptionDialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface SettingsModalProps {
   open: boolean;
@@ -53,6 +63,7 @@ export const SettingsModal = ({
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [loadingRevert, setLoadingRevert] = useState(false);
   const [hasPendingCancellation, setHasPendingCancellation] = useState(false);
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
 
   const getPlanLabel = () => {
     if (!subscriptions || subscriptions.length === 0) {
@@ -187,20 +198,35 @@ export const SettingsModal = ({
     navigate('/');
   };
 
-  const handleRevertCancellation = async () => {
+  const handleResumeSubscription = async () => {
     setLoadingRevert(true);
     try {
-      const { data, error } = await supabase.functions.invoke('revert-cancellation');
+      if (!currentSubscription) throw new Error('Assinatura não encontrada');
 
-      if (error) throw error;
+      // Delete the cancellation request
+      const { error: deleteError } = await supabase
+        .from('cancellation_requests')
+        .delete()
+        .eq('subscription_id', currentSubscription.id)
+        .in('status', ['pending', 'processed']);
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (deleteError) throw deleteError;
+
+      // Update subscription to remove cancel_at
+      const { error: updateError } = await supabase
+        .from('user_subscriptions')
+        .update({
+          status: 'active',
+          cancel_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentSubscription.id);
+
+      if (updateError) throw updateError;
 
       toast({
-        title: 'Cancelamento revertido',
-        description: 'Sua assinatura continua ativa',
+        title: 'Assinatura retomada',
+        description: 'Sua assinatura continua ativa sem cancelamento programado',
       });
 
       // Refresh the page to update subscription status
@@ -208,11 +234,12 @@ export const SettingsModal = ({
     } catch (error: any) {
       toast({
         title: 'Erro',
-        description: error.message || 'Não foi possível reverter o cancelamento',
+        description: error.message || 'Não foi possível retomar a assinatura',
         variant: 'destructive',
       });
     } finally {
       setLoadingRevert(false);
+      setShowResumeDialog(false);
     }
   };
 
@@ -379,12 +406,14 @@ export const SettingsModal = ({
                       </Button>
                       {!isPendingCancellation && (
                         hasPendingCancellation ? (
-                          <button
-                            disabled
-                            className="text-sm text-muted-foreground opacity-50 cursor-not-allowed"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowResumeDialog(true)}
+                            className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
                           >
-                            Cancelamento em andamento
-                          </button>
+                            Retomar assinatura
+                          </Button>
                         ) : (
                           <button
                             onClick={() => setShowCancelDialog(true)}
@@ -403,9 +432,9 @@ export const SettingsModal = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleRevertCancellation}
+                    onClick={() => setShowResumeDialog(true)}
                     disabled={loadingRevert}
-                    className="w-full"
+                    className="w-full border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
                   >
                     {loadingRevert ? (
                       <>
@@ -413,7 +442,7 @@ export const SettingsModal = ({
                         Processando...
                       </>
                     ) : (
-                      'Manter assinatura'
+                      'Retomar assinatura'
                     )}
                   </Button>
                 )}
@@ -477,6 +506,27 @@ export const SettingsModal = ({
           window.location.reload();
         }}
       />
+
+      <AlertDialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retomar assinatura?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar a solicitação de cancelamento? Sua assinatura continuará ativa normalmente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Não</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResumeSubscription}
+              disabled={loadingRevert}
+              className="bg-orange-500 hover:bg-orange-600"
+            >
+              {loadingRevert ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sim, retomar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };
