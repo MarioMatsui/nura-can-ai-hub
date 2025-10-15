@@ -124,16 +124,20 @@ const Dashboard = () => {
   const fetchSubscriptions = async (userId: string) => {
     const { data, error } = await supabase
       .from('user_subscriptions')
-      .select('plan_type, status')
-      .eq('user_id', userId)
-      .eq('status', 'active');
+      .select('id, plan_type, status, cancel_at, user_id')
+      .eq('user_id', userId);
 
     if (error) {
       console.error('Error fetching subscriptions:', error);
       return;
     }
 
-    setSubscriptions(data || []);
+    // Filter to include both active and pending_cancellation status
+    const filtered = (data || []).filter(sub => 
+      sub.status === 'active' || sub.status === 'pending_cancellation' as any
+    );
+
+    setSubscriptions(filtered);
   };
 
   const fetchMessages = async (conversationId: string) => {
