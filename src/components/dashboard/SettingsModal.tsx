@@ -393,17 +393,6 @@ export const SettingsModal = ({
                   </div>
                   {hasActiveSubscription && (
                     <div className="flex flex-col items-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          navigate('/planos');
-                          onOpenChange(false);
-                        }}
-                      >
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Gerenciar plano
-                      </Button>
                       {!isPendingCancellation && (
                         hasPendingCancellation ? (
                           <Button
