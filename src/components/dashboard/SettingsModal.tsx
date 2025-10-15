@@ -325,25 +325,24 @@ export const SettingsModal = ({
               <h3 className="text-lg font-medium">Plano atual</h3>
               <div className="space-y-3">
                 <div className="flex flex-col gap-3 p-4 rounded-lg bg-accent/50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{getPlanLabel()}</p>
-                        {isPendingCancellation && (
-                          <Badge variant="secondary" className="bg-muted">
-                            Cancelamento agendado
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {isPendingCancellation
-                          ? `Ativo até ${currentSubscription?.cancel_at ? new Date(currentSubscription.cancel_at).toLocaleDateString('pt-BR') : ''}`
-                          : subscriptions?.find(s => s.status === 'active')
-                          ? 'Plano ativo'
-                          : 'Sem assinatura ativa'}
-                      </p>
-                    </div>
-                    {hasActiveSubscription && (
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{getPlanLabel()}</p>
+                    {isPendingCancellation && (
+                      <Badge variant="secondary" className="bg-muted">
+                        Cancelamento agendado
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {isPendingCancellation
+                      ? `Ativo até ${currentSubscription?.cancel_at ? new Date(currentSubscription.cancel_at).toLocaleDateString('pt-BR') : ''}`
+                      : subscriptions?.find(s => s.status === 'active')
+                      ? 'Plano ativo'
+                      : 'Sem assinatura ativa'}
+                  </p>
+                  
+                  {hasActiveSubscription && (
+                    <div className="flex flex-col gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -351,21 +350,21 @@ export const SettingsModal = ({
                           navigate('/planos');
                           onOpenChange(false);
                         }}
+                        className="w-fit"
                       >
                         <CreditCard className="h-4 w-4 mr-2" />
                         Gerenciar plano
                       </Button>
-                    )}
-                  </div>
-
-                  {/* Cancel subscription link */}
-                  {hasActiveSubscription && !isPendingCancellation && (
-                    <button
-                      onClick={() => setShowCancelDialog(true)}
-                      className="text-sm text-destructive hover:underline self-start"
-                    >
-                      Cancelar assinatura
-                    </button>
+                      
+                      {!isPendingCancellation && (
+                        <button
+                          onClick={() => setShowCancelDialog(true)}
+                          className="text-sm text-destructive hover:underline self-start"
+                        >
+                          Cancelar assinatura
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
 
