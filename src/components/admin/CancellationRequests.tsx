@@ -140,6 +140,8 @@ export const CancellationRequests = () => {
         return <Badge variant="secondary">Pendente</Badge>;
       case 'processed':
         return <Badge variant="default">Processado</Badge>;
+      case 'finalized':
+        return <Badge className="bg-purple-500 text-white hover:bg-purple-600">Efetivado</Badge>;
       case 'reverted':
         return <Badge variant="outline">Revertido</Badge>;
       default:

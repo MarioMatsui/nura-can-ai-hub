@@ -238,7 +238,7 @@ export const SettingsModal = ({
         .from('cancellation_requests')
         .select('*')
         .eq('subscription_id', currentSubscription.id)
-        .eq('status', 'pending')
+        .in('status', ['pending', 'processed'])
         .maybeSingle();
       
       setHasPendingCancellation(!!data);
