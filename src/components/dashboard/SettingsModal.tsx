@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +52,7 @@ export const SettingsModal = ({
   const [loadingPassword, setLoadingPassword] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [loadingRevert, setLoadingRevert] = useState(false);
+  const [hasPendingCancellation, setHasPendingCancellation] = useState(false);
 
   const getPlanLabel = () => {
     if (!subscriptions || subscriptions.length === 0) {
@@ -225,6 +226,27 @@ export const SettingsModal = ({
   const isPendingCancellation = currentSubscription?.status === 'pending_cancellation';
   const hasActiveSubscription = currentSubscription && currentSubscription.status === 'active';
 
+  // Check for pending cancellation request
+  useEffect(() => {
+    const checkPendingCancellation = async () => {
+      if (!open || !currentSubscription) {
+        setHasPendingCancellation(false);
+        return;
+      }
+      
+      const { data } = await supabase
+        .from('cancellation_requests')
+        .select('*')
+        .eq('subscription_id', currentSubscription.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+      
+      setHasPendingCancellation(!!data);
+    };
+
+    checkPendingCancellation();
+  }, [open, currentSubscription?.id]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
@@ -356,12 +378,21 @@ export const SettingsModal = ({
                         Gerenciar plano
                       </Button>
                       {!isPendingCancellation && (
-                        <button
-                          onClick={() => setShowCancelDialog(true)}
-                          className="text-sm text-destructive hover:underline"
-                        >
-                          Cancelar assinatura
-                        </button>
+                        hasPendingCancellation ? (
+                          <button
+                            disabled
+                            className="text-sm text-muted-foreground opacity-50 cursor-not-allowed"
+                          >
+                            Cancelamento em andamento
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setShowCancelDialog(true)}
+                            className="text-sm text-destructive hover:underline"
+                          >
+                            Cancelar assinatura
+                          </button>
+                        )
                       )}
                     </div>
                   )}
