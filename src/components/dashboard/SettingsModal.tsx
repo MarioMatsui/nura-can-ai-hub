@@ -411,14 +411,7 @@ export const SettingsModal = ({
                       <div key={sub.id} className="p-4 rounded-lg bg-accent/50 border border-border">
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium">{getPlanLabel(sub.plan_type)}</p>
-                              {isScheduledCancellation && (
-                                <Badge variant="secondary" className="bg-muted">
-                                  Cancelamento agendado
-                                </Badge>
-                              )}
-                            </div>
+                            <p className="font-medium">{getPlanLabel(sub.plan_type)}</p>
                             <p className="text-sm text-muted-foreground mt-1">
                               {isScheduledCancellation && sub.cancel_at
                                 ? `Ativo até ${new Date(sub.cancel_at).toLocaleDateString('pt-BR')}`
