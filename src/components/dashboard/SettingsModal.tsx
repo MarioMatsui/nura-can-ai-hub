@@ -77,9 +77,17 @@ export const SettingsModal = ({
     return labels[planType] || 'Plano Gratuito';
   };
 
-  const activePlans = subscriptions?.filter(s => 
-    (s.status === 'active' || s.status === 'scheduled_cancellation') && s.status !== 'canceled'
-  ) || [];
+  const activePlans = subscriptions?.filter(s => {
+    // Exclude canceled subscriptions
+    if (s.status === 'canceled') return false;
+    
+    // Exclude subscriptions with cancellation date in the past
+    if ((s.status === 'pending_cancellation' || s.status === 'scheduled_cancellation') && s.cancel_at) {
+      return new Date(s.cancel_at) > new Date();
+    }
+    
+    return s.status === 'active' || s.status === 'pending_cancellation' || s.status === 'scheduled_cancellation';
+  }) || [];
   const hasSpecialist = activePlans.some(s => 
     s.plan_type === 'specialist' && s.status === 'active'
   );
