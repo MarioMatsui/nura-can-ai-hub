@@ -61,7 +61,7 @@ export const ChatSidebar = ({
 
   const getModelLabel = (modelType: string) => {
     const labels = {
-      generic: 'Genérico',
+      generic: 'Generalista',
       medical: 'Médico',
       legal: 'Jurídico',
       veterinary: 'Veterinário',

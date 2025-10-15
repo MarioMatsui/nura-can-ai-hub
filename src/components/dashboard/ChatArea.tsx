@@ -251,7 +251,7 @@ export const ChatArea = ({
     description: string;
     icon: typeof Sparkles;
   }[] = [
-    { type: 'generic', label: 'Genérico', description: 'IA básica', icon: Sparkles },
+    { type: 'generic', label: 'Generalista', description: 'IA básica', icon: Sparkles },
     { type: 'medical', label: 'Médico', description: 'Especializado em cannabis medicinal', icon: Stethoscope },
     { type: 'legal', label: 'Jurídico', description: 'Especializado em leis e regulações', icon: Scale },
     { type: 'veterinary', label: 'Veterinário', description: 'Especializado em uso veterinário', icon: PawPrint },
