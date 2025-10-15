@@ -29,20 +29,29 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
-    // Get active subscription
+    // Get subscription_id from request body
+    const { subscription_id } = await req.json();
+    
+    if (!subscription_id) {
+      return new Response(
+        JSON.stringify({ error: "subscription_id é obrigatório" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Get the specific subscription
     const { data: subscriptions, error: subError } = await supabase
       .from("user_subscriptions")
       .select("*")
+      .eq("id", subscription_id)
       .eq("user_id", user.id)
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .eq("status", "active");
 
     if (subError) throw subError;
 
     if (!subscriptions || subscriptions.length === 0) {
       return new Response(
-        JSON.stringify({ error: "Nenhuma assinatura ativa encontrada" }),
+        JSON.stringify({ error: "Assinatura não encontrada ou já cancelada" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -90,7 +99,7 @@ serve(async (req) => {
     const { error: updateError } = await supabase
       .from("user_subscriptions")
       .update({
-        status: "scheduled_cancellation",
+        status: "scheduled_cancellation" as any,
         cancel_at: effectiveCancelAt,
         updated_at: new Date().toISOString(),
       })

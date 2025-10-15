@@ -29,15 +29,24 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
+    // Get subscription_id from request body
+    const { subscription_id } = await req.json();
+    
+    if (!subscription_id) {
+      return new Response(
+        JSON.stringify({ error: "subscription_id é obrigatório" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Get scheduled cancellation subscription
     const { data: subscriptions, error: subError } = await supabase
       .from("user_subscriptions")
       .select("*")
+      .eq("id", subscription_id)
       .eq("user_id", user.id)
       .eq("status", "scheduled_cancellation")
-      .not("cancel_at", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1);
+      .not("cancel_at", "is", null);
 
     if (subError) throw subError;
 

@@ -17,20 +17,33 @@ interface CancelSubscriptionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  subscriptionId: string | null;
 }
 
 export const CancelSubscriptionDialog = ({
   open,
   onOpenChange,
   onSuccess,
+  subscriptionId,
 }: CancelSubscriptionDialogProps) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
   const handleConfirm = async () => {
+    if (!subscriptionId) {
+      toast({
+        title: 'Erro',
+        description: 'Nenhuma assinatura selecionada',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await supabase.functions.invoke('request-cancellation');
+      const response = await supabase.functions.invoke('request-cancellation', {
+        body: { subscription_id: subscriptionId }
+      });
 
       // Check for HTTP errors
       if (response.error) {

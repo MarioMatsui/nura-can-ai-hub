@@ -62,6 +62,7 @@ export const SettingsModal = ({
   const [loadingPassword, setLoadingPassword] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [loadingRevert, setLoadingRevert] = useState(false);
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null);
   const [hasPendingCancellation, setHasPendingCancellation] = useState(false);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
 
@@ -200,9 +201,20 @@ export const SettingsModal = ({
   };
 
   const handleResumeSubscription = async () => {
+    if (!selectedSubscriptionId) {
+      toast({
+        title: 'Erro',
+        description: 'Nenhuma assinatura selecionada',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoadingRevert(true);
     try {
-      const response = await supabase.functions.invoke('revert-cancellation');
+      const response = await supabase.functions.invoke('revert-cancellation', {
+        body: { subscription_id: selectedSubscriptionId }
+      });
 
       if (response.error) {
         let errorMessage = 'Não foi possível retomar a assinatura';
@@ -419,7 +431,10 @@ export const SettingsModal = ({
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setShowResumeDialog(true)}
+                                onClick={() => {
+                                  setSelectedSubscriptionId(sub.id);
+                                  setShowResumeDialog(true);
+                                }}
                                 className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
                               >
                                 Retomar
@@ -427,6 +442,7 @@ export const SettingsModal = ({
                             ) : (
                               <button
                                 onClick={() => {
+                                  setSelectedSubscriptionId(sub.id);
                                   setShowCancelDialog(true);
                                 }}
                                 className="text-sm text-destructive hover:underline"
@@ -524,6 +540,7 @@ export const SettingsModal = ({
       <CancelSubscriptionDialog
         open={showCancelDialog}
         onOpenChange={setShowCancelDialog}
+        subscriptionId={selectedSubscriptionId}
         onSuccess={() => {
           // Refresh the page to update subscription status
           window.location.reload();
