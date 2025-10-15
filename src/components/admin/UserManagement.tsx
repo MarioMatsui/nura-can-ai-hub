@@ -23,7 +23,7 @@ interface UserSubscription {
   id: string;
   user_id: string;
   plan_type: string;
-  status: string;
+  status: "active" | "inactive" | "cancelled" | "expired" | "scheduled_cancellation";
   billing_period: string | null;
   started_at: string;
   expires_at: string | null;
@@ -31,7 +31,7 @@ interface UserSubscription {
 
 interface UserData {
   profile: UserProfile;
-  subscription: UserSubscription | null;
+  subscriptions: UserSubscription[];
 }
 
 const UserManagement = () => {
@@ -76,7 +76,7 @@ const UserManagement = () => {
 
       const usersData: UserData[] = (profiles || []).map((profile) => ({
         profile,
-        subscription: subscriptions?.find((sub) => sub.user_id === profile.id) || null,
+        subscriptions: subscriptions?.filter((sub) => sub.user_id === profile.id) || [],
       }));
 
       setUsers(usersData);
@@ -93,31 +93,38 @@ const UserManagement = () => {
     setDialogOpen(true);
   };
 
-  const getStatusBadge = (subscription: UserSubscription | null) => {
-    if (!subscription) {
+  const getStatusBadge = (subscriptions: UserSubscription[]) => {
+    if (!subscriptions || subscriptions.length === 0) {
       return <Badge variant="secondary">Sem Plano</Badge>;
     }
 
-    if (subscription.status === "active") {
-      const isExpired = subscription.expires_at && new Date(subscription.expires_at) < new Date();
+    const activeSub = subscriptions.find(sub => sub.status === "active");
+    if (activeSub) {
+      const isExpired = activeSub.expires_at && new Date(activeSub.expires_at) < new Date();
       if (isExpired) {
         return <Badge variant="destructive">Expirado</Badge>;
       }
       return <Badge className="bg-primary text-primary-foreground">Ativo</Badge>;
     }
 
-    return <Badge variant="secondary">{subscription.status}</Badge>;
+    return <Badge variant="secondary">{subscriptions[0].status}</Badge>;
   };
 
-  const getPlanLabel = (planType: string) => {
-    const labels: Record<string, string> = {
-      free: "Gratuito",
-      medical: "Médico",
-      legal: "Jurídico",
-      veterinary: "Veterinário",
-      specialist: "Especialista",
-    };
-    return labels[planType] || planType;
+  const getPlanLabels = (subscriptions: UserSubscription[]) => {
+    if (!subscriptions || subscriptions.length === 0) return "—";
+    
+    return subscriptions
+      .map(sub => {
+        const labels: Record<string, string> = {
+          free: "Gratuito",
+          medical: "Médico",
+          legal: "Jurídico",
+          veterinary: "Veterinário",
+          specialist: "Especialista",
+        };
+        return labels[sub.plan_type] || sub.plan_type;
+      })
+      .join(", ");
   };
 
   return (
@@ -176,12 +183,12 @@ const UserManagement = () => {
                       <TableCell className="font-medium">{user.profile.full_name}</TableCell>
                       <TableCell>{user.profile.email}</TableCell>
                       <TableCell>
-                        {user.subscription ? getPlanLabel(user.subscription.plan_type) : "—"}
+                        {getPlanLabels(user.subscriptions)}
                       </TableCell>
-                      <TableCell>{getStatusBadge(user.subscription)}</TableCell>
+                      <TableCell>{getStatusBadge(user.subscriptions)}</TableCell>
                       <TableCell>
-                        {user.subscription?.expires_at
-                          ? new Date(user.subscription.expires_at).toLocaleDateString("pt-BR")
+                        {user.subscriptions[0]?.expires_at
+                          ? new Date(user.subscriptions[0].expires_at).toLocaleDateString("pt-BR")
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right">

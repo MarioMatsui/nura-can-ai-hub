@@ -12,8 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Calendar } from "lucide-react";
+import { Loader2, Calendar, Plus, Trash2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card } from "@/components/ui/card";
 
 interface UserProfile {
   id: string;
@@ -29,15 +30,22 @@ interface UserSubscription {
   id: string;
   user_id: string;
   plan_type: string;
-  status: string;
+  status: "active" | "inactive" | "cancelled" | "expired" | "scheduled_cancellation";
   billing_period: string | null;
   started_at: string;
   expires_at: string | null;
 }
 
+interface PlanForm {
+  id?: string;
+  plan_type: "free" | "medical" | "legal" | "veterinary" | "specialist";
+  status: "active" | "inactive" | "cancelled" | "expired" | "scheduled_cancellation";
+  expires_at: string;
+}
+
 interface UserData {
   profile: UserProfile;
-  subscription: UserSubscription | null;
+  subscriptions: UserSubscription[];
 }
 
 interface UserDialogProps {
@@ -49,58 +57,103 @@ interface UserDialogProps {
 
 const UserDialog = ({ user, open, onOpenChange, onUpdate }: UserDialogProps) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [planType, setPlanType] = useState<"free" | "medical" | "legal" | "veterinary" | "specialist">("free");
-  const [status, setStatus] = useState<"active" | "inactive" | "cancelled">("active");
-  const [expiresAt, setExpiresAt] = useState("");
+  const [plans, setPlans] = useState<PlanForm[]>([]);
 
   useEffect(() => {
-    if (user?.subscription) {
-      setPlanType(user.subscription.plan_type as typeof planType);
-      setStatus(user.subscription.status as typeof status);
-      setExpiresAt(
-        user.subscription.expires_at
-          ? new Date(user.subscription.expires_at).toISOString().split("T")[0]
-          : ""
+    if (user?.subscriptions && user.subscriptions.length > 0) {
+      setPlans(
+        user.subscriptions.map((sub) => ({
+          id: sub.id,
+          plan_type: sub.plan_type as PlanForm["plan_type"],
+          status: sub.status as PlanForm["status"],
+          expires_at: sub.expires_at
+            ? new Date(sub.expires_at).toISOString().split("T")[0]
+            : "",
+        }))
       );
     } else {
-      setPlanType("free");
-      setStatus("active");
-      setExpiresAt("");
+      setPlans([]);
     }
   }, [user]);
+
+  const addNewPlan = () => {
+    setPlans([
+      ...plans,
+      {
+        plan_type: "medical",
+        status: "active",
+        expires_at: "",
+      },
+    ]);
+  };
+
+  const removePlan = async (index: number) => {
+    const plan = plans[index];
+    if (plan.id) {
+      // Delete from database
+      setIsLoading(true);
+      try {
+        const { error } = await supabase
+          .from("user_subscriptions")
+          .delete()
+          .eq("id", plan.id);
+
+        if (error) throw error;
+        
+        toast.success("Plano removido com sucesso!");
+        setPlans(plans.filter((_, i) => i !== index));
+        onUpdate();
+      } catch (error: any) {
+        toast.error("Erro ao remover plano: " + error.message);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // Just remove from local state
+      setPlans(plans.filter((_, i) => i !== index));
+    }
+  };
+
+  const updatePlan = (index: number, field: keyof PlanForm, value: any) => {
+    const newPlans = [...plans];
+    newPlans[index] = { ...newPlans[index], [field]: value };
+    setPlans(newPlans);
+  };
 
   const handleSave = async () => {
     if (!user) return;
 
     setIsLoading(true);
     try {
-      if (user.subscription) {
-        // Update existing subscription
-        const { error } = await supabase
-          .from("user_subscriptions")
-          .update({
-            plan_type: planType,
-            status: status,
-            expires_at: expiresAt || null,
-          })
-          .eq("id", user.subscription.id);
+      for (const plan of plans) {
+        if (plan.id) {
+          // Update existing subscription
+          const { error } = await supabase
+            .from("user_subscriptions")
+            .update({
+              plan_type: plan.plan_type,
+              status: plan.status as any,
+              expires_at: plan.expires_at || null,
+            })
+            .eq("id", plan.id);
 
-        if (error) throw error;
-      } else {
-        // Create new subscription
-        const { error } = await supabase
-          .from("user_subscriptions")
-          .insert([{
-            user_id: user.profile.id,
-            plan_type: planType,
-            status: status,
-            expires_at: expiresAt || null,
-          }]);
+          if (error) throw error;
+        } else {
+          // Create new subscription
+          const { error } = await supabase
+            .from("user_subscriptions")
+            .insert([{
+              user_id: user.profile.id,
+              plan_type: plan.plan_type,
+              status: plan.status as any,
+              expires_at: plan.expires_at || null,
+            }]);
 
-        if (error) throw error;
+          if (error) throw error;
+        }
       }
 
-      toast.success("Plano atualizado com sucesso!");
+      toast.success("Planos atualizados com sucesso!");
       onUpdate();
       onOpenChange(false);
     } catch (error: any) {
@@ -160,61 +213,116 @@ const UserDialog = ({ user, open, onOpenChange, onUpdate }: UserDialogProps) => 
 
           {/* Subscription Management */}
           <div className="space-y-4">
-            <h3 className="font-semibold">Gerenciar Assinatura</h3>
-
-            <div className="space-y-2">
-              <Label htmlFor="plan-type">Tipo de Plano</Label>
-              <Select value={planType} onValueChange={(value) => setPlanType(value as typeof planType)}>
-                <SelectTrigger id="plan-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="free">Gratuito</SelectItem>
-                  <SelectItem value="medical">Médico</SelectItem>
-                  <SelectItem value="legal">Jurídico</SelectItem>
-                  <SelectItem value="veterinary">Veterinário</SelectItem>
-                  <SelectItem value="specialist">Especialista</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Gerenciar Assinatura</h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addNewPlan}
+                disabled={isLoading}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Plano
+              </Button>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select value={status} onValueChange={(value) => setStatus(value as typeof status)}>
-                <SelectTrigger id="status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Ativo</SelectItem>
-                  <SelectItem value="inactive">Inativo</SelectItem>
-                  <SelectItem value="cancelled">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {plans.length === 0 ? (
+              <Alert>
+                <AlertDescription>
+                  Nenhum plano ativo. Clique em "Adicionar Plano" para criar um.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                {plans.map((plan, index) => (
+                  <Card key={index} className="p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium">Plano {index + 1}</h4>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removePlan(index)}
+                        disabled={isLoading}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="expires-at">Data de Expiração (opcional)</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="expires-at"
-                  type="date"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  className="pl-10"
-                />
+                    <div className="space-y-2">
+                      <Label htmlFor={`plan-type-${index}`}>Tipo de Plano</Label>
+                      <Select
+                        value={plan.plan_type}
+                        onValueChange={(value) =>
+                          updatePlan(index, "plan_type", value)
+                        }
+                      >
+                        <SelectTrigger id={`plan-type-${index}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="free">Gratuito</SelectItem>
+                          <SelectItem value="medical">Médico</SelectItem>
+                          <SelectItem value="legal">Jurídico</SelectItem>
+                          <SelectItem value="veterinary">Veterinário</SelectItem>
+                          <SelectItem value="specialist">Especialista</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor={`status-${index}`}>Status</Label>
+                      <Select
+                        value={plan.status}
+                        onValueChange={(value) => updatePlan(index, "status", value)}
+                      >
+                        <SelectTrigger id={`status-${index}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Ativo</SelectItem>
+                          <SelectItem value="inactive">Inativo</SelectItem>
+                          <SelectItem value="cancelled">Cancelado</SelectItem>
+                          <SelectItem value="expired">Expirado</SelectItem>
+                          <SelectItem value="scheduled_cancellation">
+                            Cancelamento Agendado
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor={`expires-at-${index}`}>
+                        Data de Expiração (opcional)
+                      </Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id={`expires-at-${index}`}
+                          type="date"
+                          value={plan.expires_at}
+                          onChange={(e) =>
+                            updatePlan(index, "expires_at", e.target.value)
+                          }
+                          className="pl-10"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Deixe em branco para acesso ilimitado
+                      </p>
+                    </div>
+                  </Card>
+                ))}
+
+                <Alert>
+                  <AlertDescription>
+                    Ao definir uma data de expiração, o plano será automaticamente
+                    desativado quando essa data for atingida.
+                  </AlertDescription>
+                </Alert>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Deixe em branco para acesso ilimitado
-              </p>
-            </div>
-
-            <Alert>
-              <AlertDescription>
-                Ao definir uma data de expiração, o plano será automaticamente desativado quando
-                essa data for atingida.
-              </AlertDescription>
-            </Alert>
+            )}
           </div>
 
           {/* Actions */}
