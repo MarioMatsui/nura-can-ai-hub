@@ -485,6 +485,30 @@ export type Database = {
           },
         ]
       }
+      processed_webhooks: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          processed_at: string
+          webhook_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          processed_at?: string
+          webhook_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          processed_at?: string
+          webhook_id?: string
+        }
+        Relationships: []
+      }
       processing_jobs: {
         Row: {
           completed_at: string | null
@@ -633,6 +657,10 @@ export type Database = {
       binary_quantize: {
         Args: { "": string } | { "": unknown }
         Returns: unknown
+      }
+      cleanup_old_webhooks: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       halfvec_avg: {
         Args: { "": number[] }

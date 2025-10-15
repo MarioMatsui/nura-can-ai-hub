@@ -34,7 +34,10 @@ serve(async (req) => {
       });
     }
 
-    // Verify webhook authenticity
+    // Get request body as text for HMAC verification
+    const rawBody = await req.text();
+    
+    // Verify webhook authenticity with token
     const receivedToken = req.headers.get('x-webhook-token');
     if (receivedToken !== WEBHOOK_TOKEN) {
       console.error('Invalid webhook token');
@@ -44,7 +47,23 @@ serve(async (req) => {
       });
     }
 
-    const payload: CannapagWebhookPayload = await req.json();
+    // Validate timestamp to prevent replay attacks (5 minute window)
+    const timestamp = req.headers.get('x-webhook-timestamp');
+    if (timestamp) {
+      const requestTime = new Date(timestamp).getTime();
+      const currentTime = Date.now();
+      const fiveMinutes = 5 * 60 * 1000;
+      
+      if (Math.abs(currentTime - requestTime) > fiveMinutes) {
+        console.error('Webhook timestamp outside acceptable window');
+        return new Response(JSON.stringify({ error: 'Request timestamp too old or too far in future' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    const payload: CannapagWebhookPayload = JSON.parse(rawBody);
     console.log('Processing webhook event:', payload.event);
 
     // Only process payment confirmation events
@@ -56,6 +75,40 @@ serve(async (req) => {
       });
     }
 
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Check for idempotency - prevent duplicate processing
+    const webhookId = payload.data.id;
+    if (webhookId) {
+      const { data: existingWebhook } = await supabase
+        .from('processed_webhooks')
+        .select('id')
+        .eq('webhook_id', webhookId)
+        .single();
+
+      if (existingWebhook) {
+        console.log('Webhook already processed:', webhookId);
+        return new Response(JSON.stringify({ 
+          message: 'Webhook already processed',
+          webhook_id: webhookId 
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Record this webhook as processed
+      await supabase
+        .from('processed_webhooks')
+        .insert({
+          webhook_id: webhookId,
+          event_type: payload.event,
+        });
+    }
+
     const externalReference = payload.data.external_reference;
     if (!externalReference) {
       console.error('No external_reference found in webhook payload');
@@ -64,11 +117,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Determine plan type based on payment link or amount
     const planType = determinePlanType(payload.data);
@@ -158,8 +206,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error processing webhook:', error);
+    // Return generic error to client, log details server-side only
     return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: 'An error occurred processing the webhook',
+      request_id: crypto.randomUUID()
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
