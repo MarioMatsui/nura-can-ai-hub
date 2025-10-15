@@ -113,9 +113,8 @@ export const ConversationSidebar = ({
                 <button
                   onClick={() => onSelectConversation(conversation)}
                   className={cn(
-                    'w-full text-left p-2.5 rounded-lg transition-colors',
-                    'hover:bg-accent hover:[&_.chat-title]:text-black dark:hover:[&_.chat-title]:text-white',
-                    'active:bg-accent',
+                    'w-full text-left p-2.5 rounded-lg transition-colors group',
+                    'hover:bg-accent active:bg-accent',
                     currentConversation?.id === conversation.id && 'bg-accent'
                   )}
                 >
@@ -136,7 +135,7 @@ export const ConversationSidebar = ({
                       autoFocus
                     />
                   ) : (
-                    <div className="chat-title font-medium text-sm mb-0.5 line-clamp-2 pr-16 transition-colors">
+                    <div className="font-medium text-sm mb-0.5 line-clamp-2 pr-16 transition-colors group-hover:text-[#000000] dark:group-hover:text-[#FFFFFF]">
                       {conversation.title}
                     </div>
                   )}
