@@ -328,10 +328,20 @@ export const ChatArea = ({
                   )} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{model.label}</span>
+                      <span className={cn(
+                        "font-medium truncate transition-colors duration-200",
+                        isSelected && "dark:text-black"
+                      )}>
+                        {model.label}
+                      </span>
                       {isSelected && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{model.description}</p>
+                    <p className={cn(
+                      "text-xs text-muted-foreground truncate transition-colors duration-200",
+                      isSelected && "dark:text-black"
+                    )}>
+                      {model.description}
+                    </p>
                   </div>
                   {!accessible && (
                     <Lock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
