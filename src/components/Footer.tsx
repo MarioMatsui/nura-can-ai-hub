@@ -58,41 +58,29 @@ const Footer = () => {
             </ul>
           </div>
 
-          {/* Empresa */}
+          {/* Entre em contato */}
           <div>
-            <h4 className="font-bold mb-4">Empresa</h4>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <a
-                  href="#"
-                  className="text-muted-foreground hover:text-primary transition-smooth"
-                >
-                  Sobre Nós
+            <h4 className="font-bold mb-4">Entre em contato</h4>
+            <ul className="space-y-3 text-sm">
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/>
+                </svg>
+                <span className="text-muted-foreground">+55 (11) 99999-9999</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                </svg>
+                <a href="mailto:info@nuracan.ai" className="text-muted-foreground hover:text-primary transition-smooth">
+                  info@nuracan.ai
                 </a>
               </li>
-              <li>
-                <a
-                  href="#"
-                  className="text-muted-foreground hover:text-primary transition-smooth"
-                >
-                  Blog
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="text-muted-foreground hover:text-primary transition-smooth"
-                >
-                  Contato
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="text-muted-foreground hover:text-primary transition-smooth"
-                >
-                  Carreiras
-                </a>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                </svg>
+                <span className="text-muted-foreground">Seg — Sex | 9h às 18h</span>
               </li>
             </ul>
           </div>
@@ -115,22 +103,6 @@ const Footer = () => {
                   className="text-muted-foreground hover:text-primary transition-smooth"
                 >
                   Termos de Uso
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="text-muted-foreground hover:text-primary transition-smooth"
-                >
-                  Cookies
-                </a>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  className="text-muted-foreground hover:text-primary transition-smooth"
-                >
-                  LGPD
                 </a>
               </li>
             </ul>
