@@ -143,8 +143,16 @@ export const ConversationSidebar = ({
                     </div>
                   )}
                   <div className="text-xs text-muted-foreground flex items-center justify-between">
-                    <span>{getModelLabel(conversation.model_type)}</span>
-                    <span>
+                    <span className={cn(
+                      "transition-colors duration-200",
+                      (hoveredId === conversation.id || currentConversation?.id === conversation.id) && "dark:text-black"
+                    )}>
+                      {getModelLabel(conversation.model_type)}
+                    </span>
+                    <span className={cn(
+                      "transition-colors duration-200",
+                      (hoveredId === conversation.id || currentConversation?.id === conversation.id) && "dark:text-black"
+                    )}>
                       {new Date(conversation.created_at).toLocaleDateString('pt-BR', {
                         day: '2-digit',
                         month: '2-digit',

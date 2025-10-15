@@ -223,8 +223,18 @@ export const ChatSidebar = ({
                         </div>
                       )}
                       <div className="text-xs text-muted-foreground flex items-center justify-between">
-                        <span>{getModelLabel(conversation.model_type)}</span>
-                        <span>{formatDate(conversation.created_at)}</span>
+                        <span className={cn(
+                          "transition-colors duration-200",
+                          (hoveredId === conversation.id || currentConversation?.id === conversation.id) && "dark:text-black"
+                        )}>
+                          {getModelLabel(conversation.model_type)}
+                        </span>
+                        <span className={cn(
+                          "transition-colors duration-200",
+                          (hoveredId === conversation.id || currentConversation?.id === conversation.id) && "dark:text-black"
+                        )}>
+                          {formatDate(conversation.created_at)}
+                        </span>
                       </div>
                     </button>
                     
