@@ -19,8 +19,6 @@ export interface SearchResult {
 }
 
 export interface SearchFilters {
-  scope: 'all' | 'current';
-  sort: 'relevance' | 'date';
   type: {
     titles: boolean;
     messages: boolean;
@@ -35,8 +33,6 @@ export function useSearchChats(
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [filters, setFilters] = useState<SearchFilters>({
-    scope: 'all',
-    sort: 'relevance',
     type: { titles: true, messages: true },
   });
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -105,7 +101,7 @@ export function useSearchChats(
     }
 
     performSearch(sanitized);
-  }, [debouncedQuery, filters, conversations, allMessages, currentConversationId]);
+  }, [debouncedQuery, filters, conversations, allMessages]);
 
   const performSearch = async (searchQuery: string) => {
     setLoading(true);
@@ -114,14 +110,9 @@ export function useSearchChats(
       // Salva busca recente
       saveRecentSearch(searchQuery);
 
-      // Filtra conversas pelo escopo
-      const chatsToSearch = filters.scope === 'current' && currentConversationId
-        ? conversations.filter(c => c.id === currentConversationId)
-        : conversations;
-
       const searchResults: SearchResult[] = [];
 
-      chatsToSearch.forEach(chat => {
+      conversations.forEach(chat => {
         const messages = allMessages[chat.id] || [];
         
         // Busca em títulos
@@ -160,17 +151,11 @@ export function useSearchChats(
         }
       });
 
-      // Ordena resultados
-      if (filters.sort === 'relevance') {
-        searchResults.sort((a, b) => {
-          if (b.score !== a.score) return b.score - a.score;
-          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        });
-      } else {
-        searchResults.sort((a, b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
-      }
+      // Ordena por relevância e depois por data
+      searchResults.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      });
 
       setResults(searchResults.slice(0, 12)); // Limita a 12 resultados
     } catch (error) {

@@ -178,51 +178,7 @@ export function SearchModal({
           
           <CollapsibleContent>
             <div className="px-4 py-3 space-y-4 border-b bg-muted/10">
-              {/* Escopo */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Escopo</Label>
-                <RadioGroup
-                  value={filters.scope}
-                  onValueChange={(value) => updateFilter('scope', value as 'all' | 'current')}
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="all" id="scope-all" />
-                    <Label htmlFor="scope-all" className="text-sm cursor-pointer">
-                      Todos os chats
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="current" id="scope-current" />
-                    <Label htmlFor="scope-current" className="text-sm cursor-pointer">
-                      Chat atual
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {/* Ordenar por */}
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Ordenar por</Label>
-                <RadioGroup
-                  value={filters.sort}
-                  onValueChange={(value) => updateFilter('sort', value as 'relevance' | 'date')}
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="relevance" id="sort-relevance" />
-                    <Label htmlFor="sort-relevance" className="text-sm cursor-pointer">
-                      Relevância
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="date" id="sort-date" />
-                    <Label htmlFor="sort-date" className="text-sm cursor-pointer">
-                      Mais recentes
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              {/* Tipo */}
+              {/* Buscar em */}
               <div className="space-y-2">
                 <Label className="text-xs font-medium">Buscar em</Label>
                 <div className="space-y-2">
@@ -304,8 +260,7 @@ export function SearchModal({
 
             {!loading && query.trim() && results.length === 0 && (
               <div className="text-center py-8 text-sm text-muted-foreground">
-                Nenhum resultado para "<span className="font-medium">{query}</span>" em{' '}
-                {filters.scope === 'all' ? 'todos os chats' : 'chat atual'}.
+                Nenhum resultado para "<span className="font-medium">{query}</span>".
                 <br />
                 Tente outra palavra.
               </div>
