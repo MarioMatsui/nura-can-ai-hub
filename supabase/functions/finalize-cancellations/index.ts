@@ -41,17 +41,14 @@ serve(async (req) => {
 
     for (const subscription of subscriptions) {
       try {
-        // Update subscription status to canceled
-        const { error: updateSubError } = await supabase
+        // Delete the subscription instead of marking as canceled
+        const { error: deleteSubError } = await supabase
           .from("user_subscriptions")
-          .update({
-            status: "canceled",
-            updated_at: new Date().toISOString(),
-          })
+          .delete()
           .eq("id", subscription.id);
 
-        if (updateSubError) {
-          console.error(`Error updating subscription ${subscription.id}:`, updateSubError);
+        if (deleteSubError) {
+          console.error(`Error deleting subscription ${subscription.id}:`, deleteSubError);
           continue;
         }
 
@@ -74,15 +71,11 @@ serve(async (req) => {
             .eq("id", subscription.user_id);
         }
 
-        // Update cancellation request to processed
+        // Delete the cancellation request after processing
         await supabase
           .from("cancellation_requests")
-          .update({
-            status: "processed",
-            processed_at: new Date().toISOString(),
-          })
-          .eq("subscription_id", subscription.id)
-          .eq("status", "pending");
+          .delete()
+          .eq("subscription_id", subscription.id);
 
         // Send completion email
         const profile = subscription.profiles as any;
