@@ -162,7 +162,10 @@ export const ConversationSidebar = ({
                 </button>
                 
                 {hoveredId === conversation.id && editingId !== conversation.id && (
-                  <div className="absolute top-2 right-2 flex gap-1 z-10">
+                  <div 
+                    className="absolute top-2 right-2 flex gap-1 z-10"
+                    onMouseEnter={() => setHoveredId(conversation.id)}
+                  >
                     <button
                       onClick={(e) => handleStartEdit(conversation, e)}
                       className="p-2 rounded hover:bg-background/80 transition-colors"
