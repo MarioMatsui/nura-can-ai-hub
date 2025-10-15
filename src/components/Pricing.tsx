@@ -246,37 +246,13 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       return;
     }
 
-    // Map plan key to reference format
-    const referenceMapping: Record<string, { monthly: string; annual: string }> = {
-      medical: { 
-        monthly: 'PLAN_MEDICO_MENSAL', 
-        annual: 'PLAN_MEDICO_ANUAL' 
-      },
-      legal: { 
-        monthly: 'PLAN_JURIDICO_MENSAL', 
-        annual: 'PLAN_JURIDICO_ANUAL' 
-      },
-      veterinary: { 
-        monthly: 'PLAN_VETERINARIO_MENSAL', 
-        annual: 'PLAN_VETERINARIO_ANUAL' 
-      },
-      specialist: { 
-        monthly: 'PLAN_ESPECIALISTA_MENSAL', 
-        annual: 'PLAN_ESPECIALISTA_ANUAL' 
-      },
-    };
-
-    const reference = isAnnual 
-      ? referenceMapping[planKey]?.annual 
-      : referenceMapping[planKey]?.monthly;
-
     // Get the base payment link
     const baseLink = isAnnual ? plan.annualLink : plan.monthlyLink;
     
-    // Add reference parameter for webhook identification
-    const paymentUrl = `${baseLink}?reference=${reference}`;
+    // Add user ID and plan type as parameters
+    const paymentUrl = `${baseLink}?external_reference=${userId}&plan_type=${planKey}`;
     
-    console.log('Redirecting to payment with reference:', reference);
+    console.log('Redirecting to payment with external_reference:', userId, 'plan_type:', planKey);
     
     // Redirect to payment page
     window.location.href = paymentUrl;
