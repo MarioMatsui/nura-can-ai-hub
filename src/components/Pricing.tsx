@@ -330,18 +330,6 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                     plan.popular ? "ring-2 ring-primary" : ""
                   }`}
                 >
-                  {plan.popular && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-primary-foreground rounded-full text-sm font-semibold flex items-center gap-1 shadow-glow whitespace-nowrap">
-                      <Sparkles className="w-3 h-3" />
-                      Mais Popular
-                    </div>
-                  )}
-
-                  {(isActive || isScheduled) && (
-                    <div className="absolute -top-3 right-4 px-3 py-1 bg-accent text-accent-foreground rounded-full text-xs font-semibold">
-                      {isActive ? "Ativo" : "Cancelamento agendado"}
-                    </div>
-                  )}
 
                   <CardHeader className="pb-4 sm:pb-6">
                     <h3 className="text-lg sm:text-xl font-bold mb-2">
