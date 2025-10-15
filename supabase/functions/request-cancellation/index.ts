@@ -84,11 +84,10 @@ serve(async (req) => {
 
     if (cancelError) throw cancelError;
 
-    // Update subscription status
+    // Update subscription cancel_at date (status remains active until effective cancellation)
     const { error: updateError } = await supabase
       .from("user_subscriptions")
       .update({
-        status: "pending_cancellation",
         cancel_at: effectiveCancelAt,
         updated_at: new Date().toISOString(),
       })
