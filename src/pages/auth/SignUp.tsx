@@ -115,27 +115,30 @@ const SignUp = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
+      // Call server-side validation and signup endpoint
+      const { data: signupData, error: signupError } = await supabase.functions.invoke(
+        "validate-signup",
+        {
+          body: {
+            email: data.email,
+            password: data.password,
             full_name: data.fullName,
             phone: data.phone || null,
             birth_date: data.birthDate,
             cpf: data.cpf,
             crm_crv: data.crmCrv || null,
           },
-        },
-      });
-
-      if (error) {
-        if (error.message.includes("User already registered")) {
-          toast.error("Este e-mail já está cadastrado. Faça login.");
-        } else {
-          toast.error(error.message);
         }
+      );
+
+      if (signupError) {
+        console.error("Signup error:", signupError);
+        toast.error(signupError.message || "Erro ao criar conta. Tente novamente.");
+        return;
+      }
+
+      if (!signupData?.success) {
+        toast.error(signupData?.error || "Erro ao criar conta.");
         return;
       }
 

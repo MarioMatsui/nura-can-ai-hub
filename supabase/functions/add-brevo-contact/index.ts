@@ -96,9 +96,13 @@ const handler = async (req: Request): Promise<Response> => {
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (error: any) {
-    console.error("Contact sync operation failed");
+    const requestId = crypto.randomUUID();
+    console.error(`[${requestId}] Contact sync operation failed:`, error);
     return new Response(
-      JSON.stringify({ error: "Sync failed" }),
+      JSON.stringify({ 
+        error: "Erro ao sincronizar contato. Por favor, tente novamente.",
+        request_id: requestId
+      }),
       {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders },

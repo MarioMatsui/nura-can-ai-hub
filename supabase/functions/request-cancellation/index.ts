@@ -152,9 +152,13 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Error in request-cancellation:", error);
+    const requestId = crypto.randomUUID();
+    console.error(`[${requestId}] Error in request-cancellation:`, error);
     return new Response(
-      JSON.stringify({ error: (error as Error).message }),
+      JSON.stringify({ 
+        error: "Erro ao processar solicitação de cancelamento. Por favor, tente novamente mais tarde.",
+        request_id: requestId
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

@@ -205,11 +205,12 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error processing webhook:', error);
+    const requestId = crypto.randomUUID();
+    console.error(`[${requestId}] Error processing webhook:`, error);
     // Return generic error to client, log details server-side only
     return new Response(JSON.stringify({ 
-      error: 'An error occurred processing the webhook',
-      request_id: crypto.randomUUID()
+      error: 'Erro ao processar webhook. Por favor, tente novamente.',
+      request_id: requestId
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
