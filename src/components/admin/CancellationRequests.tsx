@@ -364,23 +364,25 @@ export const CancellationRequests = () => {
                     </TableCell>
                     <TableCell>{getStatusBadge(request.status)}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        {request.status === 'pending' && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleMarkProcessed(request.id)}
-                            disabled={processingId === request.id}
-                          >
-                            {processingId === request.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <CheckCircle2 className="h-4 w-4 mr-2" />
-                                Marcar como processado
-                              </>
-                            )}
-                          </Button>
-                        )}
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          {request.status === 'pending' && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleMarkProcessed(request.id)}
+                              disabled={processingId === request.id}
+                            >
+                              {processingId === request.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  Marcar como processado
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -388,7 +390,7 @@ export const CancellationRequests = () => {
                             setDeletingId(request.id);
                             setDeleteDialogOpen(true);
                           }}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
