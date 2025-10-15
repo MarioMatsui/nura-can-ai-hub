@@ -324,7 +324,7 @@ export const SettingsModal = ({
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Plano atual</h3>
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-4 rounded-lg bg-accent/50">
+                <div className="flex items-start justify-between p-4 rounded-lg bg-accent/50">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium">{getPlanLabel()}</p>
@@ -343,29 +343,29 @@ export const SettingsModal = ({
                     </p>
                   </div>
                   {hasActiveSubscription && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        navigate('/planos');
-                        onOpenChange(false);
-                      }}
-                    >
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Gerenciar plano
-                    </Button>
+                    <div className="flex flex-col items-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigate('/planos');
+                          onOpenChange(false);
+                        }}
+                      >
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Gerenciar plano
+                      </Button>
+                      {!isPendingCancellation && (
+                        <button
+                          onClick={() => setShowCancelDialog(true)}
+                          className="text-sm text-destructive hover:underline"
+                        >
+                          Cancelar assinatura
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-
-                {/* Cancel subscription link */}
-                {hasActiveSubscription && !isPendingCancellation && (
-                  <button
-                    onClick={() => setShowCancelDialog(true)}
-                    className="text-sm text-destructive hover:underline"
-                  >
-                    Cancelar assinatura
-                  </button>
-                )}
 
                 {/* Revert cancellation button */}
                 {isPendingCancellation && currentSubscription?.cancel_at && new Date() < new Date(currentSubscription.cancel_at) && (
