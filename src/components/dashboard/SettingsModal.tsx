@@ -399,7 +399,7 @@ export const SettingsModal = ({
                             variant="outline"
                             size="sm"
                             onClick={() => setShowResumeDialog(true)}
-                            className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                            className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
                           >
                             Retomar assinatura
                           </Button>
@@ -423,7 +423,7 @@ export const SettingsModal = ({
                     size="sm"
                     onClick={() => setShowResumeDialog(true)}
                     disabled={loadingRevert}
-                    className="w-full border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                    className="w-full border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
                   >
                     {loadingRevert ? (
                       <>
@@ -522,7 +522,7 @@ export const SettingsModal = ({
             <AlertDialogAction
               onClick={handleResumeSubscription}
               disabled={loadingRevert}
-              className="bg-orange-500 hover:bg-orange-600"
+              className="bg-purple-600 hover:bg-purple-700"
             >
               {loadingRevert ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sim, retomar'}
             </AlertDialogAction>
