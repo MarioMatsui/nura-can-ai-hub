@@ -68,13 +68,18 @@ serve(async (req) => {
     }
 
     // Delete cancellation request - check both 'pending' and 'processed' statuses
+    console.log('Deleting cancellation request for subscription:', subscription.id);
     const { error: cancelReqError } = await supabase
       .from("cancellation_requests")
       .delete()
       .eq("subscription_id", subscription.id)
       .in("status", ["pending", "processed"]);
 
-    if (cancelReqError) throw cancelReqError;
+    if (cancelReqError) {
+      console.error('Error deleting cancellation request:', cancelReqError);
+      throw cancelReqError;
+    }
+    console.log('Cancellation request deleted successfully');
 
     // Restore subscription to active
     const { error: updateError } = await supabase
