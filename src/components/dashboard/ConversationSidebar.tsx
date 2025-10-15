@@ -135,7 +135,7 @@ export const ConversationSidebar = ({
                       autoFocus
                     />
                   ) : (
-                    <div className="font-medium text-sm mb-0.5 line-clamp-2 pr-16 group-hover:text-black">
+                    <div className="font-medium text-sm mb-0.5 line-clamp-2 pr-16 group-hover:text-foreground">
                       {conversation.title}
                     </div>
                   )}
