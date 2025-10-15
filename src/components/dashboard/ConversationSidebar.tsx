@@ -137,7 +137,7 @@ export const ConversationSidebar = ({
                   ) : (
                     <div className={cn(
                       "font-medium text-sm mb-0.5 line-clamp-2 pr-16 transition-colors duration-200",
-                      hoveredId === conversation.id && "dark:text-black"
+                      (hoveredId === conversation.id || currentConversation?.id === conversation.id) && "dark:text-black"
                     )}>
                       {conversation.title}
                     </div>
