@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2, CheckCircle2, Calendar as CalendarIcon } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -13,6 +13,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface CancellationRequest {
   id: string;
@@ -36,6 +49,9 @@ export const CancellationRequests = () => {
   const [requests, setRequests] = useState<CancellationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [editingDateId, setEditingDateId] = useState<string | null>(null);
+  const [newDate, setNewDate] = useState<Date | undefined>();
+  const [savingDate, setSavingDate] = useState(false);
 
   const fetchRequests = async () => {
     try {
@@ -142,6 +158,55 @@ export const CancellationRequests = () => {
     return labels[planCode] || planCode;
   };
 
+  const handleEditDate = (requestId: string, currentDate: string) => {
+    setEditingDateId(requestId);
+    setNewDate(new Date(currentDate));
+  };
+
+  const handleSaveDate = async () => {
+    if (!editingDateId || !newDate) return;
+
+    setSavingDate(true);
+    try {
+      const { error } = await supabase
+        .from('cancellation_requests')
+        .update({
+          effective_cancel_at: newDate.toISOString(),
+        })
+        .eq('id', editingDateId);
+
+      if (error) throw error;
+
+      // Also update the subscription's cancel_at date
+      const request = requests.find(r => r.id === editingDateId);
+      if (request) {
+        await supabase
+          .from('user_subscriptions')
+          .update({
+            cancel_at: newDate.toISOString(),
+          })
+          .eq('id', request.subscription_id);
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: 'Data de efetivação atualizada',
+      });
+
+      setEditingDateId(null);
+      setNewDate(undefined);
+      fetchRequests();
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingDate(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -186,13 +251,53 @@ export const CancellationRequests = () => {
                     <TableCell>{(request.profiles as any)?.email || 'N/A'}</TableCell>
                     <TableCell>{getPlanLabel(request.plan_code)}</TableCell>
                     <TableCell>
-                      {new Date(request.effective_cancel_at).toLocaleDateString('pt-BR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "justify-start text-left font-normal",
+                              !request.effective_cancel_at && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {request.effective_cancel_at
+                              ? format(new Date(request.effective_cancel_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                              : "Selecionar data"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={editingDateId === request.id ? newDate : new Date(request.effective_cancel_at)}
+                            onSelect={(date) => {
+                              if (date) {
+                                setEditingDateId(request.id);
+                                setNewDate(date);
+                              }
+                            }}
+                            disabled={(date) => date < new Date()}
+                            initialFocus
+                            className={cn("p-3 pointer-events-auto")}
+                          />
+                          {editingDateId === request.id && (
+                            <div className="p-3 border-t">
+                              <Button
+                                size="sm"
+                                onClick={handleSaveDate}
+                                disabled={savingDate}
+                                className="w-full"
+                              >
+                                {savingDate ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  'Salvar data'
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </PopoverContent>
+                      </Popover>
                     </TableCell>
                     <TableCell>
                       {new Date(request.created_at).toLocaleDateString('pt-BR', {
