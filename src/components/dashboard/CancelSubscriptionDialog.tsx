@@ -32,9 +32,13 @@ export const CancelSubscriptionDialog = ({
     try {
       const { data, error } = await supabase.functions.invoke('request-cancellation');
 
-      if (error) throw error;
+      // Check for HTTP errors first
+      if (error) {
+        throw error;
+      }
 
-      if (data.error) {
+      // Check for application errors in the response
+      if (data?.error) {
         throw new Error(data.error);
       }
 
@@ -46,9 +50,20 @@ export const CancelSubscriptionDialog = ({
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
+      // Extract meaningful error message
+      let errorMessage = 'Não foi possível processar sua solicitação';
+      
+      // Try different ways to get the error message
+      if (error?.context?.body?.error) {
+        // Error from edge function response body
+        errorMessage = error.context.body.error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
       toast({
         title: 'Erro',
-        description: error.message || 'Não foi possível processar sua solicitação',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
