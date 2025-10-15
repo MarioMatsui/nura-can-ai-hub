@@ -95,7 +95,9 @@ interface PricingProps {
 const Pricing = ({ showFree = true }: PricingProps) => {
   const [isAnnual, setIsAnnual] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-  const [currentPlan, setCurrentPlan] = useState<PlanKey | null>(null);
+  const [activePlans, setActivePlans] = useState<PlanKey[]>([]);
+  const [hasSpecialist, setHasSpecialist] = useState(false);
+  const [scheduledCancellations, setScheduledCancellations] = useState<Set<PlanKey>>(new Set());
   const navigate = useNavigate();
 
   // Calculate average discount percentage
@@ -118,22 +120,37 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       const currentUserId = session?.user?.id ?? null;
       setUserId(currentUserId);
 
-      // If user is logged in, fetch their active subscription
+      // If user is logged in, fetch their active subscriptions
       if (currentUserId) {
-        const { data: subscription } = await supabase
+        const { data: subscriptions } = await supabase
           .from('user_subscriptions')
-          .select('plan_type, status')
+          .select('plan_type, status, cancel_at')
           .eq('user_id', currentUserId)
-          .eq('status', 'active')
-          .maybeSingle();
+          .or('status.eq.active,status.eq.scheduled_cancellation');
 
-        if (subscription?.plan_type) {
-          setCurrentPlan(subscription.plan_type as PlanKey);
+        if (subscriptions && subscriptions.length > 0) {
+          const active = subscriptions
+            .filter((s: any) => s.status === 'active')
+            .map((s: any) => s.plan_type as PlanKey);
+          
+          const scheduled = new Set(
+            subscriptions
+              .filter((s: any) => s.status === 'scheduled_cancellation')
+              .map((s: any) => s.plan_type as PlanKey)
+          );
+          
+          setActivePlans(active);
+          setHasSpecialist(active.includes('specialist'));
+          setScheduledCancellations(scheduled);
         } else {
-          setCurrentPlan('free');
+          setActivePlans([]);
+          setHasSpecialist(false);
+          setScheduledCancellations(new Set());
         }
       } else {
-        setCurrentPlan(null);
+        setActivePlans([]);
+        setHasSpecialist(false);
+        setScheduledCancellations(new Set());
       }
     };
 
@@ -146,19 +163,34 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       if (currentUserId) {
         supabase
           .from('user_subscriptions')
-          .select('plan_type, status')
+          .select('plan_type, status, cancel_at')
           .eq('user_id', currentUserId)
-          .eq('status', 'active')
-          .maybeSingle()
-          .then(({ data }) => {
-            if (data?.plan_type) {
-              setCurrentPlan(data.plan_type as PlanKey);
+          .or('status.eq.active,status.eq.scheduled_cancellation')
+          .then(({ data: subscriptions }) => {
+            if (subscriptions && subscriptions.length > 0) {
+              const active = subscriptions
+                .filter((s: any) => s.status === 'active')
+                .map((s: any) => s.plan_type as PlanKey);
+              
+              const scheduled = new Set(
+                subscriptions
+                  .filter((s: any) => s.status === 'scheduled_cancellation')
+                  .map((s: any) => s.plan_type as PlanKey)
+              );
+              
+              setActivePlans(active);
+              setHasSpecialist(active.includes('specialist'));
+              setScheduledCancellations(scheduled);
             } else {
-              setCurrentPlan('free');
+              setActivePlans([]);
+              setHasSpecialist(false);
+              setScheduledCancellations(new Set());
             }
           });
       } else {
-        setCurrentPlan(null);
+        setActivePlans([]);
+        setHasSpecialist(false);
+        setScheduledCancellations(new Set());
       }
     });
 
@@ -198,7 +230,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
     );
   };
 
-  const handleSubscribe = (plan: typeof plans.medical) => {
+  const handleSubscribe = async (planKey: PlanKey, plan: typeof plans.medical) => {
     if (plan.monthlyPrice === 0) return;
     
     // Check if user is logged in
@@ -208,13 +240,25 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       return;
     }
 
+    // Check if user already has 3 active plans (excluding specialist)
+    if (planKey !== 'specialist' && activePlans.length >= 3) {
+      toast.error('Limite de 3 planos por usuário atingido');
+      return;
+    }
+
+    // Check if trying to add individual plan when specialist is active
+    if (planKey !== 'specialist' && hasSpecialist) {
+      toast.error('Não é possível adicionar planos individuais quando o plano Especialista está ativo');
+      return;
+    }
+
     // Get the base payment link
     const baseLink = isAnnual ? plan.annualLink : plan.monthlyLink;
     
-    // Add user ID as external_reference
-    const paymentUrl = `${baseLink}?external_reference=${userId}`;
+    // Add user ID and plan type as parameters
+    const paymentUrl = `${baseLink}?external_reference=${userId}&plan_type=${planKey}`;
     
-    console.log('Redirecting to payment with external_reference:', userId);
+    console.log('Redirecting to payment with external_reference:', userId, 'plan_type:', planKey);
     
     // Redirect to payment page
     window.location.href = paymentUrl;
@@ -266,63 +310,96 @@ const Pricing = ({ showFree = true }: PricingProps) => {
         <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${showFree ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto`}>
           {Object.entries(plans)
             .filter(([key]) => showFree || key !== 'free')
-            .map(([key, plan]) => (
-            <Card
-              key={key}
-              className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
-                plan.popular ? "ring-2 ring-primary" : ""
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-primary-foreground rounded-full text-sm font-semibold flex items-center gap-1 shadow-glow whitespace-nowrap">
-                  <Sparkles className="w-3 h-3" />
-                  Mais Popular
-                </div>
-              )}
+            .map(([key, plan]) => {
+              const planKey = key as PlanKey;
+              const isActive = activePlans.includes(planKey);
+              const isScheduled = scheduledCancellations.has(planKey);
+              const isIncluded = hasSpecialist && ['medical', 'legal', 'veterinary'].includes(planKey);
+              const isDisabled = plan.monthlyPrice === 0 || isActive || isIncluded || (activePlans.length >= 3 && !hasSpecialist);
+              
+              let buttonText = "Assinar";
+              let tooltipText = "";
+              
+              if (plan.monthlyPrice === 0) {
+                buttonText = "Começar Grátis";
+              } else if (isActive) {
+                buttonText = "Plano Ativo";
+                tooltipText = "Você já possui este plano";
+              } else if (isIncluded) {
+                buttonText = "Incluso";
+                tooltipText = "Incluso no seu plano Especialista";
+              } else if (activePlans.length >= 3 && !hasSpecialist && planKey !== 'specialist') {
+                buttonText = "Assinar";
+                tooltipText = "Limite de 3 planos atingido";
+              }
 
-              <CardHeader className="pb-4 sm:pb-6">
-                <h3 className="text-lg sm:text-xl font-bold mb-2">
-                  {plan.name}
-                </h3>
-                {plan.description && (
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-                    {plan.description}
-                  </p>
-                )}
-                <div className="mb-4 sm:mb-6">{getDisplayPrice(plan)}</div>
-              </CardHeader>
-
-              <CardContent className="flex flex-col flex-grow">
-                <ul className="space-y-2 sm:space-y-3 flex-grow mb-6">
-                  {plan.features.map((feature, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <Check className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0 mt-0.5" />
-                      <span className="text-xs sm:text-sm">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Button
-                  onClick={() => handleSubscribe(plan)}
-                  disabled={plan.monthlyPrice === 0 || currentPlan === key}
-                  className={`w-full font-semibold transition-smooth ${
-                    currentPlan === key
-                      ? "bg-muted text-muted-foreground cursor-not-allowed"
-                      : plan.popular
-                      ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
-                      : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+              return (
+                <Card
+                  key={key}
+                  className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
+                    plan.popular ? "ring-2 ring-primary" : ""
                   }`}
-                  size="lg"
                 >
-                  {currentPlan === key
-                    ? "Plano Atual"
-                    : plan.monthlyPrice === 0
-                    ? "Começar Grátis"
-                    : "Assinar"}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                  {plan.popular && (
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-primary text-primary-foreground rounded-full text-sm font-semibold flex items-center gap-1 shadow-glow whitespace-nowrap">
+                      <Sparkles className="w-3 h-3" />
+                      Mais Popular
+                    </div>
+                  )}
+
+                  {(isActive || isIncluded || isScheduled) && (
+                    <div className="absolute -top-3 right-4 px-3 py-1 bg-accent text-accent-foreground rounded-full text-xs font-semibold">
+                      {isActive ? "Ativo" : isIncluded ? "Incluso" : "Cancelamento agendado"}
+                    </div>
+                  )}
+
+                  <CardHeader className="pb-4 sm:pb-6">
+                    <h3 className="text-lg sm:text-xl font-bold mb-2">
+                      {plan.name}
+                    </h3>
+                    {plan.description && (
+                      <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
+                        {plan.description}
+                      </p>
+                    )}
+                    <div className="mb-4 sm:mb-6">{getDisplayPrice(plan)}</div>
+                  </CardHeader>
+
+                  <CardContent className="flex flex-col flex-grow">
+                    <ul className="space-y-2 sm:space-y-3 flex-grow mb-6">
+                      {plan.features.map((feature, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <Check className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0 mt-0.5" />
+                          <span className="text-xs sm:text-sm">{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <div className="relative group">
+                      <Button
+                        onClick={() => handleSubscribe(planKey, plan)}
+                        disabled={isDisabled}
+                        className={`w-full font-semibold transition-smooth ${
+                          isDisabled
+                            ? "bg-muted text-muted-foreground cursor-not-allowed"
+                            : plan.popular
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        }`}
+                        size="lg"
+                      >
+                        {buttonText}
+                      </Button>
+                      {tooltipText && (
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-popover text-popover-foreground text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                          {tooltipText}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
         </div>
 
         {/* Additional Info */}

@@ -65,13 +65,7 @@ export const SettingsModal = ({
   const [hasPendingCancellation, setHasPendingCancellation] = useState(false);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
 
-  const getPlanLabel = () => {
-    if (!subscriptions || subscriptions.length === 0) {
-      return 'Plano Gratuito';
-    }
-    const activePlan = subscriptions.find(s => s.status === 'active');
-    if (!activePlan) return 'Plano Gratuito';
-    
+  const getPlanLabel = (planType: string) => {
     const labels: Record<string, string> = {
       free: 'Gratuito',
       medical: 'Médico',
@@ -79,8 +73,11 @@ export const SettingsModal = ({
       veterinary: 'Veterinário',
       specialist: 'Especialista',
     };
-    return labels[activePlan.plan_type] || 'Plano Gratuito';
+    return labels[planType] || 'Plano Gratuito';
   };
+
+  const activePlans = subscriptions?.filter(s => s.status === 'active') || [];
+  const hasSpecialist = activePlans.some(s => s.plan_type === 'specialist');
 
   const handleUpdateName = async () => {
     if (!fullName.trim()) {
@@ -369,74 +366,88 @@ export const SettingsModal = ({
 
             <Separator />
 
-            {/* Plano atual */}
+            {/* Planos ativos */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Plano atual</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-4 rounded-lg bg-accent/50">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{getPlanLabel()}</p>
-                      {isPendingCancellation && (
-                        <Badge variant="secondary" className="bg-muted">
-                          Cancelamento agendado
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {isPendingCancellation
-                        ? `Ativo até ${currentSubscription?.cancel_at ? new Date(currentSubscription.cancel_at).toLocaleDateString('pt-BR') : ''}`
-                        : subscriptions?.find(s => s.status === 'active')
-                        ? 'Plano ativo'
-                        : 'Sem assinatura ativa'}
-                    </p>
-                  </div>
-                  {hasActiveSubscription && (
-                    <div className="flex flex-col items-end gap-2">
-                      {!isPendingCancellation && (
-                        hasPendingCancellation ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowResumeDialog(true)}
-                            className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
-                          >
-                            Retomar assinatura
-                          </Button>
-                        ) : (
-                          <button
-                            onClick={() => setShowCancelDialog(true)}
-                            className="text-sm text-destructive hover:underline"
-                          >
-                            Cancelar assinatura
-                          </button>
-                        )
-                      )}
-                    </div>
-                  )}
+              <h3 className="text-lg font-medium">Seus planos</h3>
+              
+              {hasSpecialist && (
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 mb-4">
+                  <p className="text-sm text-primary">
+                    Seu plano Especialista inclui acesso a Médico, Jurídico e Veterinário.
+                  </p>
                 </div>
+              )}
 
-                {/* Revert cancellation button */}
-                {isPendingCancellation && currentSubscription?.cancel_at && new Date() < new Date(currentSubscription.cancel_at) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowResumeDialog(true)}
-                    disabled={loadingRevert}
-                    className="w-full border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
-                  >
-                    {loadingRevert ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Processando...
-                      </>
-                    ) : (
-                      'Retomar assinatura'
-                    )}
-                  </Button>
-                )}
+              {activePlans.length === 0 ? (
+                <div className="p-4 rounded-lg bg-muted/50 text-center">
+                  <p className="text-sm text-muted-foreground">Você está no plano gratuito</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {activePlans.map((sub) => {
+                    const isPending = sub.status === 'pending_cancellation';
+                    return (
+                      <div key={sub.id} className="p-4 rounded-lg bg-accent/50 border border-border">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{getPlanLabel(sub.plan_type)}</p>
+                              {isPending && (
+                                <Badge variant="secondary" className="bg-muted">
+                                  Cancelamento agendado
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {isPending && sub.cancel_at
+                                ? `Ativo até ${new Date(sub.cancel_at).toLocaleDateString('pt-BR')}`
+                                : 'Plano ativo'}
+                            </p>
+                          </div>
+                          
+                          <div className="flex flex-col items-end gap-2">
+                            {!isPending ? (
+                              hasPendingCancellation && sub.id === currentSubscription?.id ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setShowResumeDialog(true);
+                                  }}
+                                  className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
+                                >
+                                  Retomar
+                                </Button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setShowCancelDialog(true);
+                                  }}
+                                  className="text-sm text-destructive hover:underline"
+                                >
+                                  Cancelar
+                                </button>
+                              )
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowResumeDialog(true)}
+                                className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
+                              >
+                                Retomar
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
-                {/* Add plan button */}
+              {/* Add plan button - only show if can add more plans */}
+              {!hasSpecialist && activePlans.length < 3 && (
                 <Button
                   variant="outline"
                   className="w-full"
@@ -448,7 +459,21 @@ export const SettingsModal = ({
                   <Plus className="h-4 w-4 mr-2" />
                   Adicionar plano
                 </Button>
-              </div>
+              )}
+              
+              {activePlans.length === 0 && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    navigate('/planos');
+                    onOpenChange(false);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Ver planos disponíveis
+                </Button>
+              )}
             </div>
 
             <Separator />

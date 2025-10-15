@@ -29,7 +29,8 @@ export interface Message {
 
 export interface UserSubscription {
   plan_type: 'free' | 'medical' | 'legal' | 'veterinary' | 'specialist';
-  status: 'active' | 'inactive' | 'cancelled';
+  status: 'active' | 'inactive' | 'cancelled' | 'scheduled_cancellation' | 'pending_cancellation';
+  cancel_at?: string;
 }
 
 const Dashboard = () => {
@@ -132,12 +133,12 @@ const Dashboard = () => {
       return;
     }
 
-    // Filter to include both active and pending_cancellation status
-    const filtered = (data || []).filter(sub => 
-      sub.status === 'active' || sub.status === 'pending_cancellation' as any
+    // Filter to include active and scheduled_cancellation status
+    const filtered = (data || []).filter((sub: any) => 
+      sub.status === 'active' || sub.status === 'scheduled_cancellation' || sub.status === 'pending_cancellation'
     );
 
-    setSubscriptions(filtered);
+    setSubscriptions(filtered as any);
   };
 
   const fetchMessages = async (conversationId: string) => {
