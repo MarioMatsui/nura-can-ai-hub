@@ -23,10 +23,11 @@ interface UserSubscription {
   id: string;
   user_id: string;
   plan_type: string;
-  status: "active" | "inactive" | "cancelled" | "expired" | "scheduled_cancellation";
+  status: "active" | "inactive" | "cancelled" | "expired" | "scheduled_cancellation" | "canceled" | "pending_cancellation";
   billing_period: string | null;
   started_at: string;
   expires_at: string | null;
+  cancel_at?: string | null;
 }
 
 interface UserData {
@@ -98,7 +99,24 @@ const UserManagement = () => {
       return <Badge variant="secondary">Sem Plano</Badge>;
     }
 
-    const activeSub = subscriptions.find(sub => sub.status === "active");
+    // Filter out canceled plans and plans with past cancellation dates
+    const activePlans = subscriptions.filter((sub) => {
+      // Exclude canceled or cancelled subscriptions
+      if (sub.status === 'canceled' || sub.status === 'cancelled') return false;
+      
+      // Exclude subscriptions with cancellation date in the past
+      if ((sub.status === 'pending_cancellation' || sub.status === 'scheduled_cancellation') && sub.cancel_at) {
+        return new Date(sub.cancel_at) > new Date();
+      }
+      
+      return true;
+    });
+
+    if (activePlans.length === 0) {
+      return <Badge variant="secondary">Sem Plano</Badge>;
+    }
+
+    const activeSub = activePlans.find(sub => sub.status === "active");
     if (activeSub) {
       const isExpired = activeSub.expires_at && new Date(activeSub.expires_at) < new Date();
       if (isExpired) {
@@ -107,13 +125,28 @@ const UserManagement = () => {
       return <Badge className="bg-primary text-primary-foreground">Ativo</Badge>;
     }
 
-    return <Badge variant="secondary">{subscriptions[0].status}</Badge>;
+    return <Badge variant="secondary">{activePlans[0].status}</Badge>;
   };
 
   const getPlanLabels = (subscriptions: UserSubscription[]) => {
     if (!subscriptions || subscriptions.length === 0) return "—";
     
-    return subscriptions
+    // Filter out canceled plans and plans with past cancellation dates
+    const activePlans = subscriptions.filter((sub) => {
+      // Exclude canceled or cancelled subscriptions
+      if (sub.status === 'canceled' || sub.status === 'cancelled') return false;
+      
+      // Exclude subscriptions with cancellation date in the past
+      if ((sub.status === 'pending_cancellation' || sub.status === 'scheduled_cancellation') && sub.cancel_at) {
+        return new Date(sub.cancel_at) > new Date();
+      }
+      
+      return true;
+    });
+
+    if (activePlans.length === 0) return "—";
+    
+    return activePlans
       .map(sub => {
         const labels: Record<string, string> = {
           free: "Gratuito",
