@@ -55,7 +55,7 @@ serve(async (req) => {
     
     const validToken = receivedToken === WEBHOOK_TOKEN;
     
-    // Debug mode: logar headers quando token falhar
+    // Debug mode: logar headers e retornar 200 quando token falhar
     if (!validToken && ALLOW_DEBUG) {
       try {
         const sampleHeaders: Record<string, string> = {};
@@ -73,20 +73,25 @@ serve(async (req) => {
       } catch (err) {
         console.error(`[cannapag][${requestId}] DEBUG error logging headers:`, err);
       }
+      
+      // Retornar 200 para não perder retentativas durante o debug
+      return new Response(JSON.stringify({ 
+        success: true, 
+        debug: true, 
+        message: 'received (invalid token)' 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
-    // Produção: bloquear tokens inválidos (exceto no modo debug)
-    if (!validToken && !ALLOW_DEBUG) {
+    // Produção: bloquear tokens inválidos
+    if (!validToken) {
       console.warn(`[cannapag][${requestId}] token=fail - Invalid token received (returning 401)`);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
-    }
-    
-    // Debug mode: aceitar mas logar warning
-    if (!validToken && ALLOW_DEBUG) {
-      console.warn(`[cannapag][${requestId}] token=fail - ALLOW_DEBUG=true, accepting webhook anyway`);
     }
 
     // Extrair campos do payload com fallbacks
