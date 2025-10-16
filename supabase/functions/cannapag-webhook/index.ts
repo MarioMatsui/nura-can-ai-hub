@@ -3,19 +3,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, http_cp_access_token, x-webhook-token',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, http_cp_access_token',
 };
 
-// Mapa de planos conforme documentação (usando enums do banco: medical, legal, veterinary, specialist, monthly, annual)
+// Mapa de planos conforme documentação
 const PLAN_MAP: Record<string, { type: string; billing: string }> = {
-  PLAN_MEDICO_MENSAL:       { type: "medical",     billing: "monthly" },
-  PLAN_JURIDICO_MENSAL:     { type: "legal",       billing: "monthly" },
-  PLAN_VETERINARIO_MENSAL:  { type: "veterinary",  billing: "monthly" },
-  PLAN_ESPECIALISTA_MENSAL: { type: "specialist",  billing: "monthly" },
-  PLAN_MEDICO_ANUAL:        { type: "medical",     billing: "annual"  },
-  PLAN_JURIDICO_ANUAL:      { type: "legal",       billing: "annual"  },
-  PLAN_VETERINARIO_ANUAL:   { type: "veterinary",  billing: "annual"  },
-  PLAN_ESPECIALISTA_ANUAL:  { type: "specialist",  billing: "annual"  },
+  PLAN_MEDICO_MENSAL:       { type: "medico",       billing: "mensal" },
+  PLAN_JURIDICO_MENSAL:     { type: "juridico",     billing: "mensal" },
+  PLAN_VETERINARIO_MENSAL:  { type: "veterinario",  billing: "mensal" },
+  PLAN_ESPECIALISTA_MENSAL: { type: "especialista", billing: "mensal" },
+  PLAN_MEDICO_ANUAL:        { type: "medico",       billing: "anual"  },
+  PLAN_JURIDICO_ANUAL:      { type: "juridico",     billing: "anual"  },
+  PLAN_VETERINARIO_ANUAL:   { type: "veterinario",  billing: "anual"  },
+  PLAN_ESPECIALISTA_ANUAL:  { type: "especialista", billing: "anual"  },
 };
 
 serve(async (req) => {
@@ -29,8 +29,6 @@ serve(async (req) => {
 
   try {
     const WEBHOOK_TOKEN = Deno.env.get('CANNAPAG_WEBHOOK_TOKEN');
-    const ALLOW_DEBUG = Deno.env.get('ALLOW_WEBHOOK_DEBUG') === 'true';
-    
     if (!WEBHOOK_TOKEN) {
       console.error(`[cannapag][${requestId}] CANNAPAG_WEBHOOK_TOKEN not configured`);
       return new Response(JSON.stringify({ error: 'Webhook token not configured' }), {
@@ -44,54 +42,12 @@ serve(async (req) => {
     const body = JSON.parse(rawBody);
     const data = body.data || {};
 
-    // Validar token de todos os formatos possíveis (case-insensitive)
-    const receivedToken = 
-      req.headers.get('HTTP_CP_ACCESS_TOKEN') ||
-      req.headers.get('http_cp_access_token') ||
-      req.headers.get('x-webhook-token') ||
-      req.headers.get('X-Webhook-Token') ||
-      req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
-      req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-    
+    // Validar token do header HTTP_CP_ACCESS_TOKEN
+    const receivedToken = req.headers.get('http_cp_access_token') || req.headers.get('HTTP_CP_ACCESS_TOKEN');
     const validToken = receivedToken === WEBHOOK_TOKEN;
     
-    // Debug mode: logar headers e retornar 200 quando token falhar
-    if (!validToken && ALLOW_DEBUG) {
-      try {
-        const sampleHeaders: Record<string, string> = {};
-        let i = 0;
-        for (const [key, value] of req.headers.entries()) {
-          if (i++ > 20) break;
-          // Não logar tokens/senhas
-          if (/authorization|token|password|secret/i.test(key)) {
-            sampleHeaders[key] = '[REDACTED]';
-          } else {
-            sampleHeaders[key] = value;
-          }
-        }
-        console.warn(`[cannapag][${requestId}] DEBUG token_invalid received_token=${receivedToken?.substring(0, 8)}... headers=`, JSON.stringify(sampleHeaders));
-      } catch (err) {
-        console.error(`[cannapag][${requestId}] DEBUG error logging headers:`, err);
-      }
-      
-      // Retornar 200 para não perder retentativas durante o debug
-      return new Response(JSON.stringify({ 
-        success: true, 
-        debug: true, 
-        message: 'received (invalid token)' 
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    
-    // Produção: bloquear tokens inválidos
     if (!validToken) {
-      console.warn(`[cannapag][${requestId}] token=fail - Invalid token received (returning 401)`);
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.warn(`[cannapag][${requestId}] token=fail - Invalid token received`);
     }
 
     // Extrair campos do payload com fallbacks
@@ -105,7 +61,7 @@ serve(async (req) => {
     const match = rawRef.match(/PLAN_[A-Z_]+$/);
     const reference = match ? match[0] : null;
 
-    console.log(`[cannapag][${requestId}] token=ok charge=${chargeId} email=${payerEmail} ref=${reference} status=${status} rawRef=${rawRef}`);
+    console.log(`[cannapag][${requestId}] token=${validToken ? 'ok' : 'fail'} charge=${chargeId} email=${payerEmail} ref=${reference} status=${status} rawRef=${rawRef}`);
 
     // Initialize Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -142,7 +98,7 @@ serve(async (req) => {
           reference: reference,
           external_reference: rawRef,
           payer_email: payerEmail,
-          valid_token: true,
+          valid_token: validToken,
           provider: 'cannapag',
           payload: body,
           processed: false,
@@ -175,7 +131,8 @@ serve(async (req) => {
       reference,
       payerEmail,
       chargeId,
-      body
+      body,
+      validToken
     );
 
     // Não espera o processamento - processa em background
@@ -212,7 +169,8 @@ async function processWebhookAsync(
   reference: string | null,
   payerEmail: string,
   chargeId: string,
-  payload: any
+  payload: any,
+  validToken: boolean
 ) {
   try {
     console.log(`[cannapag][${requestId}] Starting async processing`);
@@ -230,6 +188,15 @@ async function processWebhookAsync(
 
     if (!reference || !PLAN_MAP[reference]) {
       console.error(`[cannapag][${requestId}] Referência inválida: ${reference}`);
+      await supabase
+        .from('webhook_events')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', eventId);
+      return;
+    }
+
+    if (!validToken) {
+      console.warn(`[cannapag][${requestId}] Token inválido - não processando ativação`);
       await supabase
         .from('webhook_events')
         .update({ processed: true, processed_at: new Date().toISOString() })
@@ -310,13 +277,13 @@ async function processWebhookAsync(
 
     console.log(`[cannapag][${requestId}] Activating plan: ${planType} (${billingCycle})`);
 
-    if (planType === 'specialist') {
+    if (planType === 'especialista') {
       // Desativar planos individuais
       const { error: deactivateError } = await supabase
         .from('user_subscriptions')
         .update({ status: 'inactive' })
         .eq('user_id', user.id)
-        .in('plan_type', ['medical', 'legal', 'veterinary']);
+        .in('plan_type', ['medico', 'juridico', 'veterinario']);
 
       if (deactivateError) {
         console.error(`[cannapag][${requestId}] Error deactivating individual plans:`, deactivateError);
@@ -329,7 +296,7 @@ async function processWebhookAsync(
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('plan_type', 'specialist')
+        .eq('plan_type', 'especialista')
         .single();
 
       if (existingSub) {
@@ -349,7 +316,7 @@ async function processWebhookAsync(
           .from('user_subscriptions')
           .insert({
             user_id: user.id,
-            plan_type: 'specialist',
+            plan_type: 'especialista',
             status: 'active',
             billing_period: billingCycle,
             started_at: new Date().toISOString(),
@@ -364,7 +331,7 @@ async function processWebhookAsync(
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('plan_type', 'specialist')
+        .eq('plan_type', 'especialista')
         .eq('status', 'active')
         .single();
 
