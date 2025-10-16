@@ -6,16 +6,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, http_cp_access_token, x-webhook-token',
 };
 
-// Mapa de planos conforme documentação
+// Mapa de planos conforme documentação (usando enums do banco: medical, legal, veterinary, specialist, monthly, annual)
 const PLAN_MAP: Record<string, { type: string; billing: string }> = {
-  PLAN_MEDICO_MENSAL:       { type: "medico",       billing: "mensal" },
-  PLAN_JURIDICO_MENSAL:     { type: "juridico",     billing: "mensal" },
-  PLAN_VETERINARIO_MENSAL:  { type: "veterinario",  billing: "mensal" },
-  PLAN_ESPECIALISTA_MENSAL: { type: "especialista", billing: "mensal" },
-  PLAN_MEDICO_ANUAL:        { type: "medico",       billing: "anual"  },
-  PLAN_JURIDICO_ANUAL:      { type: "juridico",     billing: "anual"  },
-  PLAN_VETERINARIO_ANUAL:   { type: "veterinario",  billing: "anual"  },
-  PLAN_ESPECIALISTA_ANUAL:  { type: "especialista", billing: "anual"  },
+  PLAN_MEDICO_MENSAL:       { type: "medical",     billing: "monthly" },
+  PLAN_JURIDICO_MENSAL:     { type: "legal",       billing: "monthly" },
+  PLAN_VETERINARIO_MENSAL:  { type: "veterinary",  billing: "monthly" },
+  PLAN_ESPECIALISTA_MENSAL: { type: "specialist",  billing: "monthly" },
+  PLAN_MEDICO_ANUAL:        { type: "medical",     billing: "annual"  },
+  PLAN_JURIDICO_ANUAL:      { type: "legal",       billing: "annual"  },
+  PLAN_VETERINARIO_ANUAL:   { type: "veterinary",  billing: "annual"  },
+  PLAN_ESPECIALISTA_ANUAL:  { type: "specialist",  billing: "annual"  },
 };
 
 serve(async (req) => {
@@ -305,13 +305,13 @@ async function processWebhookAsync(
 
     console.log(`[cannapag][${requestId}] Activating plan: ${planType} (${billingCycle})`);
 
-    if (planType === 'especialista') {
+    if (planType === 'specialist') {
       // Desativar planos individuais
       const { error: deactivateError } = await supabase
         .from('user_subscriptions')
         .update({ status: 'inactive' })
         .eq('user_id', user.id)
-        .in('plan_type', ['medico', 'juridico', 'veterinario']);
+        .in('plan_type', ['medical', 'legal', 'veterinary']);
 
       if (deactivateError) {
         console.error(`[cannapag][${requestId}] Error deactivating individual plans:`, deactivateError);
@@ -324,7 +324,7 @@ async function processWebhookAsync(
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('plan_type', 'especialista')
+        .eq('plan_type', 'specialist')
         .single();
 
       if (existingSub) {
@@ -344,7 +344,7 @@ async function processWebhookAsync(
           .from('user_subscriptions')
           .insert({
             user_id: user.id,
-            plan_type: 'especialista',
+            plan_type: 'specialist',
             status: 'active',
             billing_period: billingCycle,
             started_at: new Date().toISOString(),
@@ -359,7 +359,7 @@ async function processWebhookAsync(
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('plan_type', 'especialista')
+        .eq('plan_type', 'specialist')
         .eq('status', 'active')
         .single();
 
