@@ -29,6 +29,8 @@ serve(async (req) => {
 
   try {
     const WEBHOOK_TOKEN = Deno.env.get('CANNAPAG_WEBHOOK_TOKEN');
+    const ALLOW_DEBUG = Deno.env.get('ALLOW_WEBHOOK_DEBUG') === 'true';
+    
     if (!WEBHOOK_TOKEN) {
       console.error(`[cannapag][${requestId}] CANNAPAG_WEBHOOK_TOKEN not configured`);
       return new Response(JSON.stringify({ error: 'Webhook token not configured' }), {
@@ -42,7 +44,7 @@ serve(async (req) => {
     const body = JSON.parse(rawBody);
     const data = body.data || {};
 
-    // Validar token de todos os formatos possíveis
+    // Validar token de todos os formatos possíveis (case-insensitive)
     const receivedToken = 
       req.headers.get('HTTP_CP_ACCESS_TOKEN') ||
       req.headers.get('http_cp_access_token') ||
@@ -53,12 +55,38 @@ serve(async (req) => {
     
     const validToken = receivedToken === WEBHOOK_TOKEN;
     
-    if (!validToken) {
-      console.warn(`[cannapag][${requestId}] token=fail - Invalid token received`);
+    // Debug mode: logar headers quando token falhar
+    if (!validToken && ALLOW_DEBUG) {
+      try {
+        const sampleHeaders: Record<string, string> = {};
+        let i = 0;
+        for (const [key, value] of req.headers.entries()) {
+          if (i++ > 20) break;
+          // Não logar tokens/senhas
+          if (/authorization|token|password|secret/i.test(key)) {
+            sampleHeaders[key] = '[REDACTED]';
+          } else {
+            sampleHeaders[key] = value;
+          }
+        }
+        console.warn(`[cannapag][${requestId}] DEBUG token_invalid received_token=${receivedToken?.substring(0, 8)}... headers=`, JSON.stringify(sampleHeaders));
+      } catch (err) {
+        console.error(`[cannapag][${requestId}] DEBUG error logging headers:`, err);
+      }
+    }
+    
+    // Produção: bloquear tokens inválidos (exceto no modo debug)
+    if (!validToken && !ALLOW_DEBUG) {
+      console.warn(`[cannapag][${requestId}] token=fail - Invalid token received (returning 401)`);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+    
+    // Debug mode: aceitar mas logar warning
+    if (!validToken && ALLOW_DEBUG) {
+      console.warn(`[cannapag][${requestId}] token=fail - ALLOW_DEBUG=true, accepting webhook anyway`);
     }
 
     // Extrair campos do payload com fallbacks
