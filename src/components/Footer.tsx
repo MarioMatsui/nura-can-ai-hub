@@ -1,3 +1,5 @@
+import logo from "@/assets/logo.png";
+
 const Footer = () => {
   return (
     <footer className="bg-muted/30 border-t border-border py-12 sm:py-16">
@@ -5,13 +7,14 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12 mb-12">
           {/* Brand */}
           <div>
-            <div className="mb-4">
+            <div className="flex items-center gap-2 mb-4">
+              <img src={logo} alt="NuraCan AI" className="h-8 w-auto" />
               <span className="text-xl font-bold">
                 Nura<span className="text-primary">Can</span> AI
               </span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              IA especializada em C/\NN/\BIS medicinal para profissionais de saúde e direito.
+              IA especializada, para profissionais da saúde e direito.
             </p>
           </div>
 
