@@ -124,11 +124,9 @@ export const ChatSidebar = ({
           {state === "expanded" ? (
             <>
               <div className="flex items-center justify-between mb-2">
-                <img 
-                  src="/src/assets/logo.png" 
-                  alt="Nura AI" 
-                  className="h-8"
-                />
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border-2 border-primary">
+                  <span className="text-2xl font-bold text-primary">N</span>
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
