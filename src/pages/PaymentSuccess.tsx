@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { CheckCircle, ArrowRight } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { CheckCircle, ArrowRight } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
@@ -14,7 +14,7 @@ const PaymentSuccess = () => {
   }, []);
 
   const handleGoToApp = () => {
-    navigate('/app');
+    navigate("/app");
   };
 
   return (
@@ -23,7 +23,6 @@ const PaymentSuccess = () => {
         {/* Logo */}
         <div className="text-center mb-8 animate-fade-in">
           <div className="inline-flex items-center gap-3 mb-6">
-            <img src={logo} alt="NuraCan AI" className="h-12 w-auto" />
             <span className="text-3xl font-bold">
               Nura<span className="text-primary">Can</span> AI
             </span>
@@ -39,10 +38,8 @@ const PaymentSuccess = () => {
             </div>
 
             {/* Main Message */}
-            <h1 className="text-3xl sm:text-4xl font-bold mb-4">
-              Pagamento Confirmado!
-            </h1>
-            
+            <h1 className="text-3xl sm:text-4xl font-bold mb-4">Pagamento Confirmado!</h1>
+
             <p className="text-lg text-muted-foreground mb-6 max-w-md mx-auto">
               Sua assinatura foi ativada com sucesso. Agora você tem acesso completo aos recursos da plataforma.
             </p>
@@ -75,7 +72,8 @@ const PaymentSuccess = () => {
 
             {/* Additional Info */}
             <p className="text-sm text-muted-foreground mt-6">
-              Um e-mail de confirmação foi enviado para o seu endereço cadastrado com todos os detalhes da sua assinatura.
+              Um e-mail de confirmação foi enviado para o seu endereço cadastrado com todos os detalhes da sua
+              assinatura.
             </p>
           </CardContent>
         </Card>
@@ -83,7 +81,7 @@ const PaymentSuccess = () => {
         {/* Support Section */}
         <div className="text-center mt-8 text-sm text-muted-foreground animate-fade-in">
           <p>
-            Precisa de ajuda?{' '}
+            Precisa de ajuda?{" "}
             <a
               href="https://wa.me/5511999999999"
               target="_blank"
