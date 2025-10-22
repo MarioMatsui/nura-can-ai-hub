@@ -10,17 +10,17 @@ const features = [
   {
     icon: Heart,
     title: "Assistência Veterinária com IA",
-    description: "Orientações para tratamentos veterinários com C.a.n.n.a.b.i.s medicinal",
+    description: "Orientações para tratamentos veterinários com C.a.n.n.a.b.!.s medicinal",
   },
   {
     icon: Scale,
     title: "Assistência Jurídica com IA",
-    description: "Informações legais e regulatórias sobre C.a.n.n.a.b.i.s medicinal",
+    description: "Informações legais e regulatórias sobre C.a.n.n.a.b.!.s medicinal",
   },
   {
     icon: MessageSquare,
     title: "Chat Inteligente Especializado",
-    description: "Conversas contextualizadas com IA treinada em C.a.n.n.a.b.i.s medicinal",
+    description: "Conversas contextualizadas com IA treinada em C.a.n.n.a.b.!.s medicinal",
   },
   {
     icon: Laptop,
