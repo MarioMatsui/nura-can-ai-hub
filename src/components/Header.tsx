@@ -50,7 +50,6 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
             onClick={() => navigate("/")}
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-smooth"
           >
-            <img src={logo} alt="NuraCan AI" className="h-8 sm:h-10 w-auto" />
             <span className="text-xl sm:text-2xl font-bold text-foreground">
               Nura<span className="text-primary">Can</span> AI
             </span>
