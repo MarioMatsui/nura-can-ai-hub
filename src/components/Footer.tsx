@@ -8,7 +8,6 @@ const Footer = () => {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <img src={logo} alt="NuraCan AI" className="h-8 w-auto" />
               <span className="text-xl font-bold">
                 Nura<span className="text-primary">Can</span> AI
               </span>
