@@ -49,9 +49,6 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
             onClick={() => navigate("/")}
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-smooth"
           >
-            <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-primary/10 border-2 border-primary">
-              <span className="text-2xl sm:text-3xl font-bold text-primary">N</span>
-            </div>
             <span className="text-xl sm:text-2xl font-bold text-foreground">
               Nura<span className="text-primary">Can</span> AI
             </span>
