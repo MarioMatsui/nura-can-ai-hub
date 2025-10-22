@@ -12,7 +12,7 @@ const faqItems = [
   {
     question: "O que embasa o conhecimento dos seus modelos?",
     answer:
-      "Nossos modelos são munidos com os melhores e mais completos artigos e materiais das mais diversas áreas do ramo medicinal da C.a.n.n.a.b.i.s. Utilizamos publicações peer-reviewed, estudos científicos atualizados e guidelines clínicos reconhecidos internacionalmente.",
+      "Nossos modelos são munidos com os melhores e mais completos artigos e materiais das mais diversas áreas do ramo medicinal da C.a.n.n.a. Utilizamos publicações peer-reviewed, estudos científicos atualizados e guidelines clínicos reconhecidos internacionalmente.",
   },
   {
     question: "Funciona no celular?",
@@ -22,7 +22,7 @@ const faqItems = [
   {
     question: "Os modelos oferecem dicas de compras ou como conseguir produtos ilegais?",
     answer:
-      "NÃO! Nossa plataforma é voltada para dar suporte ao estudo da C.a.n.n.a.b.i.s, principalmente voltado para o mercado profissional. Respeitamos todas as legislações vigentes e promovemos apenas o uso legal e medicinal da C.a.n.n.a.b.i.s.",
+      "NÃO! Nossa plataforma é voltada para dar suporte ao estudo da C.a.n.n.a, principalmente voltado para o mercado profissional. Respeitamos todas as legislações vigentes e promovemos apenas o uso legal e medicinal.",
   },
 ];
 
