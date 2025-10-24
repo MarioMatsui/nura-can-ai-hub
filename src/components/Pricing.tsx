@@ -304,7 +304,14 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               <span className={`text-xl font-bold transition-all ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
                 Anual
               </span>
-              <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30 font-semibold">
+              <Badge 
+                variant="secondary" 
+                className={`font-semibold transition-all ${
+                  isAnnual 
+                    ? "bg-primary/20 text-primary border-primary/30" 
+                    : "bg-muted-foreground/20 text-muted-foreground border-muted-foreground/30"
+                }`}
+              >
                 -17%
               </Badge>
             </div>
