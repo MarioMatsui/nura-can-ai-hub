@@ -51,16 +51,16 @@ export const UserProfileHeader = ({
 
   const getPlanLabel = () => {
     if (!subscriptions || subscriptions.length === 0) {
-      return 'Plano Gratuito';
+      return 'Gratuito';
     }
     
-    // Find active plan or scheduled cancellation within valid period
-    const activePlan = subscriptions.find(s => 
+    // Find all active plans or scheduled cancellation within valid period
+    const activePlans = subscriptions.filter(s => 
       s.status === 'active' || 
       (s.status === 'scheduled_cancellation' && s.cancel_at && new Date(s.cancel_at) > new Date())
     );
     
-    if (!activePlan) return 'Plano Gratuito';
+    if (activePlans.length === 0) return 'Gratuito';
     
     const labels: Record<string, string> = {
       free: 'Gratuito',
@@ -69,7 +69,23 @@ export const UserProfileHeader = ({
       veterinary: 'Veterinário',
       specialist: 'Especialista',
     };
-    return labels[activePlan.plan_type] || 'Plano Gratuito';
+    
+    // Get all plan names
+    const planNames = activePlans
+      .map(p => labels[p.plan_type] || 'Gratuito')
+      .filter(name => name !== 'Gratuito'); // Remove "Gratuito" from the list
+    
+    if (planNames.length === 0) return 'Gratuito';
+    
+    // Join with commas
+    const plansText = planNames.join(', ');
+    
+    // Truncate if too long (max ~25 characters to fit in one line)
+    if (plansText.length > 25) {
+      return plansText.substring(0, 22) + '...';
+    }
+    
+    return plansText;
   };
 
   if (state === 'collapsed') {
