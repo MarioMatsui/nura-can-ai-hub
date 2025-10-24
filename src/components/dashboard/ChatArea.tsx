@@ -519,23 +519,44 @@ export const ChatArea = ({
             </div>
           )}
           <div className="flex gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,.pdf,.txt,.doc,.docx"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading || isProcessing}
-              className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
-            >
-              <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
+            <div className="relative">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.txt,.doc,.docx"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  if (selectedModel === 'generic') {
+                    toast({
+                      title: "Recurso bloqueado",
+                      description: "Envio de documentos não está disponível no plano gratuito. Faça upgrade para desbloquear.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  fileInputRef.current?.click();
+                }}
+                disabled={isUploading || isProcessing || selectedModel === 'generic'}
+                className={cn(
+                  "h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0",
+                  selectedModel === 'generic' && "opacity-50 cursor-not-allowed"
+                )}
+                title={selectedModel === 'generic' ? "Disponível apenas em planos pagos" : "Anexar documento"}
+              >
+                <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
+              </Button>
+              {selectedModel === 'generic' && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <Lock className="h-3 w-3 text-muted-foreground" />
+                </div>
+              )}
+            </div>
             <Textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
