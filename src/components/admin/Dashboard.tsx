@@ -69,16 +69,14 @@ const Dashboard = () => {
       {/* Filtros */}
       <Card>
         <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-          <CardDescription>
-            Configure os filtros para visualizar os dados do dashboard
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Período */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Período</label>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <CardTitle>Filtros</CardTitle>
+              <CardDescription>
+                Configure os filtros para visualizar os dados do dashboard
+              </CardDescription>
+            </div>
+            <div className="w-full md:w-64">
               <Select value={periodPreset} onValueChange={handlePresetChange}>
                 <SelectTrigger>
                   <SelectValue />
@@ -94,6 +92,10 @@ const Dashboard = () => {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* Data custom */}
             {showCustomDate && (
