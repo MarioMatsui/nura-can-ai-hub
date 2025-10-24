@@ -75,14 +75,14 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
             planAmount = stripeData.items.data[0].price.unit_amount;
           }
           
-          // Verificar se há desconto aplicado
+          // Verificar se há desconto aplicado (o discount fica no root do objeto subscription)
           if (stripeData.discount?.coupon) {
             const coupon = stripeData.discount.coupon;
             if (coupon.percent_off) {
               // Desconto percentual
               planAmount = planAmount * (1 - coupon.percent_off / 100);
             } else if (coupon.amount_off) {
-              // Desconto em valor fixo
+              // Desconto em valor fixo (já vem em centavos)
               planAmount = Math.max(0, planAmount - coupon.amount_off);
             }
           }
