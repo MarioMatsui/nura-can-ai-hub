@@ -95,7 +95,7 @@ serve(async (req) => {
             cancellation_reason: 'upgrade_para_especialista',
             status: 'pending',
             effective_cancel_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            provider: 'cannapag',
+            provider: 'stripe',
           });
 
         if (requestError) {

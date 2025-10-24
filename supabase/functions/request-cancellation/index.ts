@@ -82,7 +82,7 @@ serve(async (req) => {
       .insert({
         user_id: user.id,
         subscription_id: subscription.id,
-        provider: "cannapag",
+        provider: "stripe",
         provider_subscription_id: subscription.id,
         plan_code: subscription.plan_type,
         plan_type_requested: subscription.plan_type,
