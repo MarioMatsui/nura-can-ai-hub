@@ -1,17 +1,63 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, ArrowRight } from "lucide-react";
+import { CheckCircle, ArrowRight, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import logo from "@/assets/logo.png";
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [planActivated, setPlanActivated] = useState(false);
 
   useEffect(() => {
     // Scroll to top on mount
     window.scrollTo(0, 0);
-  }, []);
+    
+    // Wait for webhook to process and update user_plans
+    const checkPlanActivation = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/auth/login");
+        return;
+      }
+
+      // Poll for plan activation (max 10 seconds)
+      let attempts = 0;
+      const maxAttempts = 20;
+      
+      const checkInterval = setInterval(async () => {
+        attempts++;
+        
+        const { data: userPlan } = await supabase
+          .from('user_plans')
+          .select('plan_type, status')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (userPlan && userPlan.status === 'active' && userPlan.plan_type !== 'free') {
+          setPlanActivated(true);
+          setLoading(false);
+          clearInterval(checkInterval);
+        } else if (attempts >= maxAttempts) {
+          // Timeout - still show success but notify about delay
+          setLoading(false);
+          clearInterval(checkInterval);
+          toast({
+            title: "Processando pagamento",
+            description: "Seu pagamento está sendo processado. Seu plano será ativado em alguns instantes.",
+          });
+        }
+      }, 500);
+
+      return () => clearInterval(checkInterval);
+    };
+
+    checkPlanActivation();
+  }, [navigate, toast]);
 
   const handleGoToApp = () => {
     navigate("/app");
@@ -32,6 +78,13 @@ const PaymentSuccess = () => {
         {/* Success Card */}
         <Card className="gradient-card border-primary/20 shadow-glow animate-scale-in">
           <CardContent className="p-8 sm:p-12 text-center">
+            {loading ? (
+              <div className="py-12">
+                <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-primary" />
+                <p className="text-lg text-muted-foreground">Confirmando sua assinatura...</p>
+              </div>
+            ) : (
+              <>
             {/* Success Icon */}
             <div className="w-20 h-20 mx-auto rounded-full bg-green-500/10 flex items-center justify-center mb-6 animate-pulse">
               <CheckCircle className="w-12 h-12 text-green-500" />
@@ -75,6 +128,8 @@ const PaymentSuccess = () => {
               Um e-mail de confirmação foi enviado para o seu endereço cadastrado com todos os detalhes da sua
               assinatura.
             </p>
+            </>
+            )}
           </CardContent>
         </Card>
 

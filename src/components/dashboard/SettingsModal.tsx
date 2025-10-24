@@ -69,6 +69,10 @@ export const SettingsModal = ({
   const getPlanLabel = (planType: string) => {
     const labels: Record<string, string> = {
       free: 'Gratuito',
+      medico: 'Médico',
+      juridico: 'Jurídico',
+      veterinario: 'Veterinário',
+      especialista: 'Especialista',
       medical: 'Médico',
       legal: 'Jurídico',
       veterinary: 'Veterinário',
@@ -77,20 +81,58 @@ export const SettingsModal = ({
     return labels[planType] || 'Plano Gratuito';
   };
 
-  const activePlans = subscriptions?.filter(s => {
-    // Exclude canceled subscriptions
-    if (s.status === 'canceled') return false;
-    
-    // Exclude subscriptions with cancellation date in the past
-    if ((s.status === 'pending_cancellation' || s.status === 'scheduled_cancellation') && s.cancel_at) {
-      return new Date(s.cancel_at) > new Date();
+  const getStatusBadge = (status: string, cancelAtPeriodEnd: boolean) => {
+    if (cancelAtPeriodEnd) {
+      return <Badge variant="outline" className="border-yellow-500 text-yellow-600">Cancelamento Programado</Badge>;
     }
     
-    return s.status === 'active' || s.status === 'pending_cancellation' || s.status === 'scheduled_cancellation';
-  }) || [];
-  const hasSpecialist = activePlans.some(s => 
-    s.plan_type === 'specialist' && s.status === 'active'
-  );
+    const statusMap: Record<string, { label: string; variant: 'default' | 'destructive' | 'secondary' | 'outline' }> = {
+      active: { label: 'Ativo', variant: 'default' },
+      trialing: { label: 'Período de teste', variant: 'secondary' },
+      past_due: { label: 'Pagamento pendente', variant: 'destructive' },
+      canceled: { label: 'Cancelado', variant: 'outline' },
+      incomplete: { label: 'Incompleto', variant: 'destructive' },
+      inactive: { label: 'Inativo', variant: 'outline' },
+    };
+    
+    const statusInfo = statusMap[status] || { label: status, variant: 'outline' as const };
+    return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>;
+  };
+
+  const activePlans = subscriptions?.filter(s => s.status === 'active' || s.status === 'scheduled_cancellation') || [];
+  const currentPlan = activePlans[0]; // Since user_plans is one record per user
+  
+  const handleManageSubscription = async () => {
+    if (!currentPlan || !(currentPlan as any).stripe_customer_id) {
+      toast({
+        title: 'Erro',
+        description: 'Informações de assinatura não encontradas',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('create-portal-session', {
+        body: {
+          stripe_customer_id: (currentPlan as any).stripe_customer_id,
+          return_url: window.location.href,
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.url) throw new Error("URL do portal não retornada");
+
+      window.location.href = data.url;
+    } catch (error: any) {
+      console.error('Erro ao abrir portal:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Não foi possível abrir o portal de gerenciamento',
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleUpdateName = async () => {
     if (!fullName.trim()) {
@@ -399,85 +441,83 @@ export const SettingsModal = ({
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Seus planos</h3>
 
-              {activePlans.length === 0 ? (
-                <div className="p-4 rounded-lg bg-muted/50 text-center">
+              {!currentPlan ? (
+                <div className="p-6 rounded-lg bg-muted/50 text-center space-y-4">
                   <p className="text-sm text-muted-foreground">Você está no plano gratuito</p>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      navigate('/planos');
+                      onOpenChange(false);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ver planos disponíveis
+                  </Button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {activePlans.map((sub) => {
-                    const isScheduledCancellation = sub.status === 'scheduled_cancellation';
-                    return (
-                      <div key={sub.id} className="p-4 rounded-lg bg-accent/50 border border-border">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium">{getPlanLabel(sub.plan_type)}</p>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {isScheduledCancellation && sub.cancel_at
-                                ? `Ativo até ${new Date(sub.cancel_at).toLocaleDateString('pt-BR')}`
-                                : 'Plano ativo'}
-                            </p>
-                          </div>
-                          
-                          <div className="flex flex-col items-end gap-2">
-                            {isScheduledCancellation ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedSubscriptionId(sub.id);
-                                  setShowResumeDialog(true);
-                                }}
-                                className="border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/20"
-                              >
-                                Retomar
-                              </Button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setSelectedSubscriptionId(sub.id);
-                                  setShowCancelDialog(true);
-                                }}
-                                className="text-sm text-destructive hover:underline"
-                              >
-                                Cancelar
-                              </button>
-                            )}
-                          </div>
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-accent/50 border border-border space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="font-medium text-lg">{getPlanLabel(currentPlan.plan_type)}</p>
+                          {getStatusBadge((currentPlan as any).status || 'active', (currentPlan as any).cancel_at_period_end || false)}
                         </div>
+                        {(currentPlan as any).billing_cycle && (
+                          <p className="text-sm text-muted-foreground">
+                            Periodicidade: <span className="font-medium capitalize">{(currentPlan as any).billing_cycle}</span>
+                          </p>
+                        )}
+                        {currentPlan.cancel_at && (
+                          <p className="text-sm text-muted-foreground">
+                            {(currentPlan as any).cancel_at_period_end 
+                              ? `Ativo até ${new Date(currentPlan.cancel_at).toLocaleDateString('pt-BR')}`
+                              : `Próxima cobrança: ${new Date(currentPlan.cancel_at).toLocaleDateString('pt-BR')}`
+                            }
+                          </p>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
 
-              {/* Add plan button - only show if can add more plans */}
-              {activePlans.length < 3 && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    navigate('/planos');
-                    onOpenChange(false);
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar plano
-                </Button>
-              )}
-              
-              {activePlans.length === 0 && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    navigate('/planos');
-                    onOpenChange(false);
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Ver planos disponíveis
-                </Button>
+                    {(currentPlan as any).status === 'past_due' && (
+                      <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                        <p className="text-sm text-destructive">
+                          ⚠️ Pagamento pendente. Clique em <strong>Gerenciar Assinatura</strong> para regularizar.
+                        </p>
+                      </div>
+                    )}
+
+                    {(currentPlan as any).status === 'incomplete' && (
+                      <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                        <p className="text-sm text-destructive">
+                          Finalize o pagamento para ativar sua assinatura.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        navigate('/planos');
+                        onOpenChange(false);
+                      }}
+                    >
+                      Ver planos disponíveis
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={handleManageSubscription}
+                      className="gap-2"
+                    >
+                      <CreditCard className="h-4 w-4" />
+                      Gerenciar assinatura
+                    </Button>
+                  </div>
+                </div>
               )}
             </div>
 

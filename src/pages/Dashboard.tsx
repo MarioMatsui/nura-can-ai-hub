@@ -139,21 +139,29 @@ const Dashboard = () => {
 
   const fetchSubscriptions = async (userId: string) => {
     const { data, error } = await supabase
-      .from('user_subscriptions')
-      .select('id, plan_type, status, cancel_at, user_id')
-      .eq('user_id', userId);
+      .from('user_plans')
+      .select('plan_type, status, current_period_end, cancel_at_period_end, stripe_customer_id, billing_cycle')
+      .eq('user_id', userId)
+      .single();
 
     if (error) {
-      console.error('Error fetching subscriptions:', error);
+      console.error('Error fetching user plan:', error);
+      setSubscriptions([]);
       return;
     }
 
-    // Filter to include active and scheduled_cancellation status
-    const filtered = (data || []).filter((sub: any) => 
-      sub.status === 'active' || sub.status === 'scheduled_cancellation' || sub.status === 'pending_cancellation'
-    );
-
-    setSubscriptions(filtered as any);
+    // Map user_plans to subscriptions format for compatibility
+    if (data && data.status === 'active') {
+      setSubscriptions([{
+        plan_type: data.plan_type,
+        status: data.cancel_at_period_end ? 'scheduled_cancellation' : 'active',
+        cancel_at: data.current_period_end,
+        stripe_customer_id: data.stripe_customer_id,
+        billing_cycle: data.billing_cycle,
+      }] as any);
+    } else {
+      setSubscriptions([]);
+    }
   };
 
   const fetchMessages = async (conversationId: string) => {

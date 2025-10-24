@@ -114,12 +114,24 @@ export const ChatArea = ({
   const hasAccess = (modelType: ModelType): boolean => {
     if (modelType === 'generic') return true;
     
-    // Check for specific model type plan (active or scheduled cancellation within valid period)
+    // Map medical/legal/veterinary/specialist to medico/juridico/veterinario/especialista
+    const planTypeMap: Record<string, string> = {
+      'medical': 'medico',
+      'legal': 'juridico',
+      'veterinary': 'veterinario',
+      'specialist': 'especialista',
+    };
+    
+    const mappedType = planTypeMap[modelType] || modelType;
+    
+    // Check for specific model type plan or specialist (which has access to all)
     return subscriptions.some(
-      sub => sub.plan_type === modelType && (
-        sub.status === 'active' ||
-        (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date())
-      )
+      sub => {
+        const planMatch = sub.plan_type === mappedType || (sub.plan_type as string) === 'especialista';
+        const statusValid = sub.status === 'active' || 
+          (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date());
+        return planMatch && statusValid;
+      }
     );
   };
 
@@ -258,17 +270,36 @@ export const ChatArea = ({
     { type: 'specialist', label: 'Especialista', description: 'Acesso completo a todas as áreas', icon: GraduationCap },
   ];
 
+  // Map plan types for comparison
+  const planTypeMap: Record<string, ModelType> = {
+    'medico': 'medical',
+    'juridico': 'legal',
+    'veterinario': 'veterinary',
+    'especialista': 'specialist',
+  };
+
   const userName = profile?.full_name?.split(' ')[0] || 'Doutor(a)';
   const selectedModelData = models.find(m => m.type === selectedModel);
   const SelectedIcon = selectedModelData?.icon || Sparkles;
   
   // Check if user has any active paid subscription (including scheduled cancellations within valid period)
   const hasActivePaidPlan = subscriptions.some(
-    sub => sub.plan_type !== 'free' && (
-      sub.status === 'active' ||
+    sub => {
+      const isPaid = sub.plan_type !== 'free' && (sub.plan_type as string) !== 'generic';
+      const statusValid = sub.status === 'active' || 
+        (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date());
+      return isPaid && statusValid;
+    }
+  );
+
+  // Get user's subscribed models
+  const subscribedModels = subscriptions
+    .filter(sub => 
+      sub.status === 'active' || 
       (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date())
     )
-  );
+    .map(sub => planTypeMap[sub.plan_type] || sub.plan_type)
+    .filter(Boolean);
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
