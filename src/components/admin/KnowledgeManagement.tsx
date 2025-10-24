@@ -66,8 +66,8 @@ const KnowledgeManagement = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.txt')) {
-      toast.error("Por favor, envie apenas arquivos TXT.");
+    if (!file.name.endsWith('.txt') && !file.name.endsWith('.md')) {
+      toast.error("Por favor, envie apenas arquivos TXT ou MD.");
       e.target.value = '';
       return;
     }
@@ -210,7 +210,7 @@ const KnowledgeManagement = () => {
               <Input
                 id="file"
                 type="file"
-                accept=".txt"
+                accept=".txt,.md"
                 onChange={handleFileUpload}
               />
               {fileName && (
