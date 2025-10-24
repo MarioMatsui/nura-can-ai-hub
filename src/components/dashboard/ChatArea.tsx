@@ -127,6 +127,7 @@ export const ChatArea = ({
   }, [messages, isProcessing]);
 
   const hasAccess = (modelType: ModelType): boolean => {
+    // Generic model is always available for everyone
     if (modelType === 'generic') return true;
     
     // Map medical/legal/veterinary/specialist to medico/juridico/veterinario/especialista
@@ -142,10 +143,20 @@ export const ChatArea = ({
     // Check for specific model type plan or specialist (which has access to all)
     return subscriptions.some(
       sub => {
+        // Free plan only has access to generic
+        if ((sub.plan_type as string) === 'free') return false;
+        
         const planMatch = sub.plan_type === mappedType || (sub.plan_type as string) === 'especialista';
-        const statusValid = sub.status === 'active' || 
-          (sub.status === 'scheduled_cancellation' && sub.cancel_at && new Date(sub.cancel_at) > new Date());
-        return planMatch && statusValid;
+        
+        // Active plans have access
+        if (sub.status === 'active' && planMatch) return true;
+        
+        // Scheduled cancellation still has access until cancel_at date
+        if (sub.status === 'scheduled_cancellation' && planMatch && sub.cancel_at) {
+          return new Date(sub.cancel_at) > new Date();
+        }
+        
+        return false;
       }
     );
   };

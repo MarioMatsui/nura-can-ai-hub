@@ -169,15 +169,36 @@ const Dashboard = () => {
       const mappedPlanType = planTypeMap[data.plan_type] || 'free';
       console.log('[Dashboard] Mapping plan type:', data.plan_type, '->', mappedPlanType);
       
-      setSubscriptions([{
-        plan_type: mappedPlanType,
-        status: data.cancel_at_period_end ? 'scheduled_cancellation' : 'active',
-        cancel_at: data.current_period_end,
-        stripe_customer_id: data.stripe_customer_id,
-        billing_cycle: data.billing_cycle,
-      }] as any);
+      // Check if plan should still be active (not past cancellation date)
+      const isCanceled = data.cancel_at_period_end && data.current_period_end && new Date(data.current_period_end) < new Date();
+      
+      if (!isCanceled) {
+        setSubscriptions([{
+          plan_type: mappedPlanType,
+          status: data.cancel_at_period_end ? 'scheduled_cancellation' : 'active',
+          cancel_at: data.current_period_end,
+          stripe_customer_id: data.stripe_customer_id,
+          billing_cycle: data.billing_cycle,
+        }] as any);
+      } else {
+        // Plan is canceled and past due, fallback to free
+        setSubscriptions([{
+          plan_type: 'free',
+          status: 'active',
+          cancel_at: null,
+          stripe_customer_id: null,
+          billing_cycle: null,
+        }] as any);
+      }
     } else {
-      setSubscriptions([]);
+      // No active plan, fallback to free
+      setSubscriptions([{
+        plan_type: 'free',
+        status: 'active',
+        cancel_at: null,
+        stripe_customer_id: null,
+        billing_cycle: null,
+      }] as any);
     }
   };
 
