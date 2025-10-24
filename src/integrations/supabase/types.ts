@@ -643,6 +643,57 @@ export type Database = {
         }
         Relationships: []
       }
+      user_plans: {
+        Row: {
+          billing_cycle:
+            | Database["public"]["Enums"]["billing_cycle_enum"]
+            | null
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          id: string
+          plan_type: Database["public"]["Enums"]["plan_type_enum"]
+          raw: Json | null
+          status: Database["public"]["Enums"]["plan_status_enum"]
+          stripe_customer_id: string | null
+          subscription_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billing_cycle?:
+            | Database["public"]["Enums"]["billing_cycle_enum"]
+            | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          id?: string
+          plan_type?: Database["public"]["Enums"]["plan_type_enum"]
+          raw?: Json | null
+          status?: Database["public"]["Enums"]["plan_status_enum"]
+          stripe_customer_id?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billing_cycle?:
+            | Database["public"]["Enums"]["billing_cycle_enum"]
+            | null
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          id?: string
+          plan_type?: Database["public"]["Enums"]["plan_type_enum"]
+          raw?: Json | null
+          status?: Database["public"]["Enums"]["plan_status_enum"]
+          stripe_customer_id?: string | null
+          subscription_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -762,72 +813,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      binary_quantize: {
-        Args: { "": string } | { "": unknown }
-        Returns: unknown
-      }
-      cleanup_old_webhooks: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      halfvec_avg: {
-        Args: { "": number[] }
-        Returns: unknown
-      }
-      halfvec_out: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      halfvec_send: {
-        Args: { "": unknown }
-        Returns: string
-      }
-      halfvec_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
-      }
+      cleanup_old_webhooks: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
-      }
-      hnsw_bit_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnsw_halfvec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnsw_sparsevec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      hnswhandler: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflat_bit_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflat_halfvec_support: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      ivfflathandler: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      l2_norm: {
-        Args: { "": unknown } | { "": unknown }
-        Returns: number
-      }
-      l2_normalize: {
-        Args: { "": string } | { "": unknown } | { "": unknown }
-        Returns: unknown
       }
       search_semantic_chunks: {
         Args: {
@@ -897,46 +889,21 @@ export type Database = {
           table_id: string
         }[]
       }
-      sparsevec_out: {
-        Args: { "": unknown }
-        Returns: unknown
-      }
-      sparsevec_send: {
-        Args: { "": unknown }
+      upsert_user_plan: {
+        Args: {
+          _billing_cycle?: Database["public"]["Enums"]["billing_cycle_enum"]
+          _cancel_at_period_end?: boolean
+          _current_period_end?: string
+          _plan_type?: Database["public"]["Enums"]["plan_type_enum"]
+          _raw?: Json
+          _status?: Database["public"]["Enums"]["plan_status_enum"]
+          _stripe_customer_id?: string
+          _subscription_id?: string
+          _user_id: string
+        }
         Returns: string
       }
-      sparsevec_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
-      }
-      validate_cpf: {
-        Args: { cpf_input: string }
-        Returns: boolean
-      }
-      vector_avg: {
-        Args: { "": number[] }
-        Returns: string
-      }
-      vector_dims: {
-        Args: { "": string } | { "": unknown }
-        Returns: number
-      }
-      vector_norm: {
-        Args: { "": string }
-        Returns: number
-      }
-      vector_out: {
-        Args: { "": string }
-        Returns: unknown
-      }
-      vector_send: {
-        Args: { "": string }
-        Returns: string
-      }
-      vector_typmod_in: {
-        Args: { "": unknown[] }
-        Returns: number
-      }
+      validate_cpf: { Args: { cpf_input: string }; Returns: boolean }
     }
     Enums: {
       ai_model_type:
@@ -946,12 +913,26 @@ export type Database = {
         | "veterinary"
         | "specialist"
       app_role: "admin" | "user"
+      billing_cycle_enum: "mensal" | "anual"
       billing_period: "monthly" | "annual"
       cancellation_reason:
         | "solicitacao_usuario"
         | "upgrade_para_especialista"
         | "outros"
       knowledge_base_type: "medical" | "legal" | "veterinary"
+      plan_status_enum:
+        | "active"
+        | "trialing"
+        | "past_due"
+        | "canceled"
+        | "incomplete"
+        | "inactive"
+      plan_type_enum:
+        | "free"
+        | "medico"
+        | "juridico"
+        | "veterinario"
+        | "especialista"
       subscription_plan:
         | "free"
         | "medical"
@@ -1099,6 +1080,7 @@ export const Constants = {
         "specialist",
       ],
       app_role: ["admin", "user"],
+      billing_cycle_enum: ["mensal", "anual"],
       billing_period: ["monthly", "annual"],
       cancellation_reason: [
         "solicitacao_usuario",
@@ -1106,6 +1088,21 @@ export const Constants = {
         "outros",
       ],
       knowledge_base_type: ["medical", "legal", "veterinary"],
+      plan_status_enum: [
+        "active",
+        "trialing",
+        "past_due",
+        "canceled",
+        "incomplete",
+        "inactive",
+      ],
+      plan_type_enum: [
+        "free",
+        "medico",
+        "juridico",
+        "veterinario",
+        "especialista",
+      ],
       subscription_plan: [
         "free",
         "medical",
