@@ -44,6 +44,47 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_usage: {
+        Row: {
+          conversation_id: string | null
+          cost: number
+          created_at: string
+          id: string
+          model: string
+          tokens_input: number
+          tokens_output: number
+          user_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          cost?: number
+          created_at?: string
+          id?: string
+          model: string
+          tokens_input?: number
+          tokens_output?: number
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          cost?: number
+          created_at?: string
+          id?: string
+          model?: string
+          tokens_input?: number
+          tokens_output?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -617,6 +658,7 @@ export type Database = {
           full_name: string
           id: string
           phone: string | null
+          region: string | null
           updated_at: string
         }
         Insert: {
@@ -628,6 +670,7 @@ export type Database = {
           full_name: string
           id: string
           phone?: string | null
+          region?: string | null
           updated_at?: string
         }
         Update: {
@@ -639,7 +682,41 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
+          region?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          created_at: string
+          effective_at: string
+          event: string
+          id: string
+          metadata: Json | null
+          plan_type: Database["public"]["Enums"]["plan_type_enum"]
+          status: Database["public"]["Enums"]["plan_status_enum"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_at?: string
+          event: string
+          id?: string
+          metadata?: Json | null
+          plan_type: Database["public"]["Enums"]["plan_type_enum"]
+          status: Database["public"]["Enums"]["plan_status_enum"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_at?: string
+          event?: string
+          id?: string
+          metadata?: Json | null
+          plan_type?: Database["public"]["Enums"]["plan_type_enum"]
+          status?: Database["public"]["Enums"]["plan_status_enum"]
+          user_id?: string
         }
         Relationships: []
       }
