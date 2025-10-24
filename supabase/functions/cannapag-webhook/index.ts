@@ -47,7 +47,14 @@ serve(async (req) => {
     const validToken = receivedToken === WEBHOOK_TOKEN;
     
     if (!validToken) {
-      console.warn(`[cannapag][${requestId}] token=fail - Invalid token received`);
+      console.error(`[cannapag][${requestId}] Authentication failed - Invalid webhook token`);
+      return new Response(JSON.stringify({ 
+        error: 'Unauthorized - Invalid webhook token',
+        request_id: requestId 
+      }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Extrair campos do payload com fallbacks
@@ -61,7 +68,7 @@ serve(async (req) => {
     const match = rawRef.match(/PLAN_[A-Z_]+$/);
     const reference = match ? match[0] : null;
 
-    console.log(`[cannapag][${requestId}] token=${validToken ? 'ok' : 'fail'} charge=${chargeId} email=${payerEmail} ref=${reference} status=${status} rawRef=${rawRef}`);
+    console.log(`[cannapag][${requestId}] token=ok charge=${chargeId} email=${payerEmail} ref=${reference} status=${status} rawRef=${rawRef}`);
 
     // Initialize Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -98,7 +105,7 @@ serve(async (req) => {
           reference: reference,
           external_reference: rawRef,
           payer_email: payerEmail,
-          valid_token: validToken,
+          valid_token: true, // Always true at this point since we reject invalid tokens earlier
           provider: 'cannapag',
           payload: body,
           processed: false,
@@ -131,8 +138,7 @@ serve(async (req) => {
       reference,
       payerEmail,
       chargeId,
-      body,
-      validToken
+      body
     );
 
     // Não espera o processamento - processa em background
@@ -169,8 +175,7 @@ async function processWebhookAsync(
   reference: string | null,
   payerEmail: string,
   chargeId: string,
-  payload: any,
-  validToken: boolean
+  payload: any
 ) {
   try {
     console.log(`[cannapag][${requestId}] Starting async processing`);
@@ -188,15 +193,6 @@ async function processWebhookAsync(
 
     if (!reference || !PLAN_MAP[reference]) {
       console.error(`[cannapag][${requestId}] Referência inválida: ${reference}`);
-      await supabase
-        .from('webhook_events')
-        .update({ processed: true, processed_at: new Date().toISOString() })
-        .eq('id', eventId);
-      return;
-    }
-
-    if (!validToken) {
-      console.warn(`[cannapag][${requestId}] Token inválido - não processando ativação`);
       await supabase
         .from('webhook_events')
         .update({ processed: true, processed_at: new Date().toISOString() })
