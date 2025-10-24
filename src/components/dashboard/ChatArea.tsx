@@ -83,35 +83,36 @@ export const ChatArea = ({
       subscriptionsData: subscriptions,
     });
 
-    // Priority 1: Model from current conversation
-    if (currentConversation?.model_type && currentConversation.model_type !== 'generic') {
-      console.log('[ChatArea] Using conversation model:', currentConversation.model_type);
-      setSelectedModel(currentConversation.model_type);
-      return;
-    }
-
-    // Priority 2: Model from active subscription (NEW: moved up in priority)
+    // Get default model from subscriptions
     const defaultModel = getDefaultModelFromSubscriptions();
     console.log('[ChatArea] Default model from subscriptions:', defaultModel);
     
-    if (defaultModel !== 'generic') {
-      console.log('[ChatArea] Setting model from subscription:', defaultModel);
-      setSelectedModel(defaultModel);
-      localStorage.setItem('lastUsedModel', defaultModel); // Update localStorage
+    // If no active plans (defaultModel is 'generic'), FORCE generic model
+    if (defaultModel === 'generic') {
+      console.log('[ChatArea] No active plans - forcing generic model');
+      setSelectedModel('generic');
+      localStorage.setItem('lastUsedModel', 'generic');
       return;
     }
 
-    // Priority 3: Last used model from localStorage (only if no active plan)
-    const lastUsedModel = localStorage.getItem('lastUsedModel') as ModelType | null;
-    if (lastUsedModel) {
-      console.log('[ChatArea] Using last used model from localStorage:', lastUsedModel);
-      setSelectedModel(lastUsedModel);
-      return;
+    // Priority 1: Model from current conversation (if user has access to it)
+    if (currentConversation?.model_type && currentConversation.model_type !== 'generic') {
+      if (hasAccess(currentConversation.model_type)) {
+        console.log('[ChatArea] Using conversation model:', currentConversation.model_type);
+        setSelectedModel(currentConversation.model_type);
+        return;
+      } else {
+        console.log('[ChatArea] No access to conversation model, using default:', defaultModel);
+        setSelectedModel(defaultModel);
+        localStorage.setItem('lastUsedModel', defaultModel);
+        return;
+      }
     }
 
-    // Fallback: Use generic
-    console.log('[ChatArea] Using fallback generic model');
-    setSelectedModel('generic');
+    // Priority 2: Use the default model from active subscription
+    console.log('[ChatArea] Setting model from subscription:', defaultModel);
+    setSelectedModel(defaultModel);
+    localStorage.setItem('lastUsedModel', defaultModel);
   }, [currentConversation, subscriptions]);
 
   // Scroll to bottom function
