@@ -50,17 +50,30 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
         .gte("created_at", filters.dateFrom.toISOString())
         .lte("created_at", filters.dateTo.toISOString());
 
-      // Calcular receita (simulado - integrar com Stripe depois)
-      const { data: paymentsData } = await supabase
-        .from("payments")
-        .select("amount")
-        .eq("status", "paid")
+      // Calcular receita baseado nos planos ativos
+      const { data: activePlansData } = await supabase
+        .from("user_plans")
+        .select("plan_type, billing_cycle, raw, created_at")
+        .in("status", ["active", "trialing"])
         .gte("created_at", filters.dateFrom.toISOString())
         .lte("created_at", filters.dateTo.toISOString());
 
       const activeUsers = activeUsersData?.length || 0;
       const aiCost = aiUsageData?.reduce((sum, item) => sum + Number(item.cost), 0) || 0;
-      const totalRevenue = paymentsData?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+      
+      // Calcular receita total dos planos criados no período
+      let totalRevenue = 0;
+      activePlansData?.forEach((plan) => {
+        if (plan.raw && typeof plan.raw === 'object') {
+          const stripeData = plan.raw as any;
+          // Pegar o valor do plano do Stripe (em centavos)
+          if (stripeData.plan?.amount) {
+            totalRevenue += stripeData.plan.amount / 100; // Converter centavos para reais
+          } else if (stripeData.items?.data?.[0]?.price?.unit_amount) {
+            totalRevenue += stripeData.items.data[0].price.unit_amount / 100;
+          }
+        }
+      });
 
       // Calcular período anterior para comparação
       const periodLength = filters.dateTo.getTime() - filters.dateFrom.getTime();
