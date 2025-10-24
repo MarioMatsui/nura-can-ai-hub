@@ -75,36 +75,22 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
             planAmount = stripeData.items.data[0].price.unit_amount;
           }
           
-          console.log('Plan base amount:', planAmount, 'for plan:', plan.plan_type);
-          console.log('Discount data:', stripeData.discount);
-          
           // Verificar se há desconto aplicado (o discount fica no root do objeto subscription)
           if (stripeData.discount?.coupon) {
             const coupon = stripeData.discount.coupon;
-            console.log('Coupon found:', coupon);
             
             if (coupon.percent_off) {
               // Desconto percentual
-              const discountedAmount = planAmount * (1 - coupon.percent_off / 100);
-              console.log('Applying percent discount:', coupon.percent_off, '% - Original:', planAmount, 'New:', discountedAmount);
-              planAmount = discountedAmount;
+              planAmount = planAmount * (1 - coupon.percent_off / 100);
             } else if (coupon.amount_off) {
               // Desconto em valor fixo (já vem em centavos)
-              const discountedAmount = Math.max(0, planAmount - coupon.amount_off);
-              console.log('Applying amount discount:', coupon.amount_off, '- Original:', planAmount, 'New:', discountedAmount);
-              planAmount = discountedAmount;
+              planAmount = Math.max(0, planAmount - coupon.amount_off);
             }
-          } else {
-            console.log('No discount found for this plan');
           }
           
-          const revenueInReais = planAmount / 100;
-          console.log('Adding to revenue:', revenueInReais);
-          totalRevenue += revenueInReais;
+          totalRevenue += planAmount / 100; // Converter centavos para reais
         }
       });
-      
-      console.log('Total revenue calculated:', totalRevenue);
 
       // Calcular período anterior para comparação
       const periodLength = filters.dateTo.getTime() - filters.dateFrom.getTime();
