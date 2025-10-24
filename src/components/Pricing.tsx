@@ -184,11 +184,11 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       const monthlyEquivalent = plan.annualPrice / 12;
       return (
         <div className="flex flex-col items-center">
-          <div className="flex items-center justify-center gap-2">
+          <div className="relative flex items-center justify-center">
             <span className="text-2xl sm:text-3xl font-bold">
               R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
             </span>
-            <span className="text-sm text-muted-foreground line-through">
+            <span className="absolute -top-2 -right-16 text-xs text-muted-foreground line-through">
               R$ {plan.annualOriginalPrice.toFixed(2).replace(".", ",")}
             </span>
           </div>
@@ -202,11 +202,11 @@ const Pricing = ({ showFree = true }: PricingProps) => {
     
     return (
       <div className="flex flex-col items-center">
-        <div className="flex items-center justify-center gap-2">
+        <div className="relative flex items-center justify-center">
           <span className="text-2xl sm:text-3xl font-bold">
             R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
           </span>
-          <span className="text-sm text-muted-foreground line-through">
+          <span className="absolute -top-2 -right-16 text-xs text-muted-foreground line-through">
             R$ {plan.monthlyOriginalPrice.toFixed(2).replace(".", ",")}
           </span>
         </div>
