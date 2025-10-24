@@ -176,10 +176,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
             <span className="text-sm text-muted-foreground">/mês</span>
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            <span className="line-through">
-              R$ {(plan.monthlyPrice * 12).toFixed(2).replace(".", ",")}
-            </span>
-            {" • "}cobrado anualmente
+            cobrado anualmente
           </div>
         </div>
       );
