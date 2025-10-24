@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Check, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 
 const plans = {
   free: {
@@ -19,11 +20,9 @@ const plans = {
     ],
     monthlyPrice: 0,
     annualPrice: 0,
-    monthlyLink: "",
-    annualLink: "",
     popular: false,
   },
-  medical: {
+  medico: {
     name: "Médico",
     description: "",
     features: [
@@ -32,13 +31,11 @@ const plans = {
       "Acesso a banco de dados médico",
       "Respostas baseadas em evidências científicas",
     ],
-    monthlyPrice: 69.9,
-    annualPrice: 718.8,
-    monthlyLink: "https://gateway.cannapag.com/pagamento/e68ce176-b2b0-4013-817c-a02d29419176",
-    annualLink: "https://gateway.cannapag.com/pagamento/0c4d0af3-b48d-4ed7-b59b-d8b76eb6e538",
+    monthlyPrice: 59.9,
+    annualPrice: 598.8,
     popular: false,
   },
-  legal: {
+  juridico: {
     name: "Jurídico",
     description: "",
     features: [
@@ -47,13 +44,11 @@ const plans = {
       "Acesso a banco de dados jurídico",
       "Informações sobre regulamentação",
     ],
-    monthlyPrice: 59.9,
-    annualPrice: 598.8,
-    monthlyLink: "https://gateway.cannapag.com/pagamento/9dbfd8f1-3edf-46ed-a6d7-50de12176ed3",
-    annualLink: "https://gateway.cannapag.com/pagamento/ed2d1e63-4fb8-4cfb-9cb7-b26710ce979b",
+    monthlyPrice: 49.9,
+    annualPrice: 478.8,
     popular: false,
   },
-  veterinary: {
+  veterinario: {
     name: "Veterinário",
     description: "",
     features: [
@@ -62,13 +57,11 @@ const plans = {
       "Acesso a banco de dados veterinário",
       "Evidências científicas em medicina veterinária",
     ],
-    monthlyPrice: 49.9,
-    annualPrice: 478.8,
-    monthlyLink: "https://gateway.cannapag.com/pagamento/8a33c660-b08f-44b2-84d1-c5f9c907d912",
-    annualLink: "https://gateway.cannapag.com/pagamento/9b779179-68b7-4f03-9862-991a14c426f9",
+    monthlyPrice: 39.9,
+    annualPrice: 358.8,
     popular: false,
   },
-  specialist: {
+  especialista: {
     name: "Especialista",
     description: "",
     features: [
@@ -78,27 +71,24 @@ const plans = {
       "Máxima flexibilidade profissional",
       "Melhor custo-benefício",
     ],
-    monthlyPrice: 119.9,
-    annualPrice: 1188,
-    monthlyLink: "https://gateway.cannapag.com/pagamento/4e8284a1-3f3d-4ac1-b7fb-aa1102922539",
-    annualLink: "https://gateway.cannapag.com/pagamento/9082ff5d-4283-441f-a395-2b045b746192",
+    monthlyPrice: 99.0,
+    annualPrice: 1188.0,
     popular: true,
   },
 };
 
-type PlanKey = 'free' | 'medical' | 'legal' | 'veterinary' | 'specialist';
+type PlanKey = 'free' | 'medico' | 'juridico' | 'veterinario' | 'especialista';
 
 interface PricingProps {
   showFree?: boolean;
 }
 
 const Pricing = ({ showFree = true }: PricingProps) => {
-  const [isAnnual, setIsAnnual] = useState(true);
+  const { toast } = useToast();
+  const [isAnnual, setIsAnnual] = useState(true); // Anual as default
   const [userId, setUserId] = useState<string | null>(null);
-  const [activePlans, setActivePlans] = useState<PlanKey[]>([]);
-  const [hasSpecialist, setHasSpecialist] = useState(false);
-  const [scheduledCancellations, setScheduledCancellations] = useState<Set<PlanKey>>(new Set());
-  const navigate = useNavigate();
+  const [activePlans, setActivePlans] = useState<string[]>([]);
+  const [scheduledCancellations, setScheduledCancellations] = useState<string[]>([]);
 
   // Calculate average discount percentage
   const calculateAverageDiscount = () => {
@@ -115,42 +105,24 @@ const Pricing = ({ showFree = true }: PricingProps) => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      // Get current user session
       const { data: { session } } = await supabase.auth.getSession();
       const currentUserId = session?.user?.id ?? null;
       setUserId(currentUserId);
 
-      // If user is logged in, fetch their active subscriptions
       if (currentUserId) {
-        const { data: subscriptions } = await supabase
-          .from('user_subscriptions')
-          .select('plan_type, status, cancel_at')
+        const { data: userPlan } = await supabase
+          .from('user_plans')
+          .select('plan_type, status, cancel_at_period_end')
           .eq('user_id', currentUserId)
-          .or('status.eq.active,status.eq.scheduled_cancellation');
-
-        if (subscriptions && subscriptions.length > 0) {
-          const active = subscriptions
-            .filter((s: any) => s.status === 'active')
-            .map((s: any) => s.plan_type as PlanKey);
+          .single();
+        
+        if (userPlan && userPlan.status === 'active') {
+          setActivePlans([userPlan.plan_type]);
           
-          const scheduled = new Set(
-            subscriptions
-              .filter((s: any) => s.status === 'scheduled_cancellation')
-              .map((s: any) => s.plan_type as PlanKey)
-          );
-          
-          setActivePlans(active);
-          setHasSpecialist(active.includes('specialist'));
-          setScheduledCancellations(scheduled);
-        } else {
-          setActivePlans([]);
-          setHasSpecialist(false);
-          setScheduledCancellations(new Set());
+          if (userPlan.cancel_at_period_end) {
+            setScheduledCancellations([userPlan.plan_type]);
+          }
         }
-      } else {
-        setActivePlans([]);
-        setHasSpecialist(false);
-        setScheduledCancellations(new Set());
       }
     };
 
@@ -162,42 +134,32 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       
       if (currentUserId) {
         supabase
-          .from('user_subscriptions')
-          .select('plan_type, status, cancel_at')
+          .from('user_plans')
+          .select('plan_type, status, cancel_at_period_end')
           .eq('user_id', currentUserId)
-          .or('status.eq.active,status.eq.scheduled_cancellation')
-          .then(({ data: subscriptions }) => {
-            if (subscriptions && subscriptions.length > 0) {
-              const active = subscriptions
-                .filter((s: any) => s.status === 'active')
-                .map((s: any) => s.plan_type as PlanKey);
+          .single()
+          .then(({ data: userPlan }) => {
+            if (userPlan && userPlan.status === 'active') {
+              setActivePlans([userPlan.plan_type]);
               
-              const scheduled = new Set(
-                subscriptions
-                  .filter((s: any) => s.status === 'scheduled_cancellation')
-                  .map((s: any) => s.plan_type as PlanKey)
-              );
-              
-              setActivePlans(active);
-              setHasSpecialist(active.includes('specialist'));
-              setScheduledCancellations(scheduled);
+              if (userPlan.cancel_at_period_end) {
+                setScheduledCancellations([userPlan.plan_type]);
+              }
             } else {
               setActivePlans([]);
-              setHasSpecialist(false);
-              setScheduledCancellations(new Set());
+              setScheduledCancellations([]);
             }
           });
       } else {
         setActivePlans([]);
-        setHasSpecialist(false);
-        setScheduledCancellations(new Set());
+        setScheduledCancellations([]);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const getDisplayPrice = (plan: typeof plans.medical) => {
+  const getDisplayPrice = (plan: typeof plans.medico) => {
     if (plan.monthlyPrice === 0) return "Grátis";
     
     if (isAnnual) {
@@ -212,7 +174,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           </div>
           <div className="text-xs text-muted-foreground mt-1">
             <span className="line-through">
-              R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
+              R$ {(plan.monthlyPrice * 12).toFixed(2).replace(".", ",")}
             </span>
             {" • "}cobrado anualmente
           </div>
@@ -230,54 +192,106 @@ const Pricing = ({ showFree = true }: PricingProps) => {
     );
   };
 
-  const handleSubscribe = async (planKey: PlanKey, plan: typeof plans.medical) => {
-    if (plan.monthlyPrice === 0) return;
-    
+  const handleSubscribe = async (planKey: PlanKey) => {
+    // Free plan - redirect to signup or app
+    if (planKey === 'free') {
+      if (!userId) {
+        window.location.href = '/auth/signup';
+      } else {
+        window.location.href = '/app';
+      }
+      return;
+    }
+
     // Check if user is logged in
     if (!userId) {
-      toast.error('Você precisa estar logado para assinar um plano');
-      navigate('/auth/login');
+      toast({
+        title: "Login necessário",
+        description: "Faça login para assinar um plano",
+        variant: "destructive",
+      });
+      window.location.href = '/auth/login';
       return;
     }
 
-    // Check if user already has 3 active plans
-    if (activePlans.length >= 3) {
-      toast.error('Limite de 3 planos por usuário atingido');
+    // Check if already has this plan
+    if (activePlans.includes(planKey)) {
+      toast({
+        title: "Plano já ativo",
+        description: "Você já possui este plano ativo",
+        variant: "destructive",
+      });
       return;
     }
 
-    // Get the base payment link
-    const baseLink = isAnnual ? plan.annualLink : plan.monthlyLink;
-    
-    // Add user ID and plan type as parameters
-    const paymentUrl = `${baseLink}?external_reference=${userId}&plan_type=${planKey}`;
-    
-    console.log('Redirecting to payment with external_reference:', userId, 'plan_type:', planKey);
-    
-    // Redirect to payment page
-    window.location.href = paymentUrl;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) throw new Error("Email não encontrado");
+
+      const PRICE_MAP: Record<string, Record<string, string>> = {
+        medico: {
+          mensal: import.meta.env.VITE_PRICE_MEDICO_MENSAL,
+          anual: import.meta.env.VITE_PRICE_MEDICO_ANUAL,
+        },
+        juridico: {
+          mensal: import.meta.env.VITE_PRICE_JURIDICO_MENSAL,
+          anual: import.meta.env.VITE_PRICE_JURIDICO_ANUAL,
+        },
+        veterinario: {
+          mensal: import.meta.env.VITE_PRICE_VET_MENSAL,
+          anual: import.meta.env.VITE_PRICE_VET_ANUAL,
+        },
+        especialista: {
+          mensal: import.meta.env.VITE_PRICE_ESPECIALISTA_MENSAL,
+          anual: import.meta.env.VITE_PRICE_ESPECIALISTA_ANUAL,
+        },
+      };
+
+      const billingCycle = isAnnual ? 'anual' : 'mensal';
+      const priceId = PRICE_MAP[planKey]?.[billingCycle];
+
+      if (!priceId) {
+        throw new Error("Price ID não configurado");
+      }
+
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: {
+          price_id: priceId,
+          customer_email: user.email,
+          metadata: {
+            user_id: user.id,
+            plan_type: planKey,
+            billing_cycle: billingCycle,
+          },
+        },
+      });
+
+      if (error) throw error;
+      if (!data?.url) throw new Error("URL do checkout não retornada");
+
+      window.location.href = data.url;
+    } catch (error: any) {
+      console.error('Erro ao criar checkout:', error);
+      toast({
+        title: "Erro",
+        description: error.message || "Falha ao criar sessão de checkout",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
     <section id="planos" className="py-20 sm:py-32">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="max-w-3xl mx-auto text-center mb-12 sm:mb-16">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6">
-            Escolha o Plano Ideal Para Você
-          </h2>
-          <p className="text-lg sm:text-xl text-muted-foreground mb-8">
+        <div className="text-center max-w-3xl mx-auto mb-12">
+          <h2 className="text-4xl font-bold mb-4">Escolha o Plano Ideal Para Você</h2>
+          <p className="text-xl text-muted-foreground mb-8">
             Acesso especializado para cada área profissional
           </p>
-
-          {/* Billing Toggle */}
-          <div className="inline-flex items-center gap-2 sm:gap-4 p-2 rounded-full bg-muted/50 border border-border">
-            <span
-              className={`px-3 sm:px-4 py-2 rounded-full text-sm sm:text-base font-medium transition-smooth ${
-                !isAnnual
-                  ? "bg-background text-foreground shadow-card"
-                  : "text-muted-foreground"
-              }`}
-            >
+          
+          {/* Billing Cycle Toggle */}
+          <div className="inline-flex items-center gap-3 bg-muted p-2 rounded-lg">
+            <span className={!isAnnual ? "font-semibold" : "text-muted-foreground"}>
               Mensal
             </span>
             <Switch
@@ -285,42 +299,34 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               onCheckedChange={setIsAnnual}
               className="data-[state=checked]:bg-primary"
             />
-            <span
-              className={`px-3 sm:px-4 py-2 rounded-full text-sm sm:text-base font-medium transition-smooth flex items-center gap-1 sm:gap-2 ${
-                isAnnual
-                  ? "bg-background text-foreground shadow-card"
-                  : "text-muted-foreground"
-              }`}
-            >
+            <span className={isAnnual ? "font-semibold" : "text-muted-foreground"}>
               Anual
-              <span className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full" style={{ backgroundColor: 'rgba(149, 199, 0, 0.1)', color: '#95c700' }}>
-                -{discountPercentage}%
-              </span>
             </span>
+            {isAnnual && (
+              <Badge variant="secondary" className="ml-2 bg-primary/10 text-primary border-primary/20">
+                -17%
+              </Badge>
+            )}
           </div>
         </div>
 
         {/* Plans Grid */}
-        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${showFree ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-4 sm:gap-6 lg:gap-8 max-w-7xl mx-auto`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${showFree ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-6 max-w-7xl mx-auto`}>
           {Object.entries(plans)
             .filter(([key]) => showFree || key !== 'free')
             .map(([key, plan]) => {
               const planKey = key as PlanKey;
               const isActive = activePlans.includes(planKey);
-              const isScheduled = scheduledCancellations.has(planKey);
-              const isDisabled = plan.monthlyPrice === 0 || isActive || (activePlans.length >= 3);
+              const isScheduled = scheduledCancellations.includes(planKey);
               
               let buttonText = "Assinar";
-              let tooltipText = "";
               
-              if (plan.monthlyPrice === 0) {
-                buttonText = "Começar Grátis";
+              if (planKey === 'free') {
+                buttonText = userId ? "Ir para o App" : "Começar Grátis";
               } else if (isActive) {
                 buttonText = "Plano Ativo";
-                tooltipText = "Você já possui este plano";
-              } else if (activePlans.length >= 3 && planKey !== 'specialist') {
-                buttonText = "Assinar";
-                tooltipText = "Limite de 3 planos atingido";
+              } else if (isScheduled) {
+                buttonText = "Cancelamento Programado";
               }
 
               return (
@@ -330,50 +336,43 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                     plan.popular ? "ring-2 ring-primary" : ""
                   }`}
                 >
+                  {plan.popular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-primary text-primary-foreground">Popular</Badge>
+                    </div>
+                  )}
 
-                  <CardHeader className="pb-4 sm:pb-6">
-                    <h3 className="text-lg sm:text-xl font-bold mb-2">
+                  <CardHeader className="pb-6">
+                    <h3 className="text-xl font-bold mb-2">
                       {plan.name}
                     </h3>
-                    {plan.description && (
-                      <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-                        {plan.description}
-                      </p>
-                    )}
-                    <div className="mb-4 sm:mb-6">{getDisplayPrice(plan)}</div>
+                    <div className="mb-6">{getDisplayPrice(plan)}</div>
                   </CardHeader>
 
                   <CardContent className="flex flex-col flex-grow">
-                    <ul className="space-y-2 sm:space-y-3 flex-grow mb-6">
+                    <ul className="space-y-3 flex-grow mb-6">
                       {plan.features.map((feature, index) => (
                         <li key={index} className="flex items-start gap-2">
-                          <Check className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0 mt-0.5" />
-                          <span className="text-xs sm:text-sm">{feature}</span>
+                          <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                          <span className="text-sm">{feature}</span>
                         </li>
                       ))}
                     </ul>
 
-                    <div className="relative group">
-                      <Button
-                        onClick={() => handleSubscribe(planKey, plan)}
-                        disabled={isDisabled}
-                        className={`w-full font-semibold transition-smooth ${
-                          isDisabled
-                            ? "bg-muted text-muted-foreground cursor-not-allowed"
-                            : plan.popular
-                            ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
-                            : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                        }`}
-                        size="lg"
-                      >
-                        {buttonText}
-                      </Button>
-                      {tooltipText && (
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-popover text-popover-foreground text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                          {tooltipText}
-                        </div>
-                      )}
-                    </div>
+                    <Button
+                      onClick={() => handleSubscribe(planKey)}
+                      disabled={isActive}
+                      className={`w-full font-semibold transition-smooth ${
+                        isActive
+                          ? "bg-muted text-muted-foreground cursor-not-allowed"
+                          : plan.popular
+                          ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
+                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                      }`}
+                      size="lg"
+                    >
+                      {buttonText}
+                    </Button>
                   </CardContent>
                 </Card>
               );
