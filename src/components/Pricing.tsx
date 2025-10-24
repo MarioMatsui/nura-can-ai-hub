@@ -300,14 +300,14 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               onCheckedChange={setIsAnnual}
               className="data-[state=checked]:bg-primary scale-125"
             />
-            <span className={`text-xl font-bold transition-all ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
-              Anual
-            </span>
-            {isAnnual && (
-              <Badge variant="secondary" className="ml-1 bg-primary/20 text-primary border-primary/30 font-semibold">
+            <div className="flex items-center gap-2">
+              <span className={`text-xl font-bold transition-all ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
+                Anual
+              </span>
+              <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30 font-semibold">
                 -17%
               </Badge>
-            )}
+            </div>
           </div>
         </div>
 
