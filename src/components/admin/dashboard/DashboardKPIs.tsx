@@ -61,17 +61,33 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
       const activeUsers = activeUsersData?.length || 0;
       const aiCost = aiUsageData?.reduce((sum, item) => sum + Number(item.cost), 0) || 0;
       
-      // Calcular receita total dos planos criados no período
+      // Calcular receita total dos planos criados no período (considerando descontos)
       let totalRevenue = 0;
       activePlansData?.forEach((plan) => {
         if (plan.raw && typeof plan.raw === 'object') {
           const stripeData = plan.raw as any;
-          // Pegar o valor do plano do Stripe (em centavos)
+          
+          // Pegar o valor base do plano (em centavos)
+          let planAmount = 0;
           if (stripeData.plan?.amount) {
-            totalRevenue += stripeData.plan.amount / 100; // Converter centavos para reais
+            planAmount = stripeData.plan.amount;
           } else if (stripeData.items?.data?.[0]?.price?.unit_amount) {
-            totalRevenue += stripeData.items.data[0].price.unit_amount / 100;
+            planAmount = stripeData.items.data[0].price.unit_amount;
           }
+          
+          // Verificar se há desconto aplicado
+          if (stripeData.discount?.coupon) {
+            const coupon = stripeData.discount.coupon;
+            if (coupon.percent_off) {
+              // Desconto percentual
+              planAmount = planAmount * (1 - coupon.percent_off / 100);
+            } else if (coupon.amount_off) {
+              // Desconto em valor fixo
+              planAmount = Math.max(0, planAmount - coupon.amount_off);
+            }
+          }
+          
+          totalRevenue += planAmount / 100; // Converter centavos para reais
         }
       });
 
