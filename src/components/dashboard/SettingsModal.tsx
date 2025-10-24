@@ -65,6 +65,7 @@ export const SettingsModal = ({
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null);
   const [hasPendingCancellation, setHasPendingCancellation] = useState(false);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [syncingSubscriptions, setSyncingSubscriptions] = useState(false);
 
   const getPlanLabel = (planType: string) => {
     const labels: Record<string, string> = {
@@ -314,6 +315,34 @@ export const SettingsModal = ({
     }
   };
 
+  const handleSyncSubscriptions = async () => {
+    setSyncingSubscriptions(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('clean-duplicate-subscriptions', {
+        body: { userId: user?.id }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Assinaturas sincronizadas',
+        description: data.message || 'Assinaturas sincronizadas com sucesso',
+      });
+
+      // Refresh the page to show updated subscriptions
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error syncing subscriptions:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Não foi possível sincronizar as assinaturas',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncingSubscriptions(false);
+    }
+  };
+
   const getSubscriptionStatus = () => {
     if (!subscriptions || subscriptions.length === 0) return null;
     const activePlan = subscriptions.find(s => s.status === 'active' || s.status === 'pending_cancellation');
@@ -523,6 +552,24 @@ export const SettingsModal = ({
                       Gerenciar assinaturas
                     </Button>
                   </div>
+                  
+                  {/* Sync button */}
+                  <Button
+                    variant="outline"
+                    onClick={handleSyncSubscriptions}
+                    disabled={syncingSubscriptions}
+                    className="w-full"
+                    size="sm"
+                  >
+                    {syncingSubscriptions ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                        Sincronizando...
+                      </>
+                    ) : (
+                      'Sincronizar com Stripe'
+                    )}
+                  </Button>
                 </div>
               )}
             </div>
