@@ -52,7 +52,7 @@ serve(async (req) => {
 
     // Get return URL from environment or use provided one
     const finalReturnUrl = return_url || 
-                          Deno.env.get('VITE_APP_BASE_URL') || 
+                          Deno.env.get('APP_BASE_URL') || 
                           'https://nuracan.ai';
 
     console.log('[create-portal-session] Creating portal session:', {

@@ -142,7 +142,7 @@ const Dashboard = () => {
       .from('user_plans')
       .select('plan_type, status, current_period_end, cancel_at_period_end, stripe_customer_id, billing_cycle')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching user plan:', error);

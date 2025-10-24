@@ -110,18 +110,21 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       setUserId(currentUserId);
 
       if (currentUserId) {
-        const { data: userPlan } = await supabase
+        const { data: userPlan, error } = await supabase
           .from('user_plans')
           .select('plan_type, status, cancel_at_period_end')
           .eq('user_id', currentUserId)
-          .single();
+          .maybeSingle();
         
-        if (userPlan && userPlan.status === 'active') {
+        if (!error && userPlan && userPlan.status === 'active') {
           setActivePlans([userPlan.plan_type]);
           
           if (userPlan.cancel_at_period_end) {
             setScheduledCancellations([userPlan.plan_type]);
           }
+        } else {
+          setActivePlans([]);
+          setScheduledCancellations([]);
         }
       }
     };
@@ -137,9 +140,9 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           .from('user_plans')
           .select('plan_type, status, cancel_at_period_end')
           .eq('user_id', currentUserId)
-          .single()
-          .then(({ data: userPlan }) => {
-            if (userPlan && userPlan.status === 'active') {
+          .maybeSingle()
+          .then(({ data: userPlan, error }) => {
+            if (!error && userPlan && userPlan.status === 'active') {
               setActivePlans([userPlan.plan_type]);
               
               if (userPlan.cancel_at_period_end) {

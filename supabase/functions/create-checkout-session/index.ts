@@ -71,11 +71,10 @@ serve(async (req) => {
       console.log('[create-checkout-session] Created new customer:', customer.id);
     }
 
-    // Get URLs from environment
-    const successUrl = Deno.env.get('VITE_STRIPE_SUCCESS_URL') || 
-                       `${Deno.env.get('VITE_APP_BASE_URL')}/checkout/sucesso`;
-    const cancelUrl = Deno.env.get('VITE_STRIPE_CANCEL_URL') || 
-                      `${Deno.env.get('VITE_APP_BASE_URL')}/checkout/cancelado`;
+    // Get URLs from environment (without VITE_ prefix for edge functions)
+    const baseUrl = Deno.env.get('APP_BASE_URL') || 'https://nuracan.ai';
+    const successUrl = Deno.env.get('STRIPE_SUCCESS_URL') || `${baseUrl}/checkout/sucesso`;
+    const cancelUrl = Deno.env.get('STRIPE_CANCEL_URL') || `${baseUrl}/checkout/cancelado`;
 
     console.log('[create-checkout-session] Creating checkout session with:', {
       mode,
