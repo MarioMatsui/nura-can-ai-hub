@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { LogOut } from "lucide-react";
+import { LogOut, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 interface HeaderProps {
@@ -91,7 +91,8 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
                   onClick={() => navigate("/app")}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth"
                 >
-                  Dashboard
+                  <Sparkles className="h-4 w-4" />
+                  Nura AI
                 </Button>
                 <Button
                   size="icon"
