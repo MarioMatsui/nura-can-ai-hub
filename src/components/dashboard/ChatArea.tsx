@@ -81,22 +81,23 @@ export const ChatArea = ({
       return;
     }
 
-    // Priority 2: Last used model from localStorage
+    // Priority 2: Model from active subscription (NEW: moved up in priority)
+    const defaultModel = getDefaultModelFromSubscriptions();
+    if (defaultModel !== 'generic') {
+      setSelectedModel(defaultModel);
+      localStorage.setItem('lastUsedModel', defaultModel); // Update localStorage
+      return;
+    }
+
+    // Priority 3: Last used model from localStorage (only if no active plan)
     const lastUsedModel = localStorage.getItem('lastUsedModel') as ModelType | null;
-    if (lastUsedModel && lastUsedModel !== 'generic') {
+    if (lastUsedModel) {
       setSelectedModel(lastUsedModel);
       return;
     }
 
-    // Priority 3: Model from active subscription (if not generic)
-    const defaultModel = getDefaultModelFromSubscriptions();
-    if (defaultModel !== 'generic') {
-      setSelectedModel(defaultModel);
-      return;
-    }
-
-    // Fallback: Use subscription model even if generic
-    setSelectedModel(defaultModel);
+    // Fallback: Use generic
+    setSelectedModel('generic');
   }, [currentConversation, subscriptions]);
 
   // Scroll to bottom function
