@@ -17,39 +17,56 @@ const PaymentSuccess = () => {
     // Scroll to top on mount
     window.scrollTo(0, 0);
     
+    console.log('[PaymentSuccess] Component mounted');
+    
     // Wait for webhook to process and update user_plans
     const checkPlanActivation = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        console.log('[PaymentSuccess] No user found, redirecting to login');
         navigate("/auth/login");
         return;
       }
 
-      // Poll for plan activation (max 10 seconds)
+      console.log('[PaymentSuccess] Checking plan for user:', user.id);
+
+      // Poll for plan activation (max 15 seconds)
       let attempts = 0;
-      const maxAttempts = 20;
+      const maxAttempts = 30;
       
       const checkInterval = setInterval(async () => {
         attempts++;
+        console.log(`[PaymentSuccess] Polling attempt ${attempts}/${maxAttempts}`);
         
-        const { data: userPlan } = await supabase
+        const { data: userPlan, error } = await supabase
           .from('user_plans')
-          .select('plan_type, status')
+          .select('plan_type, status, subscription_id, updated_at')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
+        
+        if (error) {
+          console.error('[PaymentSuccess] Error fetching plan:', error);
+        } else {
+          console.log('[PaymentSuccess] Current plan:', userPlan);
+        }
         
         if (userPlan && userPlan.status === 'active' && userPlan.plan_type !== 'free') {
+          console.log('[PaymentSuccess] Plan activated successfully!');
           setPlanActivated(true);
           setLoading(false);
           clearInterval(checkInterval);
         } else if (attempts >= maxAttempts) {
           // Timeout - still show success but notify about delay
+          console.error('[PaymentSuccess] Timeout waiting for plan activation');
           setLoading(false);
           clearInterval(checkInterval);
           toast({
             title: "Processando pagamento",
-            description: "Seu pagamento está sendo processado. Seu plano será ativado em alguns instantes.",
+            description: "Seu pagamento está sendo processado. Seu plano será ativado em alguns instantes. Se o problema persistir, entre em contato com o suporte.",
+            duration: 10000,
           });
+          // Still allow user to proceed
+          setPlanActivated(true);
         }
       }, 500);
 

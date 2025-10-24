@@ -105,10 +105,20 @@ serve(async (req) => {
       console.log(`[stripe-webhook][${requestId}] Syncing subscription:`, {
         subscription_id: sub.id,
         user_id: userId,
+        customer_id: customerId,
         price_id: priceId,
         status: sub.status,
         plan_type: mapping?.plan_type || 'free',
+        billing_cycle: mapping?.billing_cycle,
+        current_period_end: sub.current_period_end,
+        cancel_at_period_end: sub.cancel_at_period_end,
+        metadata: sub.metadata,
       });
+
+      if (!userId) {
+        console.error(`[stripe-webhook][${requestId}] No user_id found for subscription`);
+        throw new Error('No user_id found');
+      }
 
       const { data, error } = await supabase.rpc('upsert_user_plan', {
         _user_id: userId,
@@ -127,7 +137,7 @@ serve(async (req) => {
         throw error;
       }
 
-      console.log(`[stripe-webhook][${requestId}] Successfully synced subscription for user:`, userId);
+      console.log(`[stripe-webhook][${requestId}] Successfully synced subscription for user:`, userId, 'Result:', data);
       return data;
     }
 
