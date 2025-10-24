@@ -12,18 +12,38 @@ interface HeaderProps {
 const Header = ({ isLoggedIn = false }: HeaderProps) => {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        checkAdmin(session.user.id);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (session?.user) {
+        checkAdmin(session.user.id);
+      } else {
+        setIsAdmin(false);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const checkAdmin = async (userId: string) => {
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+      .single();
+    
+    setIsAdmin(!!data);
+  };
   
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
@@ -86,6 +106,14 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
           <div className="flex items-center gap-2 sm:gap-4">
             {user ? (
               <>
+                {isAdmin && (
+                  <button
+                    onClick={() => navigate("/admin")}
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground underline transition-smooth"
+                  >
+                    Dashboard
+                  </button>
+                )}
                 <Button
                   size="lg"
                   onClick={() => navigate("/app")}
