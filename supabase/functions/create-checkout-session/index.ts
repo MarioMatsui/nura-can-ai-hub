@@ -6,6 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 255;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -15,21 +20,20 @@ serve(async (req) => {
   try {
     const { price_id, customer_email, metadata = {}, mode = 'subscription' } = await req.json();
 
-    console.log('[create-checkout-session] Request received:', {
-      price_id,
-      customer_email,
-      mode,
-      metadata
-    });
+    console.log('[create-checkout-session] Request:', { price_id, mode });
 
     // Validate required fields
     if (!price_id || !customer_email) {
-      console.error('[create-checkout-session] Missing required fields');
+      throw new Error('Missing required fields: price_id and customer_email');
+    }
+
+    // Validate email server-side
+    if (!validateEmail(customer_email)) {
       return new Response(
-        JSON.stringify({ error: 'price_id e customer_email são obrigatórios.' }),
+        JSON.stringify({ error: 'Invalid email address' }),
         { 
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }

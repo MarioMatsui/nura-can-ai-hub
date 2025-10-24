@@ -16,6 +16,11 @@ interface SignupData {
   crm_crv?: string;
 }
 
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 255;
+}
+
 function validateCpf(cpf: string): boolean {
   const cleanCpf = cpf.replace(/\D/g, '');
   
@@ -56,6 +61,17 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const data: SignupData = await req.json();
+
+    // Validate email server-side
+    if (!validateEmail(data.email)) {
+      return new Response(
+        JSON.stringify({ 
+          error: "E-mail inválido. Por favor, verifique o endereço informado.",
+          request_id: requestId
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Validate CPF server-side
     if (!validateCpf(data.cpf)) {
@@ -119,7 +135,7 @@ serve(async (req) => {
     });
 
     if (authError) {
-      console.error(`[${requestId}] Auth error:`, authError);
+      console.error(`[${requestId}] Auth error: ${authError.message}`);
       
       // Return specific errors for user-correctable issues
       if (authError.message.includes("already registered")) {
@@ -141,7 +157,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[${requestId}] User created successfully:`, authData.user.id);
+    console.log(`[${requestId}] User created successfully: ${authData.user.id}`);
 
     return new Response(
       JSON.stringify({ 
@@ -152,7 +168,7 @@ serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error(`[${requestId}] Unexpected error:`, error);
+    console.error(`[${requestId}] Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     return new Response(
       JSON.stringify({ 
         error: "Erro inesperado. Por favor, tente novamente mais tarde.",

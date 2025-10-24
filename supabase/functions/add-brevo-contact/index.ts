@@ -17,15 +17,32 @@ interface BrevoContactRequest {
   crmCrv?: string;
 }
 
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 255;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    const requestId = crypto.randomUUID();
     const { email, fullName, phone, birthDate, cpf, crmCrv }: BrevoContactRequest = await req.json();
 
-    console.log("Processing contact sync request");
+    // Validate email server-side
+    if (!validateEmail(email)) {
+      return new Response(
+        JSON.stringify({ 
+          error: "E-mail inválido",
+          request_id: requestId
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[${requestId}] Processing contact sync request`);
 
     const brevoPayload: {
       email: string;
@@ -71,11 +88,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error("API sync failed with status:", response.status);
+      console.error(`[${requestId}] API sync failed with status: ${response.status}`);
       
       // If contact already exists (HTTP 400), consider it a success
       if (response.status === 400 && errorData.includes("already exist")) {
-        console.log("Contact already exists, sync skipped");
+        console.log(`[${requestId}] Contact already exists, sync skipped`);
         return new Response(
           JSON.stringify({ success: true, message: "Contact already exists" }),
           {
@@ -89,7 +106,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const data = await response.json();
-    console.log("Contact sync completed successfully");
+    console.log(`[${requestId}] Contact sync completed successfully`);
 
     return new Response(JSON.stringify({ success: true, data }), {
       status: 200,
@@ -97,7 +114,7 @@ const handler = async (req: Request): Promise<Response> => {
     });
   } catch (error: any) {
     const requestId = crypto.randomUUID();
-    console.error(`[${requestId}] Contact sync operation failed:`, error);
+    console.error(`[${requestId}] Contact sync operation failed: ${error.message || 'Unknown error'}`);
     return new Response(
       JSON.stringify({ 
         error: "Erro ao sincronizar contato. Por favor, tente novamente.",

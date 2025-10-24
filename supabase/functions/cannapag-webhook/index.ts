@@ -68,7 +68,7 @@ serve(async (req) => {
     const match = rawRef.match(/PLAN_[A-Z_]+$/);
     const reference = match ? match[0] : null;
 
-    console.log(`[cannapag][${requestId}] token=ok charge=${chargeId} email=${payerEmail} ref=${reference} status=${status} rawRef=${rawRef}`);
+    console.log(`[cannapag][${requestId}] token=ok charge=${chargeId} ref=${reference} status=${status}`);
 
     // Initialize Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -213,7 +213,7 @@ async function processWebhookAsync(
     );
 
     if (!user) {
-      console.warn(`[cannapag][${requestId}] Usuário não encontrado para email: ${payerEmail}`);
+      console.warn(`[cannapag][${requestId}] Usuário não encontrado`);
       
       // Registrar pagamento como review_needed
       await supabase

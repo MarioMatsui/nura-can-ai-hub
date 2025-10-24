@@ -78,6 +78,31 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Check for duplicate webhook event (replay attack protection)
+    const { data: existingEvent } = await supabase
+      .from('processed_webhooks')
+      .select('id')
+      .eq('event_id', event.id)
+      .maybeSingle();
+
+    if (existingEvent) {
+      console.log(`[stripe-webhook][${requestId}] Duplicate event ${event.id} - already processed`);
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Record webhook event for deduplication
+    await supabase
+      .from('processed_webhooks')
+      .insert({
+        event_id: event.id,
+        event_type: event.type,
+        provider: 'stripe',
+        processed_at: new Date().toISOString(),
+      });
+
     // Price ID mapping
     const PRICE_MAP: Record<string, PlanMapping> = {
       [Deno.env.get('VITE_PRICE_MEDICO_MENSAL') || '']: { plan_type: 'medico', billing_cycle: 'mensal' },
@@ -238,7 +263,7 @@ serve(async (req) => {
     console.log(`[stripe-webhook][${requestId}] Webhook processed successfully`);
 
     return new Response(
-      JSON.stringify({ received: true }),
+      JSON.stringify({ received: true, request_id: requestId }),
       { 
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -246,11 +271,11 @@ serve(async (req) => {
     );
 
   } catch (err) {
-    console.error(`[stripe-webhook][${requestId}] Error processing webhook:`, err);
+    console.error(`[stripe-webhook][${requestId}] Error processing webhook: ${err instanceof Error ? err.message : 'Unknown error'}`);
     return new Response(
       JSON.stringify({ 
         error: 'Falha ao processar webhook.',
-        details: err instanceof Error ? err.message : 'Unknown error'
+        request_id: requestId
       }),
       { 
         status: 500,
