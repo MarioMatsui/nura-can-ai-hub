@@ -150,10 +150,27 @@ const Dashboard = () => {
       return;
     }
 
+    // Map Portuguese plan names to English for consistency
+    const planTypeMap: Record<string, 'free' | 'medical' | 'legal' | 'veterinary' | 'specialist'> = {
+      'free': 'free',
+      'medico': 'medical',
+      'juridico': 'legal',
+      'veterinario': 'veterinary',
+      'especialista': 'specialist',
+      // Also support English names for backward compatibility
+      'medical': 'medical',
+      'legal': 'legal',
+      'veterinary': 'veterinary',
+      'specialist': 'specialist',
+    };
+
     // Map user_plans to subscriptions format for compatibility
     if (data && data.status === 'active') {
+      const mappedPlanType = planTypeMap[data.plan_type] || 'free';
+      console.log('[Dashboard] Mapping plan type:', data.plan_type, '->', mappedPlanType);
+      
       setSubscriptions([{
-        plan_type: data.plan_type,
+        plan_type: mappedPlanType,
         status: data.cancel_at_period_end ? 'scheduled_cancellation' : 'active',
         cancel_at: data.current_period_end,
         stripe_customer_id: data.stripe_customer_id,

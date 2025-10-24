@@ -64,6 +64,8 @@ export const ChatArea = ({
       return false;
     });
     
+    console.log('[ChatArea] Active subscriptions:', activeSubs);
+    
     // Priority: specialist > medical > legal > veterinary > free/generic
     if (activeSubs.some(sub => sub.plan_type === 'specialist')) return 'specialist';
     if (activeSubs.some(sub => sub.plan_type === 'medical')) return 'medical';
