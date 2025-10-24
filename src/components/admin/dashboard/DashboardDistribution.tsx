@@ -56,24 +56,24 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
         .in("status", ["active", "trialing", "past_due"]);
 
       // Total de registros no período
-      const { data: registrations } = await supabase
+      const { count: registrationsCount } = await supabase
         .from("profiles")
-        .select("id", { count: "exact", head: true })
+        .select("*", { count: "exact", head: true })
         .gte("created_at", filters.dateFrom.toISOString())
         .lte("created_at", filters.dateTo.toISOString());
 
       // Total de assinaturas no período
-      const { data: subscriptions } = await supabase
+      const { count: subscriptionsCount } = await supabase
         .from("subscriptions")
-        .select("id", { count: "exact", head: true })
+        .select("*", { count: "exact", head: true })
         .eq("event", "created")
         .gte("effective_at", filters.dateFrom.toISOString())
         .lte("effective_at", filters.dateTo.toISOString());
 
       // Total de cancelamentos no período
-      const { data: cancellations } = await supabase
+      const { count: cancellationsCount } = await supabase
         .from("subscriptions")
-        .select("id", { count: "exact", head: true })
+        .select("*", { count: "exact", head: true })
         .eq("event", "canceled")
         .gte("effective_at", filters.dateFrom.toISOString())
         .lte("effective_at", filters.dateTo.toISOString());
@@ -95,9 +95,9 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
 
       setDistribution(distributionData);
       setStats({
-        totalRegistrations: registrations?.length || 0,
-        totalSubscriptions: subscriptions?.length || 0,
-        totalCancellations: cancellations?.length || 0,
+        totalRegistrations: registrationsCount || 0,
+        totalSubscriptions: subscriptionsCount || 0,
+        totalCancellations: cancellationsCount || 0,
       });
     } catch (error) {
       console.error("Error loading distribution:", error);
