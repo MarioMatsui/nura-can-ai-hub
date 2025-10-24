@@ -100,6 +100,10 @@ serve(async (req) => {
       const priceId = item?.price?.id;
       const mapping = priceId ? PRICE_MAP[priceId] : undefined;
 
+      // Get plan_type and billing_cycle from metadata first, fallback to mapping
+      const planType = sub.metadata?.plan_type || extraMeta?.plan_type || mapping?.plan_type || 'free';
+      const billingCycle = sub.metadata?.billing_cycle || extraMeta?.billing_cycle || mapping?.billing_cycle || null;
+
       // Try to get user_id from metadata first
       let userId = sub.metadata?.user_id || extraMeta?.user_id;
       
@@ -141,8 +145,8 @@ serve(async (req) => {
         customer_id: customerId,
         price_id: priceId,
         status: sub.status,
-        plan_type: mapping?.plan_type || 'free',
-        billing_cycle: mapping?.billing_cycle,
+        plan_type: planType,
+        billing_cycle: billingCycle,
         current_period_end: sub.current_period_end,
         cancel_at_period_end: sub.cancel_at_period_end,
         metadata: sub.metadata,
@@ -157,8 +161,8 @@ serve(async (req) => {
         _user_id: userId,
         _stripe_customer_id: customerId,
         _subscription_id: sub.id,
-        _plan_type: mapping?.plan_type || 'free',
-        _billing_cycle: mapping?.billing_cycle || null,
+        _plan_type: planType,
+        _billing_cycle: billingCycle,
         _status: sub.status,
         _current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
         _cancel_at_period_end: sub.cancel_at_period_end || false,
