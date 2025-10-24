@@ -100,7 +100,40 @@ serve(async (req) => {
       const priceId = item?.price?.id;
       const mapping = priceId ? PRICE_MAP[priceId] : undefined;
 
-      const userId = sub.metadata?.user_id || extraMeta?.user_id || customerId;
+      // Try to get user_id from metadata first
+      let userId = sub.metadata?.user_id || extraMeta?.user_id;
+      
+      // If no user_id in metadata, look up by stripe_customer_id
+      if (!userId) {
+        console.log(`[stripe-webhook][${requestId}] No user_id in metadata, looking up by customer_id:`, customerId);
+        
+        const { data: existingPlan, error: lookupError } = await supabase
+          .from('user_plans')
+          .select('user_id')
+          .eq('stripe_customer_id', customerId)
+          .single();
+        
+        if (lookupError) {
+          console.error(`[stripe-webhook][${requestId}] Error looking up user by customer_id:`, lookupError);
+        } else if (existingPlan) {
+          userId = existingPlan.user_id;
+          console.log(`[stripe-webhook][${requestId}] Found user_id from existing plan:`, userId);
+        }
+      }
+      
+      // If still no user_id, try to get from customer metadata
+      if (!userId) {
+        console.log(`[stripe-webhook][${requestId}] Fetching customer metadata from Stripe:`, customerId);
+        try {
+          const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+          userId = customer.metadata?.user_id;
+          if (userId) {
+            console.log(`[stripe-webhook][${requestId}] Found user_id in customer metadata:`, userId);
+          }
+        } catch (err) {
+          console.error(`[stripe-webhook][${requestId}] Error fetching customer:`, err);
+        }
+      }
       
       console.log(`[stripe-webhook][${requestId}] Syncing subscription:`, {
         subscription_id: sub.id,
@@ -116,7 +149,7 @@ serve(async (req) => {
       });
 
       if (!userId) {
-        console.error(`[stripe-webhook][${requestId}] No user_id found for subscription`);
+        console.error(`[stripe-webhook][${requestId}] No user_id found for subscription after all attempts`);
         throw new Error('No user_id found');
       }
 

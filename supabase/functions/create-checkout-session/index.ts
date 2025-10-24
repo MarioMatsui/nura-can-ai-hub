@@ -84,7 +84,15 @@ serve(async (req) => {
       cancelUrl
     });
 
-    // Create checkout session
+    // Update customer metadata with user_id if provided
+    if (metadata.user_id) {
+      await stripe.customers.update(customer.id, {
+        metadata: { user_id: metadata.user_id }
+      });
+      console.log('[create-checkout-session] Updated customer metadata with user_id');
+    }
+
+    // Create checkout session with subscription_data to pass metadata to subscription
     const session = await stripe.checkout.sessions.create({
       mode,
       customer: customer.id,
@@ -95,6 +103,9 @@ serve(async (req) => {
       success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
       metadata,
+      subscription_data: mode === 'subscription' ? {
+        metadata
+      } : undefined,
       allow_promotion_codes: true,
     });
 
