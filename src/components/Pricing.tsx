@@ -291,20 +291,20 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           </p>
           
           {/* Billing Cycle Toggle */}
-          <div className="inline-flex items-center gap-3 bg-muted p-2 rounded-lg">
-            <span className={!isAnnual ? "font-semibold" : "text-muted-foreground"}>
+          <div className="inline-flex items-center gap-4 bg-muted/50 px-6 py-4 rounded-full border border-border">
+            <span className={`text-xl font-bold transition-all ${!isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
               Mensal
             </span>
             <Switch
               checked={isAnnual}
               onCheckedChange={setIsAnnual}
-              className="data-[state=checked]:bg-primary"
+              className="data-[state=checked]:bg-primary scale-125"
             />
-            <span className={isAnnual ? "font-semibold" : "text-muted-foreground"}>
+            <span className={`text-xl font-bold transition-all ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
               Anual
             </span>
             {isAnnual && (
-              <Badge variant="secondary" className="ml-2 bg-primary/10 text-primary border-primary/20">
+              <Badge variant="secondary" className="ml-1 bg-primary/20 text-primary border-primary/30 font-semibold">
                 -17%
               </Badge>
             )}
