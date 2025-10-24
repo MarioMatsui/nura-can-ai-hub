@@ -603,6 +603,47 @@ serve(async (req) => {
     const data = await response.json();
     const aiResponse = data.choices[0].message.content;
 
+    // Register AI usage for cost tracking
+    try {
+      const usage = data.usage || {};
+      const tokensInput = usage.prompt_tokens || 0;
+      const tokensOutput = usage.completion_tokens || 0;
+      
+      // Estimate cost based on Lovable AI pricing
+      // These are approximate values - adjust based on actual Lovable AI pricing
+      const costPer1kInputTokens = 0.00015; // $0.15 per 1M tokens = $0.00015 per 1k
+      const costPer1kOutputTokens = 0.0006;  // $0.60 per 1M tokens = $0.0006 per 1k
+      
+      const inputCost = (tokensInput / 1000) * costPer1kInputTokens;
+      const outputCost = (tokensOutput / 1000) * costPer1kOutputTokens;
+      const totalCost = inputCost + outputCost;
+      
+      // Get user_id from auth header
+      const authHeader = req.headers.get('Authorization');
+      if (authHeader) {
+        const token = authHeader.replace('Bearer ', '');
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+        const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+        
+        const { data: { user } } = await adminClient.auth.getUser(token);
+        
+        if (user) {
+          await adminClient.from('ai_usage').insert({
+            user_id: user.id,
+            conversation_id: conversationId,
+            model: model,
+            tokens_input: tokensInput,
+            tokens_output: tokensOutput,
+            cost: totalCost,
+          });
+        }
+      }
+    } catch (usageError) {
+      console.error('Error recording AI usage:', usageError);
+      // Don't fail the request if usage recording fails
+    }
+
     return new Response(JSON.stringify({ response: aiResponse }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
