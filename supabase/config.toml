@@ -17,3 +17,18 @@ verify_jwt = false
 
 [functions.finalize-cancellations]
 verify_jwt = false
+
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.validate-signup]
+verify_jwt = false
+
+[functions.revert-cancellation]
+verify_jwt = true
+
+[functions.request-cancellation]
+verify_jwt = true
+
+[functions.activate-specialist]
+verify_jwt = true
