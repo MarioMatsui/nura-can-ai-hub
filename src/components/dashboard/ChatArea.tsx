@@ -75,15 +75,25 @@ export const ChatArea = ({
 
   // Initialize model selection with priority logic
   useEffect(() => {
+    console.log('[ChatArea] Initializing model selection', {
+      currentConversation: currentConversation?.model_type,
+      subscriptions: subscriptions.length,
+      subscriptionsData: subscriptions,
+    });
+
     // Priority 1: Model from current conversation
     if (currentConversation?.model_type && currentConversation.model_type !== 'generic') {
+      console.log('[ChatArea] Using conversation model:', currentConversation.model_type);
       setSelectedModel(currentConversation.model_type);
       return;
     }
 
     // Priority 2: Model from active subscription (NEW: moved up in priority)
     const defaultModel = getDefaultModelFromSubscriptions();
+    console.log('[ChatArea] Default model from subscriptions:', defaultModel);
+    
     if (defaultModel !== 'generic') {
+      console.log('[ChatArea] Setting model from subscription:', defaultModel);
       setSelectedModel(defaultModel);
       localStorage.setItem('lastUsedModel', defaultModel); // Update localStorage
       return;
@@ -92,11 +102,13 @@ export const ChatArea = ({
     // Priority 3: Last used model from localStorage (only if no active plan)
     const lastUsedModel = localStorage.getItem('lastUsedModel') as ModelType | null;
     if (lastUsedModel) {
+      console.log('[ChatArea] Using last used model from localStorage:', lastUsedModel);
       setSelectedModel(lastUsedModel);
       return;
     }
 
     // Fallback: Use generic
+    console.log('[ChatArea] Using fallback generic model');
     setSelectedModel('generic');
   }, [currentConversation, subscriptions]);
 
