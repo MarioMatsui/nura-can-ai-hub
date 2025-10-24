@@ -123,7 +123,13 @@ export const SettingsModal = ({
       if (error) throw error;
       if (!data?.url) throw new Error("URL do portal não retornada");
 
-      window.location.href = data.url;
+      // Abrir portal em nova aba
+      window.open(data.url, '_blank');
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Portal de gerenciamento aberto em nova aba',
+      });
     } catch (error: any) {
       console.error('Erro ao abrir portal:', error);
       toast({
