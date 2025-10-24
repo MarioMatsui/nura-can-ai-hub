@@ -32,3 +32,9 @@ verify_jwt = true
 
 [functions.activate-specialist]
 verify_jwt = true
+
+[functions.create-portal-session]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
