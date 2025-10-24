@@ -140,12 +140,11 @@ const Dashboard = () => {
   const fetchSubscriptions = async (userId: string) => {
     const { data, error } = await supabase
       .from('user_plans')
-      .select('plan_type, status, current_period_end, cancel_at_period_end, stripe_customer_id, billing_cycle')
-      .eq('user_id', userId)
-      .maybeSingle();
+      .select('plan_type, status, current_period_end, cancel_at_period_end, stripe_customer_id, billing_cycle, subscription_id')
+      .eq('user_id', userId);
 
     if (error) {
-      console.error('Error fetching user plan:', error);
+      console.error('Error fetching user plans:', error);
       setSubscriptions([]);
       return;
     }
@@ -164,40 +163,55 @@ const Dashboard = () => {
       'specialist': 'specialist',
     };
 
-    // Map user_plans to subscriptions format for compatibility
-    if (data && data.status === 'active') {
-      const mappedPlanType = planTypeMap[data.plan_type] || 'free';
-      console.log('[Dashboard] Mapping plan type:', data.plan_type, '->', mappedPlanType);
-      
-      // Check if plan should still be active (not past cancellation date)
-      const isCanceled = data.cancel_at_period_end && data.current_period_end && new Date(data.current_period_end) < new Date();
-      
-      if (!isCanceled) {
-        setSubscriptions([{
-          plan_type: mappedPlanType,
-          status: data.cancel_at_period_end ? 'scheduled_cancellation' : 'active',
-          cancel_at: data.current_period_end,
-          stripe_customer_id: data.stripe_customer_id,
-          billing_cycle: data.billing_cycle,
-        }] as any);
+    // Process all plans - multiple active plans allowed
+    if (data && data.length > 0) {
+      const activePlans = data
+        .filter(plan => plan.status === 'active')
+        .map(plan => {
+          const mappedPlanType = planTypeMap[plan.plan_type] || 'free';
+          console.log('[Dashboard] Mapping plan type:', plan.plan_type, '->', mappedPlanType);
+          
+          // Check if plan should still be active (not past cancellation date)
+          const isCanceled = plan.cancel_at_period_end && plan.current_period_end && new Date(plan.current_period_end) < new Date();
+          
+          if (!isCanceled) {
+            return {
+              plan_type: mappedPlanType,
+              status: plan.cancel_at_period_end ? 'scheduled_cancellation' : 'active',
+              cancel_at: plan.current_period_end,
+              stripe_customer_id: plan.stripe_customer_id,
+              billing_cycle: plan.billing_cycle,
+              subscription_id: plan.subscription_id,
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      console.log('[Dashboard] Active plans found:', activePlans.length);
+
+      if (activePlans.length > 0) {
+        setSubscriptions(activePlans as any);
       } else {
-        // Plan is canceled and past due, fallback to free
+        // No active plans, fallback to free
         setSubscriptions([{
           plan_type: 'free',
           status: 'active',
           cancel_at: null,
           stripe_customer_id: null,
           billing_cycle: null,
+          subscription_id: null,
         }] as any);
       }
     } else {
-      // No active plan, fallback to free
+      // No plans at all, fallback to free
       setSubscriptions([{
         plan_type: 'free',
         status: 'active',
         cancel_at: null,
         stripe_customer_id: null,
         billing_cycle: null,
+        subscription_id: null,
       }] as any);
     }
   };

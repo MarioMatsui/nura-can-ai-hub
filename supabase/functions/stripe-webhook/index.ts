@@ -157,21 +157,6 @@ serve(async (req) => {
         throw new Error('No user_id found');
       }
 
-      // Check if there's an existing active plan - don't overwrite with canceled/inactive status
-      const { data: existingPlan } = await supabase
-        .from('user_plans')
-        .select('status, subscription_id')
-        .eq('user_id', userId)
-        .single();
-
-      // Don't overwrite an active plan with a canceled/inactive one
-      if (existingPlan && 
-          existingPlan.status === 'active' && 
-          ['canceled', 'incomplete', 'inactive'].includes(sub.status)) {
-        console.log(`[stripe-webhook][${requestId}] Skipping update - won't overwrite active plan with ${sub.status} subscription`);
-        return;
-      }
-
       const { data, error } = await supabase.rpc('upsert_user_plan', {
         _user_id: userId,
         _stripe_customer_id: customerId,

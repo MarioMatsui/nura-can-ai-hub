@@ -100,10 +100,13 @@ export const SettingsModal = ({
   };
 
   const activePlans = subscriptions?.filter(s => s.status === 'active' || s.status === 'scheduled_cancellation') || [];
-  const currentPlan = activePlans[0]; // Since user_plans is one record per user
+  const hasActivePlans = activePlans.length > 0;
   
   const handleManageSubscription = async () => {
-    if (!currentPlan || !(currentPlan as any).stripe_customer_id) {
+    // Get any plan with stripe_customer_id (all should have the same customer ID)
+    const planWithCustomerId = activePlans.find(p => (p as any).stripe_customer_id);
+    
+    if (!planWithCustomerId || !(planWithCustomerId as any).stripe_customer_id) {
       toast({
         title: 'Erro',
         description: 'Informações de assinatura não encontradas',
@@ -115,7 +118,7 @@ export const SettingsModal = ({
     try {
       const { data, error } = await supabase.functions.invoke('create-portal-session', {
         body: {
-          stripe_customer_id: (currentPlan as any).stripe_customer_id,
+          stripe_customer_id: (planWithCustomerId as any).stripe_customer_id,
           return_url: window.location.href,
         },
       });
@@ -441,7 +444,7 @@ export const SettingsModal = ({
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Seus planos</h3>
 
-              {!currentPlan ? (
+              {!hasActivePlans ? (
                 <div className="p-6 rounded-lg bg-muted/50 text-center space-y-4">
                   <p className="text-sm text-muted-foreground">Você está no plano gratuito</p>
                   <Button
@@ -458,45 +461,47 @@ export const SettingsModal = ({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-accent/50 border border-border space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <p className="font-medium text-lg">{getPlanLabel(currentPlan.plan_type)}</p>
-                          {getStatusBadge((currentPlan as any).status || 'active', (currentPlan as any).cancel_at_period_end || false)}
+                  {activePlans.map((plan, index) => (
+                    <div key={index} className="p-4 rounded-lg bg-accent/50 border border-border space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <p className="font-medium text-lg">{getPlanLabel(plan.plan_type)}</p>
+                            {getStatusBadge((plan as any).status || 'active', (plan as any).cancel_at_period_end || false)}
+                          </div>
+                          {(plan as any).billing_cycle && (
+                            <p className="text-sm text-muted-foreground">
+                              Periodicidade: <span className="font-medium capitalize">{(plan as any).billing_cycle}</span>
+                            </p>
+                          )}
+                          {plan.cancel_at && (
+                            <p className="text-sm text-muted-foreground">
+                              {(plan as any).cancel_at_period_end 
+                                ? `Ativo até ${new Date(plan.cancel_at).toLocaleDateString('pt-BR')}`
+                                : `Próxima cobrança: ${new Date(plan.cancel_at).toLocaleDateString('pt-BR')}`
+                              }
+                            </p>
+                          )}
                         </div>
-                        {(currentPlan as any).billing_cycle && (
-                          <p className="text-sm text-muted-foreground">
-                            Periodicidade: <span className="font-medium capitalize">{(currentPlan as any).billing_cycle}</span>
-                          </p>
-                        )}
-                        {currentPlan.cancel_at && (
-                          <p className="text-sm text-muted-foreground">
-                            {(currentPlan as any).cancel_at_period_end 
-                              ? `Ativo até ${new Date(currentPlan.cancel_at).toLocaleDateString('pt-BR')}`
-                              : `Próxima cobrança: ${new Date(currentPlan.cancel_at).toLocaleDateString('pt-BR')}`
-                            }
-                          </p>
-                        )}
                       </div>
+
+                      {(plan as any).status === 'past_due' && (
+                        <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                          <p className="text-sm text-destructive">
+                            ⚠️ Pagamento pendente. Clique em <strong>Gerenciar Assinatura</strong> para regularizar.
+                          </p>
+                        </div>
+                      )}
+
+                      {(plan as any).status === 'incomplete' && (
+                        <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                          <p className="text-sm text-destructive">
+                            Finalize o pagamento para ativar sua assinatura.
+                          </p>
+                        </div>
+                      )}
                     </div>
-
-                    {(currentPlan as any).status === 'past_due' && (
-                      <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-                        <p className="text-sm text-destructive">
-                          ⚠️ Pagamento pendente. Clique em <strong>Gerenciar Assinatura</strong> para regularizar.
-                        </p>
-                      </div>
-                    )}
-
-                    {(currentPlan as any).status === 'incomplete' && (
-                      <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-                        <p className="text-sm text-destructive">
-                          Finalize o pagamento para ativar sua assinatura.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  ))}
 
                   <div className="grid grid-cols-2 gap-3">
                     <Button
@@ -506,7 +511,8 @@ export const SettingsModal = ({
                         onOpenChange(false);
                       }}
                     >
-                      Ver planos disponíveis
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adicionar plano
                     </Button>
                     <Button
                       variant="default"
@@ -514,7 +520,7 @@ export const SettingsModal = ({
                       className="gap-2"
                     >
                       <CreditCard className="h-4 w-4" />
-                      Gerenciar assinatura
+                      Gerenciar assinaturas
                     </Button>
                   </div>
                 </div>
