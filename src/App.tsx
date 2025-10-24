@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Planos from "./pages/Planos";
 import Dashboard from "./pages/Dashboard";
 import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCanceled from "./pages/PaymentCanceled";
 import SignUp from "./pages/auth/SignUp";
 import Login from "./pages/auth/Login";
 import ForgotPassword from "./pages/auth/ForgotPassword";
@@ -25,7 +26,8 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/planos" element={<Planos />} />
           <Route path="/app" element={<Dashboard />} />
-          <Route path="/pagamento-confirmado" element={<PaymentSuccess />} />
+          <Route path="/checkout/sucesso" element={<PaymentSuccess />} />
+          <Route path="/checkout/cancelado" element={<PaymentCanceled />} />
           <Route path="/auth/signup" element={<SignUp />} />
           <Route path="/auth/login" element={<Login />} />
           <Route path="/auth/forgot-password" element={<ForgotPassword />} />
