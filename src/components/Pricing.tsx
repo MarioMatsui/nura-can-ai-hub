@@ -19,7 +19,10 @@ const plans = {
       "Respostas mais diretas",
     ],
     monthlyPrice: 0,
+    monthlyOriginalPrice: 0,
     annualPrice: 0,
+    annualOriginalPrice: 0,
+    annualTotalPrice: 0,
     popular: false,
   },
   medico: {
@@ -31,8 +34,11 @@ const plans = {
       "Acesso a banco de dados médico",
       "Respostas baseadas em evidências científicas",
     ],
-    monthlyPrice: 69.9,
-    annualPrice: 718.8,
+    monthlyPrice: 84.99,
+    monthlyOriginalPrice: 99.90,
+    annualPrice: 922.99,
+    annualOriginalPrice: 89.90,
+    annualTotalPrice: 922.99,
     popular: false,
   },
   juridico: {
@@ -44,8 +50,11 @@ const plans = {
       "Acesso a banco de dados jurídico",
       "Informações sobre regulamentação",
     ],
-    monthlyPrice: 59.9,
-    annualPrice: 598.8,
+    monthlyPrice: 76.90,
+    monthlyOriginalPrice: 89.90,
+    annualPrice: 816.00,
+    annualOriginalPrice: 79.90,
+    annualTotalPrice: 816.00,
     popular: false,
   },
   veterinario: {
@@ -57,8 +66,11 @@ const plans = {
       "Acesso a banco de dados veterinário",
       "Evidências científicas em medicina veterinária",
     ],
-    monthlyPrice: 49.9,
-    annualPrice: 478.8,
+    monthlyPrice: 68.00,
+    monthlyOriginalPrice: 79.90,
+    annualPrice: 719.88,
+    annualOriginalPrice: 69.90,
+    annualTotalPrice: 719.88,
     popular: false,
   },
   especialista: {
@@ -71,8 +83,11 @@ const plans = {
       "Máxima flexibilidade profissional",
       "Melhor custo-benefício",
     ],
-    monthlyPrice: 119.9,
-    annualPrice: 1188.0,
+    monthlyPrice: 109.90,
+    monthlyOriginalPrice: 129.90,
+    annualPrice: 1188.00,
+    annualOriginalPrice: 109.90,
+    annualTotalPrice: 1188.00,
     popular: true,
   },
 };
@@ -169,15 +184,17 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       const monthlyEquivalent = plan.annualPrice / 12;
       return (
         <div className="flex flex-col items-center">
-          <div className="flex flex-col items-center">
+          <div className="flex items-center gap-2">
             <span className="text-2xl sm:text-3xl font-bold">
               R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
             </span>
-            <span className="text-sm text-muted-foreground">/mês</span>
+            <span className="text-sm text-muted-foreground line-through">
+              R$ {plan.annualOriginalPrice.toFixed(2).replace(".", ",")}
+            </span>
           </div>
+          <span className="text-sm text-muted-foreground">/mês</span>
           <div className="text-xs text-muted-foreground mt-1">
-            R$ {plan.annualPrice.toFixed(2).replace(".", ",")}
-            {" • "}cobrado anualmente
+            (R$ {plan.annualTotalPrice.toFixed(2).replace(".", ",")} cobrados anualmente)
           </div>
         </div>
       );
@@ -185,9 +202,14 @@ const Pricing = ({ showFree = true }: PricingProps) => {
     
     return (
       <div className="flex flex-col items-center">
-        <span className="text-2xl sm:text-3xl font-bold">
-          R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-2xl sm:text-3xl font-bold">
+            R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
+          </span>
+          <span className="text-sm text-muted-foreground line-through">
+            R$ {plan.monthlyOriginalPrice.toFixed(2).replace(".", ",")}
+          </span>
+        </div>
         <span className="text-sm text-muted-foreground">/mês</span>
       </div>
     );
