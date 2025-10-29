@@ -86,22 +86,6 @@ const AdminKnowledge = () => {
     }
   };
 
-  const generateTitleFromFileName = (fileName: string): string => {
-    // Remove extension
-    const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
-    
-    // Replace underscores and hyphens with spaces
-    const nameWithSpaces = nameWithoutExt.replace(/[_-]/g, ' ');
-    
-    // Convert to Title Case
-    const titleCase = nameWithSpaces
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-    
-    return titleCase;
-  };
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -116,17 +100,10 @@ const AdminKnowledge = () => {
     setFileName(file.name);
     setSelectedFile(file);
     
-    // Auto-fill title if empty or if it's the last auto-generated title
-    const shouldGenerateTitle = !title.trim() || title === lastGeneratedTitle;
-    console.log('Should generate title:', shouldGenerateTitle, 'Current title:', title, 'Last generated:', lastGeneratedTitle);
-    
-    if (shouldGenerateTitle) {
-      const generatedTitle = generateTitleFromFileName(file.name);
-      console.log('Generated title:', generatedTitle);
-      setTitle(generatedTitle);
-      setLastGeneratedTitle(generatedTitle);
-      toast.success(`Título preenchido automaticamente: ${generatedTitle}`);
-    }
+    // Auto-fill title with filename without extension
+    const titleFromFile = file.name.replace(/\.(txt|md)$/i, '');
+    setTitle(titleFromFile);
+    setLastGeneratedTitle(titleFromFile);
     
     // Read the content immediately
     const reader = new FileReader();
