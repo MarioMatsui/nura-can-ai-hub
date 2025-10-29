@@ -241,16 +241,6 @@ const AdminKnowledge = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="title">Título do Documento</Label>
-                  <Input
-                    id="title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ex: Estudo sobre CBD em epilepsia"
-                  />
-                </div>
-
-                <div>
                   <Label htmlFor="file">Arquivo</Label>
                   <input
                     id="file"
@@ -267,6 +257,16 @@ const AdminKnowledge = () => {
                   <p className="text-xs text-muted-foreground mt-1">
                     Apenas arquivos TXT e MD aceitos (máx 10MB). Converta PDFs para TXT antes de fazer upload.
                   </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="title">Título do Documento</Label>
+                  <Input
+                    id="title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Ex: Estudo sobre CBD em epilepsia"
+                  />
                 </div>
 
                 <div>
