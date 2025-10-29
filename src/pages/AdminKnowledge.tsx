@@ -42,6 +42,7 @@ const AdminKnowledge = () => {
   const [content, setContent] = useState("");
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [lastGeneratedTitle, setLastGeneratedTitle] = useState("");
 
   useEffect(() => {
     checkAdmin();
@@ -85,19 +86,42 @@ const AdminKnowledge = () => {
     }
   };
 
+  const generateTitleFromFileName = (fileName: string): string => {
+    // Remove extension
+    const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+    
+    // Replace underscores and hyphens with spaces
+    const nameWithSpaces = nameWithoutExt.replace(/[_-]/g, ' ');
+    
+    // Convert to Title Case
+    const titleCase = nameWithSpaces
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    
+    return titleCase;
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Accept only TXT files
-    if (!file.name.endsWith('.txt')) {
-      toast.error("Por favor, envie apenas arquivos TXT. Converta PDFs para TXT antes de fazer upload.");
+    // Accept TXT and MD files
+    if (!file.name.endsWith('.txt') && !file.name.endsWith('.md')) {
+      toast.error("Por favor, envie apenas arquivos TXT ou MD. Converta PDFs para TXT antes de fazer upload.");
       e.target.value = '';
       return;
     }
 
     setFileName(file.name);
     setSelectedFile(file);
+    
+    // Auto-fill title if empty or if it's the last auto-generated title
+    if (title === "" || title === lastGeneratedTitle) {
+      const generatedTitle = generateTitleFromFileName(file.name);
+      setTitle(generatedTitle);
+      setLastGeneratedTitle(generatedTitle);
+    }
     
     // Read the content immediately
     const reader = new FileReader();
@@ -161,6 +185,7 @@ const AdminKnowledge = () => {
       setContent("");
       setFileName("");
       setSelectedFile(null);
+      setLastGeneratedTitle("");
       loadDocuments();
     } catch (error: any) {
       toast.error("Erro: " + error.message);
@@ -248,7 +273,7 @@ const AdminKnowledge = () => {
                   <Input
                     id="file"
                     type="file"
-                    accept=".txt"
+                    accept=".txt,.md"
                     onChange={handleFileUpload}
                   />
                   {fileName && (
@@ -257,7 +282,7 @@ const AdminKnowledge = () => {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    Apenas arquivos TXT aceitos (máx 10MB). Converta PDFs para TXT antes de fazer upload.
+                    Apenas arquivos TXT e MD aceitos (máx 10MB). Converta PDFs para TXT antes de fazer upload.
                   </p>
                 </div>
 
