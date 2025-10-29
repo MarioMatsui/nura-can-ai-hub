@@ -45,6 +45,14 @@ const KnowledgeManagement = () => {
     loadDocuments();
   }, []);
 
+  // Auto-fill title when file is selected
+  useEffect(() => {
+    if (fileName) {
+      const titleFromFile = fileName.replace(/\.(txt|md)$/i, '');
+      setTitle(titleFromFile);
+    }
+  }, [fileName]);
+
   const loadDocuments = async () => {
     setIsLoading(true);
     try {
