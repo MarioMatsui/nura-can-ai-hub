@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ const AdminKnowledge = () => {
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [lastGeneratedTitle, setLastGeneratedTitle] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     checkAdmin();
@@ -258,6 +259,7 @@ const AdminKnowledge = () => {
                 <div>
                   <Label htmlFor="file">Arquivo</Label>
                   <input
+                    ref={fileInputRef}
                     id="file"
                     type="file"
                     accept=".txt,.md"
