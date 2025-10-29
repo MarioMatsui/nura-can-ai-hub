@@ -88,6 +88,8 @@ const AdminKnowledge = () => {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    console.log('handleFileUpload called, file:', file?.name);
+    
     if (!file) return;
 
     // Accept TXT and MD files
@@ -102,8 +104,10 @@ const AdminKnowledge = () => {
     
     // Auto-fill title with filename without extension
     const titleFromFile = file.name.replace(/\.(txt|md)$/i, '');
+    console.log('Setting title to:', titleFromFile);
     setTitle(titleFromFile);
     setLastGeneratedTitle(titleFromFile);
+    toast.success(`Título preenchido: ${titleFromFile}`);
     
     // Read the content immediately
     const reader = new FileReader();
