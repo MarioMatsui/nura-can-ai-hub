@@ -49,6 +49,15 @@ const AdminKnowledge = () => {
     loadDocuments();
   }, []);
 
+  // Auto-fill title when file is selected
+  useEffect(() => {
+    if (selectedFile) {
+      const titleFromFile = selectedFile.name.replace(/\.(txt|md)$/i, '');
+      setTitle(titleFromFile);
+      setLastGeneratedTitle(titleFromFile);
+    }
+  }, [selectedFile]);
+
   const checkAdmin = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -88,26 +97,17 @@ const AdminKnowledge = () => {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    console.log('handleFileUpload called, file:', file?.name);
-    
     if (!file) return;
 
     // Accept TXT and MD files
     if (!file.name.endsWith('.txt') && !file.name.endsWith('.md')) {
-      toast.error("Por favor, envie apenas arquivos TXT ou MD. Converta PDFs para TXT antes de fazer upload.");
+      toast.error("Por favor, envie apenas arquivos TXT ou MD.");
       e.target.value = '';
       return;
     }
 
     setFileName(file.name);
     setSelectedFile(file);
-    
-    // Auto-fill title with filename without extension
-    const titleFromFile = file.name.replace(/\.(txt|md)$/i, '');
-    console.log('Setting title to:', titleFromFile);
-    setTitle(titleFromFile);
-    setLastGeneratedTitle(titleFromFile);
-    toast.success(`Título preenchido: ${titleFromFile}`);
     
     // Read the content immediately
     const reader = new FileReader();
