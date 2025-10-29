@@ -117,10 +117,15 @@ const AdminKnowledge = () => {
     setSelectedFile(file);
     
     // Auto-fill title if empty or if it's the last auto-generated title
-    if (title === "" || title === lastGeneratedTitle) {
+    const shouldGenerateTitle = !title.trim() || title === lastGeneratedTitle;
+    console.log('Should generate title:', shouldGenerateTitle, 'Current title:', title, 'Last generated:', lastGeneratedTitle);
+    
+    if (shouldGenerateTitle) {
       const generatedTitle = generateTitleFromFileName(file.name);
+      console.log('Generated title:', generatedTitle);
       setTitle(generatedTitle);
       setLastGeneratedTitle(generatedTitle);
+      toast.success(`Título preenchido automaticamente: ${generatedTitle}`);
     }
     
     // Read the content immediately
