@@ -84,8 +84,15 @@ const KnowledgeManagement = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title) {
-      toast.error("Preencha o título do documento");
+    
+    // If no title, use filename without extension
+    let finalTitle = title.trim();
+    if (!finalTitle && fileName) {
+      finalTitle = fileName.replace(/\.(txt|md)$/i, '');
+    }
+    
+    if (!finalTitle) {
+      toast.error("Preencha o título do documento ou selecione um arquivo");
       return;
     }
 
@@ -105,7 +112,7 @@ const KnowledgeManagement = () => {
       const { data: document, error: insertError } = await supabase
         .from("knowledge_documents")
         .insert({
-          title,
+          title: finalTitle,
           file_name: fileName || "manual-entry.txt",
           content: extractedText.trim(),
           knowledge_type: knowledgeType,
