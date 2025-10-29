@@ -13,6 +13,12 @@ serve(async (req) => {
   }
 
   try {
+    // Verify JWT token
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+
     const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -100,6 +106,25 @@ serve(async (req) => {
 
     if (!userId) {
       throw new Error('Could not find user_id for this customer');
+    }
+
+    // Verify user owns this customer ID (prevent privilege escalation)
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    
+    if (userError || !user) {
+      throw new Error('Invalid authentication token');
+    }
+
+    // Verify the customer belongs to the authenticated user
+    const { data: planData, error: verifyError } = await supabase
+      .from('user_plans')
+      .select('user_id')
+      .eq('stripe_customer_id', customerId)
+      .single();
+
+    if (verifyError || !planData || planData.user_id !== user.id) {
+      throw new Error('Unauthorized: Customer does not belong to authenticated user');
     }
 
     console.log(`[sync-stripe] Updating plan for user ${userId}: ${planType} (${billingCycle})`);

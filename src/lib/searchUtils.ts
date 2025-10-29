@@ -105,9 +105,16 @@ export function createSnippet(
   return snippet;
 }
 
-// Adiciona highlight HTML ao texto
+// HTML-escapes text to prevent XSS
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Adiciona highlight HTML ao texto (XSS-safe)
 export function highlightText(text: string, query: string): string {
-  if (!query.trim()) return text;
+  if (!query.trim()) return escapeHtml(text);
   
   const normalizedText = normalizeString(text);
   const normalizedQuery = normalizeString(query);
@@ -161,11 +168,13 @@ export function highlightText(text: string, query: string): string {
   // Ordena por posição
   matches.sort((a, b) => a.start - b.start);
   
-  // Aplica highlights
+  // Aplica highlights com escape de HTML
   let offset = 0;
   matches.forEach(match => {
     const before = result.slice(0, match.start + offset);
-    const highlighted = `<mark class="bg-primary/20 text-primary font-medium rounded px-0.5">${match.original}</mark>`;
+    // Escape HTML to prevent XSS attacks
+    const escapedMatch = escapeHtml(match.original);
+    const highlighted = `<mark class="bg-primary/20 text-primary font-medium rounded px-0.5">${escapedMatch}</mark>`;
     const after = result.slice(match.end + offset);
     result = before + highlighted + after;
     offset += highlighted.length - match.original.length;

@@ -31,10 +31,10 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.create-portal-session]
-verify_jwt = false
+verify_jwt = true
 
 [functions.stripe-webhook]
 verify_jwt = false
 
 [functions.sync-stripe-subscription]
-verify_jwt = false
+verify_jwt = true
