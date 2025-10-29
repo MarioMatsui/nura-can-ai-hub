@@ -49,15 +49,6 @@ const AdminKnowledge = () => {
     loadDocuments();
   }, []);
 
-  // Auto-fill title when file is selected
-  useEffect(() => {
-    if (selectedFile) {
-      const titleFromFile = selectedFile.name.replace(/\.(txt|md)$/i, '');
-      setTitle(titleFromFile);
-      setLastGeneratedTitle(titleFromFile);
-    }
-  }, [selectedFile]);
-
   const checkAdmin = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -108,6 +99,11 @@ const AdminKnowledge = () => {
 
     setFileName(file.name);
     setSelectedFile(file);
+    
+    // Set title immediately from filename without extension
+    const titleFromFile = file.name.replace(/\.(txt|md)$/i, '');
+    setTitle(titleFromFile);
+    setLastGeneratedTitle(titleFromFile);
     
     // Read the content immediately
     const reader = new FileReader();
