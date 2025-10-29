@@ -88,7 +88,16 @@ const AdminKnowledge = () => {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    
+    console.log('=== FILE UPLOAD TRIGGERED ===');
+    console.log('File:', file);
+    
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+
+    console.log('File name:', file.name);
 
     // Accept TXT and MD files
     if (!file.name.endsWith('.txt') && !file.name.endsWith('.md')) {
@@ -97,18 +106,24 @@ const AdminKnowledge = () => {
       return;
     }
 
+    const titleFromFile = file.name.replace(/\.(txt|md)$/i, '');
+    console.log('Title from file:', titleFromFile);
+    
+    // Update all states
     setFileName(file.name);
     setSelectedFile(file);
-    
-    // Set title immediately from filename without extension
-    const titleFromFile = file.name.replace(/\.(txt|md)$/i, '');
     setTitle(titleFromFile);
     setLastGeneratedTitle(titleFromFile);
+    
+    console.log('States updated. New title should be:', titleFromFile);
+    toast.success(`Arquivo selecionado: ${file.name}`);
     
     // Read the content immediately
     const reader = new FileReader();
     reader.onload = (event) => {
-      setContent(event.target?.result as string);
+      const contentText = event.target?.result as string;
+      console.log('Content loaded, length:', contentText?.length);
+      setContent(contentText);
     };
     reader.readAsText(file, 'UTF-8');
   };
