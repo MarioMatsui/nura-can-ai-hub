@@ -78,9 +78,15 @@ const AdminFinance = () => {
   const loadFinanceData = async () => {
     setLoading(true);
     try {
-      const fromDate = dateFrom.toISOString();
-      // Add 5 minutes buffer to account for clock differences between client and server
-      const toDate = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      // Set fromDate to start of day (00:00:00)
+      const fromDateStart = new Date(dateFrom);
+      fromDateStart.setHours(0, 0, 0, 0);
+      const fromDate = fromDateStart.toISOString();
+      
+      // Set toDate to end of day (23:59:59) + buffer for clock differences
+      const toDateEnd = new Date(dateTo);
+      toDateEnd.setHours(23, 59, 59, 999);
+      const toDate = toDateEnd.toISOString();
 
       // Carregar transações
       const { data: transactionsData } = await supabase
@@ -199,12 +205,20 @@ const AdminFinance = () => {
   };
 
   const prepareChartData = async (transactions: any[]) => {
+    // Set fromDate to start of day (00:00:00)
+    const fromDateStart = new Date(dateFrom);
+    fromDateStart.setHours(0, 0, 0, 0);
+    
+    // Set toDate to end of day (23:59:59)
+    const toDateEnd = new Date(dateTo);
+    toDateEnd.setHours(23, 59, 59, 999);
+    
     // Carregar pagamentos Stripe para os gráficos
     const { data: stripePayments } = await supabase
       .from("payments")
       .select("amount, created_at")
-      .gte("created_at", dateFrom.toISOString())
-      .lte("created_at", new Date(Date.now() + 5 * 60 * 1000).toISOString())
+      .gte("created_at", fromDateStart.toISOString())
+      .lte("created_at", toDateEnd.toISOString())
       .eq("provider", "stripe")
       .in("status", ["paid", "succeeded"]);
 
