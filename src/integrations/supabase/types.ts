@@ -422,6 +422,33 @@ export type Database = {
           },
         ]
       }
+      financial_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          tag: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          tag: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          tag?: string
+          type?: string
+        }
+        Relationships: []
+      }
       knowledge_documents: {
         Row: {
           author: string | null

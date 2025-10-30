@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import UserManagement from "@/components/admin/UserManagement";
 import KnowledgeManagement from "@/components/admin/KnowledgeManagement";
 import Dashboard from "@/components/admin/Dashboard";
+import AdminFinance from "./AdminFinance";
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ const Admin = () => {
   
   const activeTab = location.pathname === "/admin/knowledge" ? "knowledge" 
                    : location.pathname === "/admin/users" ? "users"
+                   : location.pathname === "/admin/finance" ? "finance"
                    : "dashboard";
 
   useEffect(() => {
@@ -53,6 +55,8 @@ const Admin = () => {
       navigate("/admin/knowledge");
     } else if (value === "users") {
       navigate("/admin/users");
+    } else if (value === "finance") {
+      navigate("/admin/finance");
     } else {
       navigate("/admin");
     }
@@ -84,6 +88,7 @@ const Admin = () => {
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="users">Gestão de Usuários</TabsTrigger>
             <TabsTrigger value="knowledge">Base de Conhecimento</TabsTrigger>
+            <TabsTrigger value="finance">Financeiro</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard">
@@ -96,6 +101,10 @@ const Admin = () => {
 
           <TabsContent value="knowledge">
             <KnowledgeManagement />
+          </TabsContent>
+
+          <TabsContent value="finance">
+            <AdminFinance />
           </TabsContent>
         </Tabs>
       </div>
