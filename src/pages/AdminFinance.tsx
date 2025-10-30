@@ -96,29 +96,17 @@ const AdminFinance = () => {
       const entradas = transactionsData?.filter(t => t.type === "entrada").reduce((sum, t) => sum + Number(t.amount), 0) || 0;
       const saidas = transactionsData?.filter(t => t.type === "saida").reduce((sum, t) => sum + Number(t.amount), 0) || 0;
 
-      // Carregar receita da Stripe (user_plans)
-      const { data: stripePlans } = await supabase
-        .from("user_plans")
-        .select("plan_type, billing_cycle, status, created_at")
+      // Carregar receita real da Stripe através da tabela de pagamentos
+      const { data: stripePayments } = await supabase
+        .from("payments")
+        .select("amount, status, created_at")
         .gte("created_at", fromDate)
         .lte("created_at", toDate)
-        .eq("status", "active");
+        .eq("provider", "stripe")
+        .in("status", ["paid", "succeeded"]);
 
-      // Calcular receita Stripe
-      const planPrices: Record<string, Record<string, number>> = {
-        medico: { mensal: 157, anual: 1884 },
-        juridico: { mensal: 157, anual: 1884 },
-        veterinario: { mensal: 157, anual: 1884 },
-        especialista: { mensal: 397, anual: 4764 },
-      };
-
-      let stripeRevenue = 0;
-      stripePlans?.forEach(plan => {
-        if (plan.plan_type !== "free" && plan.billing_cycle) {
-          const price = planPrices[plan.plan_type]?.[plan.billing_cycle] || 0;
-          stripeRevenue += price;
-        }
-      });
+      // Calcular receita Stripe real (pagamentos efetivados)
+      const stripeRevenue = stripePayments?.reduce((sum, payment) => sum + Number(payment.amount), 0) || 0;
 
       // KPI: Ganho Geral
       const totalGanho = entradas + stripeRevenue;
@@ -142,8 +130,13 @@ const AdminFinance = () => {
         (t.tag === "marketing" || t.tag === "vendas") && t.type === "saida"
       ).reduce((sum, t) => sum + Number(t.amount), 0) || 0;
 
-      const activeSubscriptions = stripePlans?.length || 1;
-      setCAC(marketingCosts / activeSubscriptions);
+      const { count: activeSubscriptions } = await supabase
+        .from("user_plans")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active")
+        .neq("plan_type", "free");
+
+      setCAC(marketingCosts / (activeSubscriptions || 1));
 
       // KPI: Taxa de Conversão
       const { count: totalUsers } = await supabase
@@ -162,14 +155,10 @@ const AdminFinance = () => {
 
       setTaxaConversao(totalUsers ? ((activeUsers || 0) / totalUsers) * 100 : 0);
 
-      // KPI: Ticket Médio
-      const tickets = stripePlans?.map(plan => {
-        if (plan.plan_type === "free") return 0;
-        const price = planPrices[plan.plan_type]?.[plan.billing_cycle || "mensal"] || 0;
-        return plan.billing_cycle === "anual" ? price / 12 : price;
-      }) || [];
-
-      const avgTicket = tickets.length > 0 ? tickets.reduce((sum, t) => sum + t, 0) / tickets.length : 0;
+      // KPI: Ticket Médio (baseado em pagamentos reais)
+      const avgTicket = stripePayments && stripePayments.length > 0 
+        ? stripePayments.reduce((sum, p) => sum + Number(p.amount), 0) / stripePayments.length 
+        : 0;
       setTicketMedio(avgTicket);
 
       // KPI: Churn
@@ -200,7 +189,7 @@ const AdminFinance = () => {
       setChurn(churnRate);
 
       // Preparar dados dos gráficos
-      prepareChartData(transactionsData || [], stripePlans || []);
+      await prepareChartData(transactionsData || []);
 
     } catch (error) {
       console.error("Error loading finance data:", error);
@@ -209,7 +198,16 @@ const AdminFinance = () => {
     }
   };
 
-  const prepareChartData = (transactions: any[], plans: any[]) => {
+  const prepareChartData = async (transactions: any[]) => {
+    // Carregar pagamentos Stripe para os gráficos
+    const { data: stripePayments } = await supabase
+      .from("payments")
+      .select("amount, created_at")
+      .gte("created_at", dateFrom.toISOString())
+      .lte("created_at", new Date(Date.now() + 5 * 60 * 1000).toISOString())
+      .eq("provider", "stripe")
+      .in("status", ["paid", "succeeded"]);
+
     // Agrupar por mês
     const monthlyData = new Map<string, { entradas: number; saidas: number; revenue: number }>();
 
@@ -226,21 +224,10 @@ const AdminFinance = () => {
       monthlyData.set(month, current);
     });
 
-    plans.forEach(plan => {
-      const month = format(new Date(plan.created_at), "MMM/yy", { locale: ptBR });
+    stripePayments?.forEach(payment => {
+      const month = format(new Date(payment.created_at), "MMM/yy", { locale: ptBR });
       const current = monthlyData.get(month) || { entradas: 0, saidas: 0, revenue: 0 };
-      
-      const planPrices: Record<string, Record<string, number>> = {
-        medico: { mensal: 157, anual: 1884 },
-        juridico: { mensal: 157, anual: 1884 },
-        veterinario: { mensal: 157, anual: 1884 },
-        especialista: { mensal: 397, anual: 4764 },
-      };
-      
-      if (plan.plan_type !== "free" && plan.billing_cycle) {
-        current.revenue += planPrices[plan.plan_type]?.[plan.billing_cycle] || 0;
-      }
-      
+      current.revenue += Number(payment.amount);
       monthlyData.set(month, current);
     });
 
