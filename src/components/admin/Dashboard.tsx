@@ -22,13 +22,13 @@ export interface DashboardFilters {
 
 const Dashboard = () => {
   const [filters, setFilters] = useState<DashboardFilters>({
-    dateFrom: new Date(new Date().setMonth(new Date().getMonth() - 1)),
+    dateFrom: new Date(2020, 0, 1),
     dateTo: new Date(),
     planTypes: ["medico", "juridico", "veterinario", "especialista"],
     regions: [],
   });
 
-  const [periodPreset, setPeriodPreset] = useState("1_mes");
+  const [periodPreset, setPeriodPreset] = useState("sempre");
   const [showCustomDate, setShowCustomDate] = useState(false);
 
   const handlePresetChange = (preset: string) => {
