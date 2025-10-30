@@ -46,7 +46,8 @@ serve(async (req) => {
       .in('plan_type', ['medical', 'legal', 'veterinary']);
 
     if (plansError) {
-      throw plansError;
+      console.error('Error fetching plans:', plansError);
+      throw new Error('Failed to fetch subscription plans');
     }
 
     console.log('Found active individual plans:', activePlans?.length || 0);
@@ -63,7 +64,8 @@ serve(async (req) => {
       .eq('id', subscriptionId);
 
     if (updateError) {
-      throw updateError;
+      console.error('Error updating subscription:', updateError);
+      throw new Error('Failed to activate specialist plan');
     }
 
     // Schedule cancellation for all active individual plans
@@ -138,12 +140,26 @@ serve(async (req) => {
       }
     );
   } catch (error: any) {
-    console.error('Error in activate-specialist function:', error);
+    const requestId = crypto.randomUUID();
+    console.error(`[${requestId}] Error in activate-specialist function:`, error);
+    
+    // Map to user-friendly error messages
+    let userMessage = 'Erro ao ativar plano especialista';
+    let statusCode = 500;
+    
+    if (error.message === 'Unauthorized') {
+      userMessage = 'Não autorizado';
+      statusCode = 401;
+    }
+    
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ 
+        error: userMessage,
+        request_id: requestId
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: error.message === 'Unauthorized' ? 401 : 500,
+        status: statusCode,
       }
     );
   }

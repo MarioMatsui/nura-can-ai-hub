@@ -144,7 +144,7 @@ serve(async (req) => {
 
     if (error) {
       console.error('[sync-stripe] Error updating plan:', error);
-      throw error;
+      throw new Error('Failed to update subscription plan');
     }
 
     console.log('[sync-stripe] Successfully synced subscription');
@@ -160,11 +160,33 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[sync-stripe] Error:', error);
+    const requestId = crypto.randomUUID();
+    console.error(`[sync-stripe][${requestId}] Error:`, error);
+    
+    // Map common errors to user-friendly messages
+    let userMessage = 'Erro ao sincronizar assinatura';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('authorization')) {
+        userMessage = 'Não autorizado';
+        statusCode = 401;
+      } else if (error.message.includes('configuration')) {
+        userMessage = 'Erro de configuração do serviço';
+        statusCode = 503;
+      } else if (error.message.includes('Unauthorized: Customer does not belong')) {
+        userMessage = 'Cliente não pertence ao usuário autenticado';
+        statusCode = 403;
+      }
+    }
+    
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ 
+        error: userMessage,
+        request_id: requestId
+      }),
       { 
-        status: 500,
+        status: statusCode,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );

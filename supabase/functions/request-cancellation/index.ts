@@ -47,7 +47,10 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .eq("status", "active");
 
-    if (subError) throw subError;
+    if (subError) {
+      console.error('Error fetching subscription:', subError);
+      throw new Error('Failed to retrieve subscription');
+    }
 
     if (!subscriptions || subscriptions.length === 0) {
       return new Response(
@@ -93,7 +96,10 @@ serve(async (req) => {
       .select()
       .single();
 
-    if (cancelError) throw cancelError;
+    if (cancelError) {
+      console.error('Error creating cancellation request:', cancelError);
+      throw new Error('Failed to create cancellation request');
+    }
 
     // Update subscription cancel_at date and status
     const { error: updateError } = await supabase
@@ -105,7 +111,10 @@ serve(async (req) => {
       })
       .eq("id", subscription.id);
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      console.error('Error updating subscription status:', updateError);
+      throw new Error('Failed to schedule cancellation');
+    }
 
     // Get user profile
     const { data: profile } = await supabase

@@ -39,7 +39,10 @@ serve(async (req) => {
       .select('*')
       .eq('user_id', userId);
 
-    if (plansError) throw plansError;
+    if (plansError) {
+      console.error('Error fetching user plans:', plansError);
+      throw new Error('Failed to fetch user subscription plans');
+    }
 
     console.log(`Found ${userPlans.length} plans for user ${userId}`);
 
@@ -84,7 +87,10 @@ serve(async (req) => {
         .update({ status: 'canceled' })
         .in('id', plansToDeactivate);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Error updating plans:', updateError);
+        throw new Error('Failed to update subscription status');
+      }
     }
 
     // Get updated plans
@@ -94,7 +100,10 @@ serve(async (req) => {
       .eq('user_id', userId)
       .eq('status', 'active');
 
-    if (updatedError) throw updatedError;
+    if (updatedError) {
+      console.error('Error fetching updated plans:', updatedError);
+      throw new Error('Failed to retrieve updated plans');
+    }
 
     return new Response(
       JSON.stringify({
@@ -108,14 +117,28 @@ serve(async (req) => {
     );
 
   } catch (error: any) {
-    console.error('Error:', error);
+    const requestId = crypto.randomUUID();
+    console.error(`[${requestId}] Error in clean-duplicate-subscriptions:`, error);
+    
+    // Map to user-friendly error message
+    let userMessage = 'Erro ao limpar assinaturas duplicadas';
+    let statusCode = 500;
+    
+    if (error?.message?.includes('required')) {
+      userMessage = 'Parâmetros obrigatórios ausentes';
+      statusCode = 400;
+    } else if (error?.message?.includes('not configured')) {
+      userMessage = 'Serviço não configurado corretamente';
+      statusCode = 503;
+    }
+    
     return new Response(
       JSON.stringify({ 
-        error: error?.message || 'Unknown error',
-        details: error?.toString() || 'No details available'
+        error: userMessage,
+        request_id: requestId
       }),
       {
-        status: 400,
+        status: statusCode,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
