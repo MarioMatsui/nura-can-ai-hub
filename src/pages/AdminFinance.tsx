@@ -136,13 +136,38 @@ const AdminFinance = () => {
         (t.tag === "marketing" || t.tag === "vendas") && t.type === "saida"
       ).reduce((sum, t) => sum + Number(t.amount), 0) || 0;
 
-      const { count: activeSubscriptions } = await supabase
-        .from("user_plans")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "active")
-        .neq("plan_type", "free");
+      // Buscar pagamentos do período
+      const { data: periodPayments } = await supabase
+        .from("payments")
+        .select("user_id, created_at")
+        .gte("created_at", fromDate)
+        .lte("created_at", toDate)
+        .eq("provider", "stripe")
+        .in("status", ["paid", "succeeded"]);
 
-      setCAC(marketingCosts / (activeSubscriptions || 1));
+      // Para cada usuário que pagou no período, verificar se foi o primeiro pagamento
+      let newCustomers = 0;
+      if (periodPayments) {
+        const uniqueUsers = [...new Set(periodPayments.map(p => p.user_id))];
+        
+        for (const userId of uniqueUsers) {
+          // Verificar se há pagamentos anteriores ao período
+          const { count: previousPayments } = await supabase
+            .from("payments")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .eq("provider", "stripe")
+            .in("status", ["paid", "succeeded"])
+            .lt("created_at", fromDate);
+          
+          // Se não há pagamentos anteriores, este é um novo cliente
+          if (previousPayments === 0) {
+            newCustomers++;
+          }
+        }
+      }
+
+      setCAC(newCustomers > 0 ? marketingCosts / newCustomers : 0);
 
       // KPI: Taxa de Conversão
       const { count: totalUsers } = await supabase
