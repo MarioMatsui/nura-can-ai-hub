@@ -133,13 +133,26 @@ const AdminFinance = () => {
           // Extrair preço do objeto raw da Stripe
           const subscriptionData = plan.raw as any;
           if (subscriptionData?.items?.data?.[0]?.price?.unit_amount) {
-            const priceInCents = subscriptionData.items.data[0].price.unit_amount;
+            let priceInCents = subscriptionData.items.data[0].price.unit_amount;
+            
+            // Aplicar desconto se houver
+            if (subscriptionData.discount?.coupon) {
+              const coupon = subscriptionData.discount.coupon;
+              if (coupon.percent_off) {
+                // Desconto percentual
+                priceInCents = priceInCents * (1 - coupon.percent_off / 100);
+              } else if (coupon.amount_off) {
+                // Desconto fixo em centavos
+                priceInCents = Math.max(0, priceInCents - coupon.amount_off);
+              }
+            }
+            
             const priceInReais = priceInCents / 100; // Converter centavos para reais
             
             // Se for mensal, adiciona valor integral
             if (plan.billing_cycle === 'mensal') {
               totalMRR += priceInReais;
-            } 
+            }
             // Se for anual, divide por 12
             else if (plan.billing_cycle === 'anual') {
               totalMRR += priceInReais / 12;
