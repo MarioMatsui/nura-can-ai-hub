@@ -62,21 +62,21 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
         .gte("created_at", filters.dateFrom.toISOString())
         .lte("created_at", filters.dateTo.toISOString());
 
-      // Total de assinaturas no período
+      // Total de assinaturas no período (planos pagos criados)
       const { count: subscriptionsCount } = await supabase
-        .from("subscriptions")
+        .from("user_plans")
         .select("*", { count: "exact", head: true })
-        .eq("event", "created")
-        .gte("effective_at", filters.dateFrom.toISOString())
-        .lte("effective_at", filters.dateTo.toISOString());
+        .neq("plan_type", "free")
+        .gte("created_at", filters.dateFrom.toISOString())
+        .lte("created_at", filters.dateTo.toISOString());
 
-      // Total de cancelamentos no período
+      // Total de cancelamentos no período (planos que foram cancelados)
       const { count: cancellationsCount } = await supabase
-        .from("subscriptions")
+        .from("user_plans")
         .select("*", { count: "exact", head: true })
-        .eq("event", "canceled")
-        .gte("effective_at", filters.dateFrom.toISOString())
-        .lte("effective_at", filters.dateTo.toISOString());
+        .eq("cancel_at_period_end", true)
+        .gte("updated_at", filters.dateFrom.toISOString())
+        .lte("updated_at", filters.dateTo.toISOString());
 
       // Processar distribuição
       const planCounts = new Map<string, number>();
