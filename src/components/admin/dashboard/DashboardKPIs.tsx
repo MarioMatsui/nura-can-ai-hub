@@ -50,47 +50,21 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
         .gte("created_at", filters.dateFrom.toISOString())
         .lte("created_at", filters.dateTo.toISOString());
 
-      // Calcular receita baseado nos planos ativos
-      const { data: activePlansData } = await supabase
-        .from("user_plans")
-        .select("plan_type, billing_cycle, raw, created_at")
-        .in("status", ["active", "trialing"])
+      // Calcular receita baseado nos PAGAMENTOS REAIS recebidos no período
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from("payments")
+        .select("amount, status, created_at")
+        .in("status", ["completed", "succeeded", "paid"])
         .gte("created_at", filters.dateFrom.toISOString())
         .lte("created_at", filters.dateTo.toISOString());
 
       const activeUsers = activeUsersData?.length || 0;
       const aiCost = aiUsageData?.reduce((sum, item) => sum + Number(item.cost), 0) || 0;
       
-      // Calcular receita total dos planos criados no período (considerando descontos)
-      let totalRevenue = 0;
-      activePlansData?.forEach((plan) => {
-        if (plan.raw && typeof plan.raw === 'object') {
-          const stripeData = plan.raw as any;
-          
-          // Pegar o valor base do plano (em centavos)
-          let planAmount = 0;
-          if (stripeData.plan?.amount) {
-            planAmount = stripeData.plan.amount;
-          } else if (stripeData.items?.data?.[0]?.price?.unit_amount) {
-            planAmount = stripeData.items.data[0].price.unit_amount;
-          }
-          
-          // Verificar se há desconto aplicado (o discount fica no root do objeto subscription)
-          if (stripeData.discount?.coupon) {
-            const coupon = stripeData.discount.coupon;
-            
-            if (coupon.percent_off) {
-              // Desconto percentual
-              planAmount = planAmount * (1 - coupon.percent_off / 100);
-            } else if (coupon.amount_off) {
-              // Desconto em valor fixo (já vem em centavos)
-              planAmount = Math.max(0, planAmount - coupon.amount_off);
-            }
-          }
-          
-          totalRevenue += planAmount / 100; // Converter centavos para reais
-        }
-      });
+      // Calcular receita total baseado nos pagamentos reais recebidos
+      const totalRevenue = paymentsData?.reduce((sum, payment) => {
+        return sum + Number(payment.amount || 0);
+      }, 0) || 0;
 
       // Calcular período anterior para comparação
       const periodLength = filters.dateTo.getTime() - filters.dateFrom.getTime();
