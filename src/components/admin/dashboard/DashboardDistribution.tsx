@@ -44,7 +44,7 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
 
   useEffect(() => {
     loadDistribution();
-  }, [filters]);
+  }, [filters.dateFrom, filters.dateTo]);
 
   const loadDistribution = async () => {
     setLoading(true);
