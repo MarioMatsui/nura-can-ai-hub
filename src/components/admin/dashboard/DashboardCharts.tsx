@@ -151,7 +151,7 @@ export const DashboardCharts = ({ filters }: { filters: DashboardFilters }) => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip contentStyle={{ backgroundColor: '#262b36', border: 'none' }} />
                 <Legend />
                 <Line type="monotone" dataKey="subscriptions" stroke="hsl(var(--primary))" name="Assinaturas" />
               </LineChart>
@@ -164,7 +164,7 @@ export const DashboardCharts = ({ filters }: { filters: DashboardFilters }) => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip contentStyle={{ backgroundColor: '#262b36', border: 'none' }} />
                 <Legend />
                 <Bar dataKey="medico" fill="#ef4444" name="Médico" />
                 <Bar dataKey="juridico" fill="#3b82f6" name="Jurídico" />
@@ -180,7 +180,7 @@ export const DashboardCharts = ({ filters }: { filters: DashboardFilters }) => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip contentStyle={{ backgroundColor: '#262b36', border: 'none' }} />
                 <Legend />
                 <Line type="monotone" dataKey="cancellations" stroke="#ef4444" name="Cancelamentos" />
               </LineChart>
@@ -193,7 +193,7 @@ export const DashboardCharts = ({ filters }: { filters: DashboardFilters }) => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip contentStyle={{ backgroundColor: '#262b36', border: 'none' }} />
                 <Legend />
                 <Line type="monotone" dataKey="registrations" stroke="hsl(var(--primary))" name="Registros" />
               </LineChart>
