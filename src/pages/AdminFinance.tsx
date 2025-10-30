@@ -172,15 +172,30 @@ const AdminFinance = () => {
       setTicketMedio(avgTicket);
 
       // KPI: Churn
-      const { data: canceledSubs } = await supabase
+      // 1. Contar assinaturas ativas no início do período
+      const { data: activeAtStart } = await supabase
+        .from("user_plans")
+        .select("*")
+        .lte("created_at", fromDate);
+
+      // Filtrar apenas as que estavam ativas no início (ativas agora OU canceladas depois do início)
+      const activeAtStartCount = activeAtStart?.filter(sub => 
+        sub.status === "active" || 
+        (sub.status === "canceled" && new Date(sub.updated_at) > new Date(fromDate))
+      ).length || 0;
+
+      // 2. Contar assinaturas canceladas durante o período
+      const { data: canceledInPeriod } = await supabase
         .from("user_plans")
         .select("*")
         .gte("updated_at", fromDate)
         .lte("updated_at", toDate)
         .eq("status", "canceled");
 
-      const churnCount = canceledSubs?.length || 0;
-      const churnRate = activeSubscriptions > 0 ? (churnCount / activeSubscriptions) * 100 : 0;
+      const canceledCount = canceledInPeriod?.length || 0;
+
+      // 3. Calcular Churn
+      const churnRate = activeAtStartCount > 0 ? (canceledCount / activeAtStartCount) * 100 : 0;
       setChurn(churnRate);
 
       // Preparar dados dos gráficos
