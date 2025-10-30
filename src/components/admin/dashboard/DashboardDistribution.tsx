@@ -49,13 +49,23 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
   const loadDistribution = async () => {
     setLoading(true);
     try {
-      // Distribuição por plano no período filtrado
+      // Distribuição por plano - usuários que estavam ativos durante o período filtrado
       const { data: plansData } = await supabase
         .from("user_plans")
-        .select("plan_type")
+        .select("plan_type, created_at, current_period_end")
         .in("status", ["active", "trialing", "past_due"])
-        .lte("created_at", filters.dateTo.toISOString())
-        .or(`current_period_end.is.null,current_period_end.gte.${filters.dateFrom.toISOString()}`);
+        .lte("created_at", filters.dateTo.toISOString());
+      
+      // Filtrar apenas planos que estavam ativos durante o período
+      const activePlansInPeriod = plansData?.filter(plan => {
+        const createdAt = new Date(plan.created_at);
+        const periodEnd = plan.current_period_end ? new Date(plan.current_period_end) : null;
+        
+        // O plano estava ativo se:
+        // 1. Foi criado antes do fim do período filtrado E
+        // 2. (Não tem data de término OU o término é depois do início do período)
+        return createdAt <= filters.dateTo && (!periodEnd || periodEnd >= filters.dateFrom);
+      }) || [];
 
       // Total de registros no período
       const { count: registrationsCount } = await supabase
@@ -83,7 +93,7 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
 
       // Processar distribuição
       const planCounts = new Map<string, number>();
-      plansData?.forEach((plan) => {
+      activePlansInPeriod.forEach((plan) => {
         const count = planCounts.get(plan.plan_type) || 0;
         planCounts.set(plan.plan_type, count + 1);
       });

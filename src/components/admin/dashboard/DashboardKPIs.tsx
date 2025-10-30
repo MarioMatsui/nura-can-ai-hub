@@ -36,12 +36,18 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
     setLoading(true);
     try {
       // Usuários ativos no período - planos que estavam ativos durante o período filtrado
-      const { data: activeUsersData, error: usersError } = await supabase
+      const { data: allActivePlans } = await supabase
         .from("user_plans")
-        .select("user_id")
+        .select("user_id, created_at, current_period_end")
         .in("status", ["active", "trialing", "past_due"])
-        .lte("created_at", filters.dateTo.toISOString())
-        .or(`current_period_end.is.null,current_period_end.gte.${filters.dateFrom.toISOString()}`);
+        .lte("created_at", filters.dateTo.toISOString());
+      
+      // Filtrar apenas planos que estavam ativos durante o período
+      const activeUsersData = allActivePlans?.filter(plan => {
+        const createdAt = new Date(plan.created_at);
+        const periodEnd = plan.current_period_end ? new Date(plan.current_period_end) : null;
+        return createdAt <= filters.dateTo && (!periodEnd || periodEnd >= filters.dateFrom);
+      }) || [];
 
       // Gasto com IA
       const { data: aiUsageData, error: aiError } = await supabase
@@ -71,12 +77,18 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
       const previousDateFrom = new Date(filters.dateFrom.getTime() - periodLength);
       const previousDateTo = new Date(filters.dateFrom.getTime());
 
-      const { data: previousUsersData } = await supabase
+      const { data: allPreviousPlans } = await supabase
         .from("user_plans")
-        .select("user_id")
+        .select("user_id, created_at, current_period_end")
         .in("status", ["active", "trialing", "past_due"])
-        .lte("created_at", previousDateTo.toISOString())
-        .or(`current_period_end.is.null,current_period_end.gte.${previousDateFrom.toISOString()}`);
+        .lte("created_at", previousDateTo.toISOString());
+      
+      // Filtrar apenas planos que estavam ativos durante o período anterior
+      const previousUsersData = allPreviousPlans?.filter(plan => {
+        const createdAt = new Date(plan.created_at);
+        const periodEnd = plan.current_period_end ? new Date(plan.current_period_end) : null;
+        return createdAt <= previousDateTo && (!periodEnd || periodEnd >= previousDateFrom);
+      }) || [];
 
       const previousUsers = previousUsersData?.length || 0;
       const activeUsersChange =
