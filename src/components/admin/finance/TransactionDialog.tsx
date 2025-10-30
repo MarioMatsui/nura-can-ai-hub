@@ -30,6 +30,12 @@ export const TransactionDialog = ({ open, onOpenChange, transaction, onSuccess }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!tag) {
+      toast.error("Por favor, selecione uma tag");
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -109,8 +115,8 @@ export const TransactionDialog = ({ open, onOpenChange, transaction, onSuccess }
             </div>
 
             <div>
-              <Label htmlFor="tag">Tag</Label>
-              <Select value={tag} onValueChange={setTag}>
+              <Label htmlFor="tag">Tag <span className="text-destructive">*</span></Label>
+              <Select value={tag} onValueChange={setTag} required>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma tag" />
                 </SelectTrigger>
