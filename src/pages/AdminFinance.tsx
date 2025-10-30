@@ -79,8 +79,8 @@ const AdminFinance = () => {
     setLoading(true);
     try {
       const fromDate = dateFrom.toISOString();
-      // Always use current date/time for 'to' date to include latest records
-      const toDate = new Date().toISOString();
+      // Add 5 minutes buffer to account for clock differences between client and server
+      const toDate = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
       // Carregar transações
       const { data: transactionsData } = await supabase
