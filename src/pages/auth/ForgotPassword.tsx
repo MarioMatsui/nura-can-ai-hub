@@ -64,12 +64,11 @@ const ForgotPassword = () => {
       <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4 py-12">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <Link to="/" className="inline-flex items-center gap-2 mb-4">
-              <img src={logo} alt="NuraCan AI" className="h-10 w-auto" />
-              <span className="text-2xl font-bold">
-                Nura<span className="text-primary">Can</span> AI
-              </span>
-            </Link>
+          <Link to="/" className="inline-flex items-center gap-2 mb-4">
+            <span className="text-2xl font-bold">
+              Nura<span className="text-primary">Can</span> AI
+            </span>
+          </Link>
           </div>
 
           <div className="gradient-card border-border p-6 sm:p-8 text-center">
@@ -114,7 +113,6 @@ const ForgotPassword = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2 mb-4">
-            <img src={logo} alt="NuraCan AI" className="h-10 w-auto" />
             <span className="text-2xl font-bold">
               Nura<span className="text-primary">Can</span> AI
             </span>
