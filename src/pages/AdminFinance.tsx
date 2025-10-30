@@ -342,11 +342,11 @@ const AdminFinance = () => {
         loading={loading}
       />
 
-      {/* Gráficos */}
-      <FinanceCharts revenueData={revenueData} transactionData={transactionData} loading={loading} />
-
       {/* Tabela de Transações */}
       <FinanceTransactions transactions={transactions} loading={loading} onRefresh={loadFinanceData} />
+
+      {/* Gráficos */}
+      <FinanceCharts revenueData={revenueData} transactionData={transactionData} loading={loading} />
     </div>
   );
 };
