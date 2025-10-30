@@ -135,15 +135,31 @@ const AdminFinance = () => {
           if (subscriptionData?.items?.data?.[0]?.price?.unit_amount) {
             let priceInCents = subscriptionData.items.data[0].price.unit_amount;
             
-            // Aplicar desconto se houver
+            // Aplicar desconto se houver (verificar múltiplas fontes)
+            let discountApplied = false;
+            
+            // 1. Verificar desconto no nível da assinatura (campo 'discount')
             if (subscriptionData.discount?.coupon) {
               const coupon = subscriptionData.discount.coupon;
               if (coupon.percent_off) {
-                // Desconto percentual
                 priceInCents = priceInCents * (1 - coupon.percent_off / 100);
+                discountApplied = true;
               } else if (coupon.amount_off) {
-                // Desconto fixo em centavos
                 priceInCents = Math.max(0, priceInCents - coupon.amount_off);
+                discountApplied = true;
+              }
+            }
+            
+            // 2. Verificar array de descontos (campo 'discounts')
+            if (!discountApplied && subscriptionData.discounts && Array.isArray(subscriptionData.discounts) && subscriptionData.discounts.length > 0) {
+              const firstDiscount = subscriptionData.discounts[0];
+              if (firstDiscount.coupon) {
+                const coupon = firstDiscount.coupon;
+                if (coupon.percent_off) {
+                  priceInCents = priceInCents * (1 - coupon.percent_off / 100);
+                } else if (coupon.amount_off) {
+                  priceInCents = Math.max(0, priceInCents - coupon.amount_off);
+                }
               }
             }
             

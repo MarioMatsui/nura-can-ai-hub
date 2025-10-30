@@ -115,22 +115,81 @@ serve(async (req) => {
       [Deno.env.get('VITE_PRICE_ESPECIALISTA_ANUAL') || '']: { plan_type: 'especialista', billing_cycle: 'anual' },
     };
 
+    // Helper function to register payment
+    async function registerPayment(invoice: Stripe.Invoice) {
+      try {
+        console.log(`[stripe-webhook][${requestId}] Registering payment for invoice:`, invoice.id);
+        
+        // Get user_id from subscription or customer
+        let userId: string | null = null;
+        
+        if (invoice.subscription) {
+          const { data: planData } = await supabase
+            .from('user_plans')
+            .select('user_id, plan_type, billing_cycle')
+            .eq('subscription_id', invoice.subscription)
+            .maybeSingle();
+          
+          if (planData) {
+            userId = planData.user_id;
+            
+            // Register payment
+            const { error: paymentError } = await supabase
+              .from('payments')
+              .insert({
+                user_id: userId,
+                provider: 'stripe',
+                provider_payment_id: invoice.payment_intent as string,
+                charge_id: invoice.charge as string,
+                amount: (invoice.amount_paid || 0) / 100, // Convert cents to reais
+                status: invoice.status === 'paid' ? 'paid' : invoice.status,
+                plan_type: planData.plan_type,
+                billing_cycle: planData.billing_cycle,
+                payer_email: invoice.customer_email || undefined,
+                payload_raw: invoice as any,
+              });
+            
+            if (paymentError) {
+              console.error(`[stripe-webhook][${requestId}] Error registering payment:`, paymentError);
+            } else {
+              console.log(`[stripe-webhook][${requestId}] Payment registered successfully for user:`, userId);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[stripe-webhook][${requestId}] Error in registerPayment:`, err);
+      }
+    }
+
     // Helper function to sync subscription to database
     async function syncFromSubscription(
       sub: Stripe.Subscription, 
       customerId: string, 
       extraMeta?: Record<string, any>
     ) {
-      const item = sub.items?.data?.[0];
+      // Expand discounts if they exist
+      let expandedSub = sub;
+      if (sub.discounts && sub.discounts.length > 0 && typeof sub.discounts[0] === 'string') {
+        try {
+          console.log(`[stripe-webhook][${requestId}] Expanding subscription discounts for:`, sub.id);
+          expandedSub = await stripe.subscriptions.retrieve(sub.id, {
+            expand: ['discounts.coupon']
+          });
+        } catch (err) {
+          console.error(`[stripe-webhook][${requestId}] Error expanding discounts:`, err);
+        }
+      }
+      
+      const item = expandedSub.items?.data?.[0];
       const priceId = item?.price?.id;
       const mapping = priceId ? PRICE_MAP[priceId] : undefined;
 
       // Get plan_type and billing_cycle from metadata first, fallback to mapping
-      const planType = sub.metadata?.plan_type || extraMeta?.plan_type || mapping?.plan_type || 'free';
-      const billingCycle = sub.metadata?.billing_cycle || extraMeta?.billing_cycle || mapping?.billing_cycle || null;
+      const planType = expandedSub.metadata?.plan_type || extraMeta?.plan_type || mapping?.plan_type || 'free';
+      const billingCycle = expandedSub.metadata?.billing_cycle || extraMeta?.billing_cycle || mapping?.billing_cycle || null;
 
       // Try to get user_id from metadata first
-      let userId = sub.metadata?.user_id || extraMeta?.user_id;
+      let userId = expandedSub.metadata?.user_id || extraMeta?.user_id;
       
       // If no user_id in metadata, look up by stripe_customer_id
       if (!userId) {
@@ -165,16 +224,18 @@ serve(async (req) => {
       }
       
       console.log(`[stripe-webhook][${requestId}] Syncing subscription:`, {
-        subscription_id: sub.id,
+        subscription_id: expandedSub.id,
         user_id: userId,
         customer_id: customerId,
         price_id: priceId,
-        status: sub.status,
+        status: expandedSub.status,
         plan_type: planType,
         billing_cycle: billingCycle,
-        current_period_end: sub.current_period_end,
-        cancel_at_period_end: sub.cancel_at_period_end,
-        metadata: sub.metadata,
+        current_period_end: expandedSub.current_period_end,
+        cancel_at_period_end: expandedSub.cancel_at_period_end,
+        metadata: expandedSub.metadata,
+        has_discount: !!expandedSub.discount,
+        has_discounts_array: !!expandedSub.discounts && expandedSub.discounts.length > 0,
       });
 
       if (!userId) {
@@ -185,13 +246,13 @@ serve(async (req) => {
       const { data, error } = await supabase.rpc('upsert_user_plan', {
         _user_id: userId,
         _stripe_customer_id: customerId,
-        _subscription_id: sub.id,
+        _subscription_id: expandedSub.id,
         _plan_type: planType,
         _billing_cycle: billingCycle,
-        _status: sub.status,
-        _current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-        _cancel_at_period_end: sub.cancel_at_period_end || false,
-        _raw: sub as any,
+        _status: expandedSub.status,
+        _current_period_end: expandedSub.current_period_end ? new Date(expandedSub.current_period_end * 1000).toISOString() : null,
+        _cancel_at_period_end: expandedSub.cancel_at_period_end || false,
+        _raw: expandedSub as any,
       });
 
       if (error) {
@@ -245,6 +306,12 @@ serve(async (req) => {
       case 'customer.subscription.deleted': {
         console.log(`[stripe-webhook][${requestId}] Subscription ${eventType.split('.')[2]} for:`, data.id);
         await syncFromSubscription(data as Stripe.Subscription, data.customer as string);
+        break;
+      }
+
+      case 'invoice.payment_succeeded': {
+        console.log(`[stripe-webhook][${requestId}] Payment succeeded for invoice:`, data.id);
+        await registerPayment(data as Stripe.Invoice);
         break;
       }
 
