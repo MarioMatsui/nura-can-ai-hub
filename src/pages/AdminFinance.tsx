@@ -136,32 +136,30 @@ const AdminFinance = () => {
         (t.tag === "marketing" || t.tag === "vendas") && t.type === "saida"
       ).reduce((sum, t) => sum + Number(t.amount), 0) || 0;
 
-      // Buscar pagamentos do período
-      const { data: periodPayments } = await supabase
-        .from("payments")
+      // Buscar assinaturas criadas no período (incluindo com cupom de desconto)
+      const { data: periodSubscriptions } = await supabase
+        .from("user_plans")
         .select("user_id, created_at")
         .gte("created_at", fromDate)
         .lte("created_at", toDate)
-        .eq("provider", "stripe")
-        .in("status", ["paid", "succeeded"]);
+        .neq("plan_type", "free");
 
-      // Para cada usuário que pagou no período, verificar se foi o primeiro pagamento
+      // Para cada usuário que criou assinatura no período, verificar se foi a primeira
       let newCustomers = 0;
-      if (periodPayments) {
-        const uniqueUsers = [...new Set(periodPayments.map(p => p.user_id))];
+      if (periodSubscriptions) {
+        const uniqueUsers = [...new Set(periodSubscriptions.map(s => s.user_id))];
         
         for (const userId of uniqueUsers) {
-          // Verificar se há pagamentos anteriores ao período
-          const { count: previousPayments } = await supabase
-            .from("payments")
+          // Verificar se há assinaturas anteriores ao período
+          const { count: previousSubscriptions } = await supabase
+            .from("user_plans")
             .select("*", { count: "exact", head: true })
             .eq("user_id", userId)
-            .eq("provider", "stripe")
-            .in("status", ["paid", "succeeded"])
+            .neq("plan_type", "free")
             .lt("created_at", fromDate);
           
-          // Se não há pagamentos anteriores, este é um novo cliente
-          if (previousPayments === 0) {
+          // Se não há assinaturas anteriores, este é um novo cliente
+          if (previousSubscriptions === 0) {
             newCustomers++;
           }
         }
