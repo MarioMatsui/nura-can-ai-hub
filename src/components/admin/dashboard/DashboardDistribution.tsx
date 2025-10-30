@@ -74,13 +74,9 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
         .gte("created_at", filters.dateFrom.toISOString())
         .lte("created_at", filters.dateTo.toISOString());
 
-      // Total de assinaturas criadas no período (novos planos pagos, independente do status atual)
-      const { count: subscriptionsCount } = await supabase
-        .from("user_plans")
-        .select("*", { count: "exact", head: true })
-        .neq("plan_type", "free")
-        .gte("created_at", filters.dateFrom.toISOString())
-        .lte("created_at", filters.dateTo.toISOString());
+      // Total de assinaturas ativas durante o período filtrado (planos pagos que estavam ativos)
+      const activePaidPlans = activePlansInPeriod.filter(plan => plan.plan_type !== "free");
+      const subscriptionsCount = activePaidPlans.length;
 
       // Total de cancelamentos EFETIVADOS no período (planos que ficaram inativos/cancelados)
       const { count: cancellationsCount } = await supabase
