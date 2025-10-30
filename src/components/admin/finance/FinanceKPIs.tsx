@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, TrendingDown, Users, Percent, Target, UserX } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Users, Percent, Target, UserX, Repeat } from "lucide-react";
 
 interface FinanceKPIsProps {
   ganhoGeral: number;
+  mrr: number;
   lucro: number;
   gastoIA: number;
   cac: number;
@@ -14,6 +15,7 @@ interface FinanceKPIsProps {
 
 export const FinanceKPIs = ({
   ganhoGeral,
+  mrr,
   lucro,
   gastoIA,
   cac,
@@ -39,6 +41,12 @@ export const FinanceKPIs = ({
       value: formatCurrency(ganhoGeral),
       icon: DollarSign,
       color: "text-green-500",
+    },
+    {
+      title: "MRR",
+      value: formatCurrency(mrr),
+      icon: Repeat,
+      color: "text-emerald-500",
     },
     {
       title: "Lucro",
@@ -81,7 +89,7 @@ export const FinanceKPIs = ({
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(7)].map((_, i) => (
+        {[...Array(8)].map((_, i) => (
           <Card key={i}>
             <CardHeader className="pb-2">
               <div className="h-4 bg-muted animate-pulse rounded w-24" />

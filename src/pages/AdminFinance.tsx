@@ -21,6 +21,7 @@ const AdminFinance = () => {
 
   // KPIs state
   const [ganhoGeral, setGanhoGeral] = useState(0);
+  const [mrr, setMRR] = useState(0);
   const [lucro, setLucro] = useState(0);
   const [gastoIA, setGastoIA] = useState(0);
   const [cac, setCAC] = useState(0);
@@ -117,6 +118,36 @@ const AdminFinance = () => {
       // KPI: Ganho Geral
       const totalGanho = entradas + stripeRevenue;
       setGanhoGeral(totalGanho);
+
+      // KPI: MRR (Monthly Recurring Revenue)
+      // Buscar todos os planos ativos (usuários podem ter múltiplos planos simultaneamente)
+      const { data: activePlans } = await supabase
+        .from("user_plans")
+        .select("*")
+        .eq("status", "active")
+        .neq("plan_type", "free");
+
+      let totalMRR = 0;
+      if (activePlans && activePlans.length > 0) {
+        activePlans.forEach(plan => {
+          // Extrair preço do objeto raw da Stripe
+          const subscriptionData = plan.raw as any;
+          if (subscriptionData?.items?.data?.[0]?.price?.unit_amount) {
+            const priceInCents = subscriptionData.items.data[0].price.unit_amount;
+            const priceInReais = priceInCents / 100; // Converter centavos para reais
+            
+            // Se for mensal, adiciona valor integral
+            if (plan.billing_cycle === 'mensal') {
+              totalMRR += priceInReais;
+            } 
+            // Se for anual, divide por 12
+            else if (plan.billing_cycle === 'anual') {
+              totalMRR += priceInReais / 12;
+            }
+          }
+        });
+      }
+      setMRR(totalMRR);
 
       // Carregar gastos com IA
       const { data: aiCosts } = await supabase
@@ -356,6 +387,7 @@ const AdminFinance = () => {
       {/* KPIs */}
       <FinanceKPIs
         ganhoGeral={ganhoGeral}
+        mrr={mrr}
         lucro={lucro}
         gastoIA={gastoIA}
         cac={cac}
