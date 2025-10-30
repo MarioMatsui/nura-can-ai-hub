@@ -49,11 +49,13 @@ export const DashboardDistribution = ({ filters }: { filters: DashboardFilters }
   const loadDistribution = async () => {
     setLoading(true);
     try {
-      // Distribuição por plano atual
+      // Distribuição por plano no período filtrado
       const { data: plansData } = await supabase
         .from("user_plans")
         .select("plan_type")
-        .in("status", ["active", "trialing", "past_due"]);
+        .in("status", ["active", "trialing", "past_due"])
+        .lte("created_at", filters.dateTo.toISOString())
+        .or(`current_period_end.is.null,current_period_end.gte.${filters.dateFrom.toISOString()}`);
 
       // Total de registros no período
       const { count: registrationsCount } = await supabase

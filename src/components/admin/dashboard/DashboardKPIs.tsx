@@ -35,13 +35,13 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
   const loadKPIs = async () => {
     setLoading(true);
     try {
-      // Usuários ativos
+      // Usuários ativos no período - planos que estavam ativos durante o período filtrado
       const { data: activeUsersData, error: usersError } = await supabase
         .from("user_plans")
         .select("user_id")
         .in("status", ["active", "trialing", "past_due"])
-        .gte("updated_at", filters.dateFrom.toISOString())
-        .lte("updated_at", filters.dateTo.toISOString());
+        .lte("created_at", filters.dateTo.toISOString())
+        .or(`current_period_end.is.null,current_period_end.gte.${filters.dateFrom.toISOString()}`);
 
       // Gasto com IA
       const { data: aiUsageData, error: aiError } = await supabase
@@ -75,8 +75,8 @@ export const DashboardKPIs = ({ filters }: { filters: DashboardFilters }) => {
         .from("user_plans")
         .select("user_id")
         .in("status", ["active", "trialing", "past_due"])
-        .gte("updated_at", previousDateFrom.toISOString())
-        .lte("updated_at", previousDateTo.toISOString());
+        .lte("created_at", previousDateTo.toISOString())
+        .or(`current_period_end.is.null,current_period_end.gte.${previousDateFrom.toISOString()}`);
 
       const previousUsers = previousUsersData?.length || 0;
       const activeUsersChange =
