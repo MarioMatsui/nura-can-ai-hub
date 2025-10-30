@@ -28,23 +28,24 @@ export const DashboardCharts = ({ filters }: { filters: DashboardFilters }) => {
   const loadChartData = async () => {
     setLoading(true);
     try {
-      // Assinaturas por mês
+      // Assinaturas ativas criadas por mês
       const { data: subsData } = await supabase
-        .from("subscriptions")
-        .select("effective_at, event, plan_type")
-        .eq("event", "created")
-        .gte("effective_at", filters.dateFrom.toISOString())
-        .lte("effective_at", filters.dateTo.toISOString())
-        .order("effective_at");
+        .from("user_plans")
+        .select("created_at, plan_type")
+        .neq("plan_type", "free")
+        .in("status", ["active", "trialing"])
+        .gte("created_at", filters.dateFrom.toISOString())
+        .lte("created_at", filters.dateTo.toISOString())
+        .order("created_at");
 
-      // Cancelamentos por mês
+      // Cancelamentos efetivados por mês
       const { data: cancelData } = await supabase
-        .from("subscriptions")
-        .select("effective_at")
-        .eq("event", "canceled")
-        .gte("effective_at", filters.dateFrom.toISOString())
-        .lte("effective_at", filters.dateTo.toISOString())
-        .order("effective_at");
+        .from("user_plans")
+        .select("updated_at")
+        .in("status", ["canceled", "inactive"])
+        .gte("updated_at", filters.dateFrom.toISOString())
+        .lte("updated_at", filters.dateTo.toISOString())
+        .order("updated_at");
 
       // Registros por mês
       const { data: regData } = await supabase
@@ -58,7 +59,7 @@ export const DashboardCharts = ({ filters }: { filters: DashboardFilters }) => {
       const monthMap = new Map<string, ChartData>();
 
       subsData?.forEach((item) => {
-        const month = new Date(item.effective_at).toLocaleDateString("pt-BR", {
+        const month = new Date(item.created_at).toLocaleDateString("pt-BR", {
           year: "numeric",
           month: "short",
         });
@@ -83,7 +84,7 @@ export const DashboardCharts = ({ filters }: { filters: DashboardFilters }) => {
       });
 
       cancelData?.forEach((item) => {
-        const month = new Date(item.effective_at).toLocaleDateString("pt-BR", {
+        const month = new Date(item.updated_at).toLocaleDateString("pt-BR", {
           year: "numeric",
           month: "short",
         });
