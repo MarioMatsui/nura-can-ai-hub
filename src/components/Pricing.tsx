@@ -125,25 +125,27 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       setUserId(currentUserId);
 
       if (currentUserId) {
-        const { data: userPlan, error } = await supabase
+        const { data: userPlans, error } = await supabase
           .from('user_plans')
           .select('plan_type, status, cancel_at_period_end')
           .eq('user_id', currentUserId)
-          .maybeSingle();
+          .eq('status', 'active');
         
-        console.log('Pricing - User plan data:', { userPlan, error, userId: currentUserId });
+        console.log('Pricing - User plans data:', { userPlans, error, userId: currentUserId });
         
-        if (!error && userPlan && userPlan.status === 'active') {
-          console.log('Pricing - Setting active plan:', userPlan.plan_type);
-          setActivePlans([userPlan.plan_type]);
+        if (!error && userPlans && userPlans.length > 0) {
+          const activePlanTypes = userPlans.map(plan => plan.plan_type);
+          const scheduledPlans = userPlans
+            .filter(plan => plan.cancel_at_period_end)
+            .map(plan => plan.plan_type);
           
-          if (userPlan.cancel_at_period_end) {
-            setScheduledCancellations([userPlan.plan_type]);
-          } else {
-            setScheduledCancellations([]);
-          }
+          console.log('Pricing - Setting active plans:', activePlanTypes);
+          console.log('Pricing - Scheduled cancellations:', scheduledPlans);
+          
+          setActivePlans(activePlanTypes);
+          setScheduledCancellations(scheduledPlans);
         } else {
-          console.log('Pricing - No active plan found');
+          console.log('Pricing - No active plans found');
           setActivePlans([]);
           setScheduledCancellations([]);
         }
@@ -161,14 +163,16 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           .from('user_plans')
           .select('plan_type, status, cancel_at_period_end')
           .eq('user_id', currentUserId)
-          .maybeSingle()
-          .then(({ data: userPlan, error }) => {
-            if (!error && userPlan && userPlan.status === 'active') {
-              setActivePlans([userPlan.plan_type]);
+          .eq('status', 'active')
+          .then(({ data: userPlans, error }) => {
+            if (!error && userPlans && userPlans.length > 0) {
+              const activePlanTypes = userPlans.map(plan => plan.plan_type);
+              const scheduledPlans = userPlans
+                .filter(plan => plan.cancel_at_period_end)
+                .map(plan => plan.plan_type);
               
-              if (userPlan.cancel_at_period_end) {
-                setScheduledCancellations([userPlan.plan_type]);
-              }
+              setActivePlans(activePlanTypes);
+              setScheduledCancellations(scheduledPlans);
             } else {
               setActivePlans([]);
               setScheduledCancellations([]);
