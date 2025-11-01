@@ -131,13 +131,19 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           .eq('user_id', currentUserId)
           .maybeSingle();
         
+        console.log('Pricing - User plan data:', { userPlan, error, userId: currentUserId });
+        
         if (!error && userPlan && userPlan.status === 'active') {
+          console.log('Pricing - Setting active plan:', userPlan.plan_type);
           setActivePlans([userPlan.plan_type]);
           
           if (userPlan.cancel_at_period_end) {
             setScheduledCancellations([userPlan.plan_type]);
+          } else {
+            setScheduledCancellations([]);
           }
         } else {
+          console.log('Pricing - No active plan found');
           setActivePlans([]);
           setScheduledCancellations([]);
         }
@@ -346,6 +352,8 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               const planKey = key as PlanKey;
               const isActive = activePlans.includes(planKey);
               const isScheduled = scheduledCancellations.includes(planKey);
+              
+              console.log('Pricing - Plan check:', { planKey, isActive, isScheduled, activePlans, scheduledCancellations });
               
               let buttonText = "Assinar";
               
