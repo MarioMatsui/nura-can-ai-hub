@@ -182,15 +182,19 @@ const Pricing = ({ showFree = true }: PricingProps) => {
     
     if (isAnnual) {
       const monthlyEquivalent = plan.annualPrice / 12;
+      const discount = Math.round(((plan.annualOriginalPrice - monthlyEquivalent) / plan.annualOriginalPrice) * 100);
+      
       return (
         <div className="flex flex-col items-center">
-          <div className="relative flex items-center justify-center">
+          <div className="relative flex items-center justify-center gap-2">
             <span className="text-2xl sm:text-3xl font-bold">
               R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
             </span>
-            <span className="absolute -top-2 -right-10 text-xs text-muted-foreground line-through">
-              R$ {plan.annualOriginalPrice.toFixed(2).replace(".", ",")}
-            </span>
+            {discount > 0 && (
+              <span className="text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded">
+                {discount}%
+              </span>
+            )}
           </div>
           <span className="text-sm text-muted-foreground">/mês</span>
           <div className="text-xs text-muted-foreground mt-1">
@@ -200,15 +204,19 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       );
     }
     
+    const discount = Math.round(((plan.monthlyOriginalPrice - plan.monthlyPrice) / plan.monthlyOriginalPrice) * 100);
+    
     return (
       <div className="flex flex-col items-center">
-        <div className="relative flex items-center justify-center">
+        <div className="relative flex items-center justify-center gap-2">
           <span className="text-2xl sm:text-3xl font-bold">
             R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
           </span>
-          <span className="absolute -top-2 -right-10 text-xs text-muted-foreground line-through">
-            R$ {plan.monthlyOriginalPrice.toFixed(2).replace(".", ",")}
-          </span>
+          {discount > 0 && (
+            <span className="text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded">
+              {discount}%
+            </span>
+          )}
         </div>
         <span className="text-sm text-muted-foreground">/mês</span>
       </div>
