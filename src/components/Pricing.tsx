@@ -189,7 +189,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
             <span className="text-2xl sm:text-3xl font-bold">
               R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
             </span>
-            <span className="absolute -top-2 -right-8 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded">
+            <span className="absolute -top-2 -right-8 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative before:content-[''] before:absolute before:inset-0 before:border-t before:border-red-500 before:rotate-[-15deg] before:origin-center">
               -15%
             </span>
           </div>
@@ -207,7 +207,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           <span className="text-2xl sm:text-3xl font-bold">
             R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
           </span>
-          <span className="absolute -top-2 -right-8 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded">
+          <span className="absolute -top-2 -right-8 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative before:content-[''] before:absolute before:inset-0 before:border-t before:border-red-500 before:rotate-[-15deg] before:origin-center">
             -15%
           </span>
         </div>
