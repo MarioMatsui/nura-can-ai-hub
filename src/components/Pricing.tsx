@@ -189,7 +189,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
             <span className="text-2xl sm:text-3xl font-bold">
               R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
             </span>
-            <span className="absolute -top-2 -right-8 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
+            <span className="absolute -top-2 -right-4 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
               -15%
             </span>
           </div>
@@ -207,7 +207,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           <span className="text-2xl sm:text-3xl font-bold">
             R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
           </span>
-          <span className="absolute -top-2 -right-8 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
+          <span className="absolute -top-2 -right-4 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
             -15%
           </span>
         </div>
