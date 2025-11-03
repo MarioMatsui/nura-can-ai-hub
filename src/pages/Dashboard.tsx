@@ -390,45 +390,115 @@ const Dashboard = () => {
       attachments: userMessage.attachments as any
     } as Message]);
 
-    // Call AI API and save response
+    // Create temporary AI message for streaming
+    const tempAiMessage: Message = {
+      id: `temp-${Date.now()}`,
+      role: 'assistant',
+      content: '',
+      created_at: new Date().toISOString(),
+      attachments: undefined
+    };
+    
+    setMessages(prev => [...prev, tempAiMessage]);
+
+    // Call AI API with streaming
     try {
-      const response = await supabase.functions.invoke('chat-ai', {
-        body: {
-          conversationId,
-          message: content,
-          modelType,
-          attachments: attachments || [],
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-ai`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            conversationId,
+            message: content,
+            modelType,
+            attachments: attachments || [],
+          }),
         }
-      });
+      );
 
-      const aiData = response.data as any;
-
-      // Check for business logic errors (like daily limit)
-      if (aiData?.error === 'limite_diario') {
-        toast({
-          title: 'Limite Diário Atingido',
-          description: aiData.message || 'Você atingiu o limite de 5 mensagens por dia do plano gratuito.',
-          variant: 'destructive',
-        });
-        return;
+      if (!response.ok || !response.body) {
+        throw new Error('Failed to start stream');
       }
 
-      // Check for other errors
-      if (response.error) {
-        throw response.error;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let textBuffer = '';
+      let fullResponse = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        textBuffer += decoder.decode(value, { stream: true });
+
+        // Process line-by-line
+        let newlineIndex: number;
+        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+          let line = textBuffer.slice(0, newlineIndex);
+          textBuffer = textBuffer.slice(newlineIndex + 1);
+
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
+
+          const jsonStr = line.slice(6).trim();
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            
+            if (parsed.done) {
+              fullResponse = parsed.fullResponse || fullResponse;
+              break;
+            }
+
+            if (parsed.content) {
+              fullResponse += parsed.content;
+              
+              // Update temporary message with streaming content
+              setMessages(prev => prev.map(msg => 
+                msg.id === tempAiMessage.id 
+                  ? { ...msg, content: fullResponse }
+                  : msg
+              ));
+            }
+            
+            // Check for errors in stream
+            if (parsed.error === 'limite_diario') {
+              toast({
+                title: 'Limite Diário Atingido',
+                description: parsed.message || 'Você atingiu o limite de 5 mensagens por dia do plano gratuito.',
+                variant: 'destructive',
+              });
+              // Remove temp message
+              setMessages(prev => prev.filter(msg => msg.id !== tempAiMessage.id));
+              return;
+            }
+          } catch (parseError) {
+            // Incomplete JSON, wait for more data
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
+        }
       }
 
-      if (!aiData?.response) {
+      if (!fullResponse) {
         throw new Error('No response from AI');
       }
 
-      // Save AI response to database
+      // Save final AI response to database
       const { data: aiMessage, error: aiMsgError } = await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
           role: 'assistant',
-          content: aiData.response,
+          content: fullResponse,
         })
         .select()
         .single();
@@ -437,14 +507,19 @@ const Dashboard = () => {
         throw aiMsgError;
       }
 
+      // Replace temporary message with saved message
       if (aiMessage) {
-        setMessages(prev => [...prev, {
-          ...aiMessage,
-          attachments: aiMessage.attachments as any
-        } as Message]);
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempAiMessage.id 
+            ? { ...aiMessage, attachments: aiMessage.attachments as any } as Message
+            : msg
+        ));
       }
     } catch (error: any) {
       console.error('Error getting AI response:', error);
+      
+      // Remove temporary message on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempAiMessage.id));
       
       // Check if it's a daily limit error
       const errorMessage = error?.message || '';

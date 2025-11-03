@@ -600,53 +600,139 @@ serve(async (req) => {
       });
     }
 
-    const data = await response.json();
-    const aiResponse = data.choices[0].message.content;
-
-    // Register AI usage for cost tracking
-    try {
-      const usage = data.usage || {};
-      const tokensInput = usage.prompt_tokens || 0;
-      const tokensOutput = usage.completion_tokens || 0;
-      
-      // Estimate cost based on Lovable AI pricing
-      // These are approximate values - adjust based on actual Lovable AI pricing
-      const costPer1kInputTokens = 0.00015; // $0.15 per 1M tokens = $0.00015 per 1k
-      const costPer1kOutputTokens = 0.0006;  // $0.60 per 1M tokens = $0.0006 per 1k
-      
-      const inputCost = (tokensInput / 1000) * costPer1kInputTokens;
-      const outputCost = (tokensOutput / 1000) * costPer1kOutputTokens;
-      const totalCost = inputCost + outputCost;
-      
-      // Get user_id from auth header
-      const authHeader = req.headers.get('Authorization');
-      if (authHeader) {
-        const token = authHeader.replace('Bearer ', '');
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-        const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-        
-        const { data: { user } } = await adminClient.auth.getUser(token);
-        
-        if (user) {
-          await adminClient.from('ai_usage').insert({
-            user_id: user.id,
-            conversation_id: conversationId,
-            model: model,
-            tokens_input: tokensInput,
-            tokens_output: tokensOutput,
-            cost: totalCost,
-          });
-        }
-      }
-    } catch (usageError) {
-      console.error('Error recording AI usage:', usageError);
-      // Don't fail the request if usage recording fails
+    // Stream the response
+    if (!response.ok || !response.body) {
+      throw new Error('Failed to start stream');
     }
 
-    return new Response(JSON.stringify({ response: aiResponse }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let textBuffer = '';
+    let fullResponse = '';
+    let totalTokensInput = 0;
+    let totalTokensOutput = 0;
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let streamDone = false;
+          
+          while (!streamDone) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            textBuffer += decoder.decode(value, { stream: true });
+
+            // Process line-by-line as data arrives
+            let newlineIndex: number;
+            while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
+              let line = textBuffer.slice(0, newlineIndex);
+              textBuffer = textBuffer.slice(newlineIndex + 1);
+
+              if (line.endsWith("\r")) line = line.slice(0, -1);
+              if (line.startsWith(":") || line.trim() === "") continue;
+              if (!line.startsWith("data: ")) continue;
+
+              const jsonStr = line.slice(6).trim();
+              if (jsonStr === "[DONE]") {
+                streamDone = true;
+                break;
+              }
+
+              try {
+                const parsed = JSON.parse(jsonStr);
+                const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+                
+                if (content) {
+                  fullResponse += content;
+                  // Send chunk to client
+                  controller.enqueue(`data: ${JSON.stringify({ content })}\n\n`);
+                }
+
+                // Track token usage
+                if (parsed.usage) {
+                  totalTokensInput = parsed.usage.prompt_tokens || 0;
+                  totalTokensOutput = parsed.usage.completion_tokens || 0;
+                }
+              } catch (parseError) {
+                // Incomplete JSON split across chunks: put it back and wait for more data
+                textBuffer = line + "\n" + textBuffer;
+                break;
+              }
+            }
+          }
+
+          // Final flush
+          if (textBuffer.trim()) {
+            for (let raw of textBuffer.split("\n")) {
+              if (!raw) continue;
+              if (raw.endsWith("\r")) raw = raw.slice(0, -1);
+              if (raw.startsWith(":") || raw.trim() === "") continue;
+              if (!raw.startsWith("data: ")) continue;
+              const jsonStr = raw.slice(6).trim();
+              if (jsonStr === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(jsonStr);
+                const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+                if (content) {
+                  fullResponse += content;
+                  controller.enqueue(`data: ${JSON.stringify({ content })}\n\n`);
+                }
+              } catch { /* ignore partial leftovers */ }
+            }
+          }
+
+          // Send done signal
+          controller.enqueue(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`);
+
+          // Register AI usage for cost tracking
+          try {
+            const costPer1kInputTokens = 0.00015;
+            const costPer1kOutputTokens = 0.0006;
+            
+            const inputCost = (totalTokensInput / 1000) * costPer1kInputTokens;
+            const outputCost = (totalTokensOutput / 1000) * costPer1kOutputTokens;
+            const totalCost = inputCost + outputCost;
+            
+            const authHeader = req.headers.get('Authorization');
+            if (authHeader) {
+              const token = authHeader.replace('Bearer ', '');
+              const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+              const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+              const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+              
+              const { data: { user } } = await adminClient.auth.getUser(token);
+              
+              if (user) {
+                await adminClient.from('ai_usage').insert({
+                  user_id: user.id,
+                  conversation_id: conversationId,
+                  model: model,
+                  tokens_input: totalTokensInput,
+                  tokens_output: totalTokensOutput,
+                  cost: totalCost,
+                });
+              }
+            }
+          } catch (usageError) {
+            console.error('Error recording AI usage:', usageError);
+          }
+
+          controller.close();
+        } catch (error) {
+          console.error('Stream error:', error);
+          controller.error(error);
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      },
     });
 
   } catch (error) {
