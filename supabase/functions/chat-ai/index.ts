@@ -696,39 +696,23 @@ serve(async (req) => {
           controller.enqueue(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`);
 
           // Register AI usage for cost tracking
-          try {
-            const costPer1kInputTokens = 0.00015;
-            const costPer1kOutputTokens = 0.0006;
-            
-            const inputCost = (totalTokensInput / 1000) * costPer1kInputTokens;
-            const outputCost = (totalTokensOutput / 1000) * costPer1kOutputTokens;
-            const totalCost = inputCost + outputCost;
-            
-            const authHeader = req.headers.get('Authorization');
-            if (authHeader) {
-              const token = authHeader.replace('Bearer ', '');
-              const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-              const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-              const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-              
-              const { data: { user } } = await adminClient.auth.getUser(token);
-              
-              if (user) {
-                await adminClient.from('ai_usage').insert({
-                  user_id: user.id,
-                  conversation_id: conversationId,
-                  model: model,
-                  tokens_input: totalTokensInput,
-                  tokens_output: totalTokensOutput,
-                  cost: totalCost,
-                });
-              }
+          if (conversationId) {
+            const { error: usageError } = await supabase
+              .from('ai_usage')
+              .insert({
+                conversation_id: conversationId,
+                model: model,
+                tokens_input: totalTokensInput,
+                tokens_output: totalTokensOutput,
+                total_tokens: totalTokensInput + totalTokensOutput,
+              });
+
+            if (usageError) {
+              console.error('Error registering AI usage:', usageError);
             }
-          } catch (usageError) {
-            console.error('Error recording AI usage:', usageError);
           }
 
-          controller.close();
+          // Don't explicitly close - stream closes automatically when start() ends
         } catch (error) {
           console.error('Stream error:', error);
           controller.error(error);
