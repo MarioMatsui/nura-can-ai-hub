@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { MarkdownMessage } from './MarkdownMessage';
+import { TypingIndicator } from './TypingIndicator';
 
 interface Attachment {
   file_path: string;
@@ -476,17 +477,7 @@ export const ChatArea = ({
             ))}
             
             {/* AI Processing Indicator */}
-            {isProcessing && (
-              <div className="flex justify-start">
-                <div className="max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4 bg-muted">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {isProcessing && <TypingIndicator />}
             {/* Invisible element to scroll to */}
             <div ref={messagesEndRef} />
           </div>
