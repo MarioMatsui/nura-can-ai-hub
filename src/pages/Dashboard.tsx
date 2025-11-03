@@ -431,8 +431,9 @@ const Dashboard = () => {
       const decoder = new TextDecoder();
       let textBuffer = '';
       let fullResponse = '';
+      let streamComplete = false;
 
-      while (true) {
+      while (!streamComplete) {
         const { done, value } = await reader.read();
         if (done) break;
         
@@ -455,6 +456,7 @@ const Dashboard = () => {
             
             if (parsed.done) {
               fullResponse = parsed.fullResponse || fullResponse;
+              streamComplete = true;
               break;
             }
 
@@ -487,6 +489,8 @@ const Dashboard = () => {
           }
         }
       }
+
+      console.log('Stream complete. Full response length:', fullResponse.length);
 
       if (!fullResponse) {
         throw new Error('No response from AI');

@@ -617,9 +617,14 @@ serve(async (req) => {
         try {
           let streamDone = false;
           
+          console.log('Starting SSE stream processing...');
+          
           while (!streamDone) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              console.log('Stream read completed');
+              break;
+            }
             
             textBuffer += decoder.decode(value, { stream: true });
 
@@ -635,6 +640,7 @@ serve(async (req) => {
 
               const jsonStr = line.slice(6).trim();
               if (jsonStr === "[DONE]") {
+                console.log('Received [DONE] signal');
                 streamDone = true;
                 break;
               }
@@ -655,12 +661,15 @@ serve(async (req) => {
                   totalTokensOutput = parsed.usage.completion_tokens || 0;
                 }
               } catch (parseError) {
+                console.error('Error parsing JSON chunk:', parseError, 'Raw line:', jsonStr);
                 // Incomplete JSON split across chunks: put it back and wait for more data
                 textBuffer = line + "\n" + textBuffer;
                 break;
               }
             }
           }
+
+          console.log('Stream processing complete. Response length:', fullResponse.length);
 
           // Final flush
           if (textBuffer.trim()) {
@@ -682,7 +691,8 @@ serve(async (req) => {
             }
           }
 
-          // Send done signal
+          // Send done signal with full response
+          console.log('Sending done signal with response length:', fullResponse.length);
           controller.enqueue(`data: ${JSON.stringify({ done: true, fullResponse })}\n\n`);
 
           // Register AI usage for cost tracking
