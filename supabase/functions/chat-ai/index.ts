@@ -301,18 +301,18 @@ serve(async (req) => {
     const userId = conversation.user_id;
 
     // Check if user has active paid subscription
-    const { data: subscriptions, error: subError } = await supabase
-      .from('user_subscriptions')
+    const { data: activePlans, error: plansError } = await supabase
+      .from('user_plans')
       .select('plan_type, status')
       .eq('user_id', userId)
-      .eq('status', 'active');
+      .in('status', ['active', 'trialing']);
 
-    if (subError) {
-      console.error('Error fetching subscriptions:', subError);
+    if (plansError) {
+      console.error('Error fetching user plans:', plansError);
     }
 
-    const hasActivePaidPlan = subscriptions && subscriptions.length > 0 && 
-      subscriptions.some(sub => sub.plan_type !== 'free');
+    const hasActivePaidPlan = activePlans && activePlans.length > 0 && 
+      activePlans.some(plan => plan.plan_type !== 'free');
 
     // If free plan, check daily message limit
     if (!hasActivePaidPlan) {
