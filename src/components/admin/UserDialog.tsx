@@ -108,7 +108,7 @@ const UserDialog = ({ user, open, onOpenChange, onUpdate }: UserDialogProps) => 
       setIsLoading(true);
       try {
         const { error } = await supabase
-          .from("user_subscriptions")
+          .from("user_plans")
           .delete()
           .eq("id", plan.id);
 
@@ -139,29 +139,38 @@ const UserDialog = ({ user, open, onOpenChange, onUpdate }: UserDialogProps) => 
 
     setIsLoading(true);
     try {
+      // Map plan types from English to Portuguese
+      const planTypeMap: Record<string, 'medico' | 'juridico' | 'veterinario' | 'especialista' | 'free'> = {
+        'medical': 'medico',
+        'legal': 'juridico',
+        'veterinary': 'veterinario',
+        'specialist': 'especialista',
+        'free': 'free',
+      };
+
       for (const plan of plans) {
+        const mappedPlanType = planTypeMap[plan.plan_type] || 'free' as 'medico' | 'juridico' | 'veterinario' | 'especialista' | 'free';
+        
         if (plan.id) {
-          // Update existing subscription
+          // Update existing plan in user_plans
           const { error } = await supabase
-            .from("user_subscriptions")
+            .from("user_plans")
             .update({
-              plan_type: plan.plan_type,
+              plan_type: mappedPlanType as any,
               status: plan.status as any,
-              expires_at: plan.expires_at || null,
+              current_period_end: plan.expires_at || null,
             })
             .eq("id", plan.id);
 
           if (error) throw error;
         } else {
-          // Create new subscription
-          const { error } = await supabase
-            .from("user_subscriptions")
-            .insert([{
-              user_id: user.profile.id,
-              plan_type: plan.plan_type,
-              status: plan.status as any,
-              expires_at: plan.expires_at || null,
-            }]);
+          // Create new plan in user_plans using upsert_user_plan function
+          const { error } = await supabase.rpc('upsert_user_plan', {
+            _user_id: user.profile.id,
+            _plan_type: mappedPlanType as any,
+            _status: plan.status as any,
+            _current_period_end: plan.expires_at || null,
+          });
 
           if (error) throw error;
         }

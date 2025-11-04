@@ -69,11 +69,26 @@ const UserManagement = () => {
 
       if (profilesError) throw profilesError;
 
-      const { data: subscriptions, error: subscriptionsError } = await supabase
-        .from("user_subscriptions")
+      // Fetch from user_plans instead of user_subscriptions
+      const { data: plans, error: plansError } = await supabase
+        .from("user_plans")
         .select("*");
 
-      if (subscriptionsError) throw subscriptionsError;
+      if (plansError) throw plansError;
+
+      // Map user_plans to UserSubscription format
+      const subscriptions: UserSubscription[] = (plans || []).map((plan) => ({
+        id: plan.id,
+        user_id: plan.user_id,
+        plan_type: plan.plan_type,
+        status: plan.status === 'active' ? 'active' : 
+                plan.status === 'past_due' ? 'inactive' : 
+                plan.status === 'canceled' ? 'cancelled' : 'inactive',
+        billing_period: plan.billing_cycle,
+        started_at: plan.created_at,
+        expires_at: plan.current_period_end,
+        cancel_at: plan.cancel_at_period_end ? plan.current_period_end : null,
+      }));
 
       const usersData: UserData[] = (profiles || []).map((profile) => ({
         profile,
