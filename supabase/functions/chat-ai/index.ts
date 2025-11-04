@@ -574,7 +574,6 @@ serve(async (req) => {
         model: model,
         messages: geminiMessages,
         max_tokens: 8000,
-        stream: true,
       }),
     });
 
