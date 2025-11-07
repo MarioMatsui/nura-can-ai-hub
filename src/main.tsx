@@ -1,4 +1,4 @@
-import { createRoot, hydrateRoot } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,9 +11,8 @@ import "./index.css";
 document.documentElement.classList.add('dark');
 
 const queryClient = new QueryClient();
-const rootEl = document.getElementById("root")!;
 
-const app = (
+createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -24,10 +23,3 @@ const app = (
     </TooltipProvider>
   </QueryClientProvider>
 );
-
-// In production, if the server injected HTML exists, hydrate; else createRoot
-if (import.meta.env.PROD && rootEl.hasChildNodes()) {
-  hydrateRoot(rootEl, app);
-} else {
-  createRoot(rootEl).render(app);
-}
