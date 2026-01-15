@@ -33,7 +33,7 @@ const Hero = () => {
               onClick={scrollToPlans}
               className="group bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-glow transition-smooth text-lg px-8 py-6 w-full sm:w-auto"
             >
-              Comece seu teste gratuito
+              Experimentar
               <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-smooth" />
             </Button>
           </div>
