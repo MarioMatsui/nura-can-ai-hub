@@ -36,9 +36,6 @@ const Hero = () => {
               Comece seu teste gratuito
               <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-smooth" />
             </Button>
-            <Button size="lg" variant="outline" className="font-semibold text-lg px-8 py-6 border-2 w-full sm:w-auto">
-              Saiba Mais
-            </Button>
           </div>
         </div>
       </div>
