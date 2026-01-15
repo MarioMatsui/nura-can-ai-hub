@@ -15,12 +15,6 @@ const Hero = () => {
       {/* Content */}
       <div className="container relative z-10 mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-32">
         <div className="max-w-4xl mx-auto text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6 sm:mb-8 animate-fade-in">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-primary">IA Especializada</span>
-          </div>
-
           {/* Main Heading */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 sm:mb-8 leading-tight">
             A IA Especialista em <span className="text-primary">C/\NN/\BIS Medicinal</span> mais completa do Mundo!
@@ -45,22 +39,6 @@ const Hero = () => {
             <Button size="lg" variant="outline" className="font-semibold text-lg px-8 py-6 border-2 w-full sm:w-auto">
               Saiba Mais
             </Button>
-          </div>
-
-          {/* Trust indicators */}
-          <div className="mt-12 sm:mt-16 flex flex-wrap items-center justify-center gap-6 sm:gap-8 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>Baseado em Evidências</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>Consultas Ilimitadas</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>100% Seguro</span>
-            </div>
           </div>
         </div>
       </div>
