@@ -1,6 +1,11 @@
-import logo from "@/assets/logo.png";
+import logoLight from "@/assets/logo-light.png";
+import logoDark from "@/assets/logo-dark.png";
+import { useTheme } from "@/components/theme-provider";
 
 const Footer = () => {
+  const { theme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
   return (
     <footer className="bg-muted/30 border-t border-border py-12 sm:py-16">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -8,9 +13,11 @@ const Footer = () => {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-xl font-bold">
-                Nura<span className="text-primary">Can</span> AI
-              </span>
+              <img 
+                src={isDark ? logoDark : logoLight} 
+                alt="NuraCan AI" 
+                className="h-8 w-auto"
+              />
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
               IA especializada, para profissionais da saúde e direito.
