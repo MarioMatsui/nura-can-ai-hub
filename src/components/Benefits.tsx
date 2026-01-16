@@ -33,9 +33,6 @@ const Benefits = () => {
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6">
             Por Que Escolher a <span className="text-primary">Nura?</span>
           </h2>
-          <p className="text-lg sm:text-xl text-muted-foreground">
-            Benefícios que transformam a forma como você trabalha com C/\NN/\BIS medicinal
-          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
