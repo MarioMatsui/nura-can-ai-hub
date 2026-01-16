@@ -42,13 +42,13 @@ const Benefits = () => {
           {benefits.map((benefit, index) => (
             <Card
               key={index}
-              className="gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow group relative overflow-hidden"
+              className="gradient-card border-border relative overflow-hidden"
             >
               <div
-                className={`absolute inset-0 bg-gradient-to-br ${benefit.gradient} opacity-0 group-hover:opacity-100 transition-smooth`}
+                className={`absolute inset-0 bg-gradient-to-br ${benefit.gradient} opacity-100`}
               />
               <CardContent className="p-8 sm:p-10 relative z-10">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary/20 transition-smooth group-hover:scale-110 transition-bounce">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
                   <benefit.icon className="w-8 h-8 text-primary" />
                 </div>
                 <h3 className="text-xl sm:text-2xl font-bold mb-4">{benefit.title}</h3>
