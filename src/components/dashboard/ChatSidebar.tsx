@@ -120,7 +120,7 @@ export const ChatSidebar = ({
 
   return (
     <>
-      <Sidebar collapsible="icon" className="border-r border-border">
+      <Sidebar collapsible="icon" className="border-r border-border flex flex-col">
         <SidebarHeader className="pt-[21px] px-3 pb-4">
           {state === "expanded" ? (
             <>
@@ -190,7 +190,7 @@ export const ChatSidebar = ({
           )}
         </SidebarHeader>
 
-        <SidebarContent>
+        <SidebarContent className="flex-1">
           {state === "expanded" ? (
             <>
               <div className="px-4 pt-4 pb-0">
