@@ -90,13 +90,13 @@ export const UserProfileHeader = ({
 
   if (state === 'collapsed') {
     return (
-      <div className="mt-auto border-t border-border p-2">
+      <div className="mt-auto border-t border-border pt-1.5 pb-3 px-2">
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="w-full h-12 rounded-lg hover:bg-accent transition-colors"
+              className="w-full h-[50px] sm:h-[60px] rounded-lg hover:bg-accent transition-colors"
             >
               <Avatar className="h-8 w-8">
                 <AvatarImage src={AVATAR_DEFAULT_URL} alt="Profile" />
@@ -171,10 +171,10 @@ export const UserProfileHeader = ({
   }
 
   return (
-    <div className="mt-auto border-t border-border p-3">
+    <div className="mt-auto border-t border-border pt-1.5 pb-3 px-3">
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
-          <button className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent transition-all duration-200 hover:shadow-sm group">
+          <button className="w-full flex items-center gap-3 h-[50px] sm:h-[60px] px-2.5 rounded-xl hover:bg-accent transition-all duration-200 hover:shadow-sm group">
             <Avatar className="h-10 w-10 ring-2 ring-primary/10 group-hover:ring-primary/20 transition-all">
               <AvatarImage src={AVATAR_DEFAULT_URL} alt="Profile" />
               <AvatarFallback>{profile?.full_name?.[0] || 'U'}</AvatarFallback>
