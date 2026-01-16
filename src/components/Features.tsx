@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Search, MessageCircle, Syringe, BarChart3, Sparkles, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ImageLightbox from "@/components/ui/image-lightbox";
 
 // Feature images
 import pesquisaImg from "@/assets/features/pesquisa.jpg";
@@ -49,6 +50,7 @@ const features = [
 
 const Features = () => {
   const [activeTab, setActiveTab] = useState("pesquisa");
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
   const activeFeature = features.find((f) => f.id === activeTab) || features[0];
 
   return (
@@ -103,7 +105,8 @@ const Features = () => {
                     <img
                       src={feature.image}
                       alt={feature.label}
-                      className="w-full h-auto max-h-[500px] object-cover rounded-2xl"
+                      className="w-full h-auto max-h-[500px] object-cover rounded-2xl cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => setLightboxImage({ src: feature.image, alt: feature.label })}
                     />
                   ) : (
                     <div className="w-full h-[400px] rounded-2xl bg-muted flex flex-col items-center justify-center gap-3">
@@ -127,6 +130,14 @@ const Features = () => {
           </div>
         </div>
       </div>
+
+      {/* Lightbox */}
+      <ImageLightbox
+        src={lightboxImage?.src || ""}
+        alt={lightboxImage?.alt || ""}
+        isOpen={!!lightboxImage}
+        onClose={() => setLightboxImage(null)}
+      />
     </section>
   );
 };
