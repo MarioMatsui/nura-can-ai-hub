@@ -42,12 +42,9 @@ const Benefits = () => {
           {benefits.map((benefit, index) => (
             <Card
               key={index}
-              className="gradient-card benefits-card border-border relative overflow-hidden cursor-default transition-none hover:border-border hover:shadow-sm"
+              className="bg-card border-border relative overflow-hidden cursor-default"
             >
-              <div
-                className={`absolute inset-0 bg-gradient-to-br ${benefit.gradient} opacity-100`}
-              />
-              <CardContent className="p-8 sm:p-10 relative z-10">
+              <CardContent className="p-8 sm:p-10">
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
                   <benefit.icon className="w-8 h-8 text-primary" />
                 </div>
