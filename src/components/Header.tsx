@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LogOut, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useTheme } from "@/components/theme-provider";
+import logoLight from "@/assets/logo-light.png";
+import logoDark from "@/assets/logo-dark.png";
 
 interface HeaderProps {
   isLoggedIn?: boolean;
@@ -11,8 +14,27 @@ interface HeaderProps {
 
 const Header = ({ isLoggedIn = false }: HeaderProps) => {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+  
+  // Track actual theme (resolve "system" to actual value)
+  useEffect(() => {
+    const checkTheme = () => {
+      if (theme === "system") {
+        setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+      } else {
+        setIsDark(theme === "dark");
+      }
+    };
+    
+    checkTheme();
+    
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    mediaQuery.addEventListener("change", checkTheme);
+    return () => mediaQuery.removeEventListener("change", checkTheme);
+  }, [theme]);
   
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,9 +91,11 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
             onClick={() => navigate("/")}
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-smooth"
           >
-            <span className="text-xl sm:text-2xl font-bold text-foreground">
-              Nura<span className="text-primary">Can</span> AI
-            </span>
+            <img 
+              src={isDark ? logoDark : logoLight} 
+              alt="NuraCan AI" 
+              className="h-6 sm:h-8 w-auto"
+            />
           </button>
 
           {/* Navigation - Hidden on mobile */}
