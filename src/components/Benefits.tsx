@@ -46,7 +46,7 @@ const Benefits = () => {
             >
               <CardContent className="p-8 sm:p-10">
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
-                  <benefit.icon className="w-8 h-8 text-primary" />
+                  <benefit.icon className="w-8 h-8 text-foreground" />
                 </div>
                 <h3 className="text-xl sm:text-2xl font-bold mb-4">{benefit.title}</h3>
                 <p className="text-muted-foreground leading-relaxed">{benefit.description}</p>
