@@ -350,12 +350,26 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           </div>
         </div>
 
-        {/* Plans Grid */}
-        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${showFree ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-6 max-w-7xl mx-auto`}>
-          {Object.entries(plans)
+        {/* Plans Grid - Dynamic grid based on active plans count */}
+        {(() => {
+          const visiblePlans = Object.entries(plans)
             .filter(([key]) => showFree || key !== 'free')
-            .filter(([key]) => isPlanActive(key)) // Filter out inactive plans
-            .map(([key, plan]) => {
+            .filter(([key]) => isPlanActive(key));
+          
+          const planCount = visiblePlans.length;
+          
+          // Dynamic grid classes based on number of visible plans
+          const getGridClasses = () => {
+            if (planCount === 1) return 'grid-cols-1 max-w-md';
+            if (planCount === 2) return 'grid-cols-1 sm:grid-cols-2 max-w-2xl';
+            if (planCount === 3) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl';
+            if (planCount === 4) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl';
+            return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 max-w-7xl';
+          };
+          
+          return (
+            <div className={`grid ${getGridClasses()} gap-6 mx-auto`}>
+              {visiblePlans.map(([key, plan]) => {
               const planKey = key as PlanKey;
               const isActive = activePlans.includes(planKey);
               const isScheduled = scheduledCancellations.includes(planKey);
@@ -426,7 +440,9 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                 </Card>
               );
             })}
-        </div>
+            </div>
+          );
+        })()}
 
         {/* Additional Info */}
         <div className="mt-8 sm:mt-12 text-center px-4">
