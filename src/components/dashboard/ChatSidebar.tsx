@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, PanelLeft, Search } from 'lucide-react';
+import logoIcon from '@/assets/logo-icon.png';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Conversation } from '@/pages/Dashboard';
@@ -124,8 +125,8 @@ export const ChatSidebar = ({
           {state === "expanded" ? (
             <>
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 border-2 border-primary">
-                  <span className="text-2xl font-bold text-primary">N</span>
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg overflow-hidden">
+                  <img src={logoIcon} alt="Nura Logo" className="w-10 h-10 object-cover" />
                 </div>
                 <Button
                   variant="ghost"
