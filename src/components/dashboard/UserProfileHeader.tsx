@@ -90,7 +90,7 @@ export const UserProfileHeader = ({
 
   if (state === 'collapsed') {
     return (
-      <div className="mt-auto border-t border-border pt-1.5 pb-2 px-2">
+      <div className="mt-auto border-t border-border pt-1.5 pb-3 px-2">
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
@@ -171,7 +171,7 @@ export const UserProfileHeader = ({
   }
 
   return (
-    <div className="mt-auto border-t border-border pt-1.5 pb-2 px-3">
+    <div className="mt-auto border-t border-border pt-1.5 pb-3 px-3">
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
           <button className="w-full flex items-center gap-3 h-[50px] sm:h-[60px] px-2.5 rounded-xl hover:bg-accent transition-all duration-200 hover:shadow-sm group">
