@@ -94,7 +94,7 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
             <img 
               src={isDark ? logoDark : logoLight} 
               alt="NuraCan AI" 
-              className="h-6 sm:h-8 w-auto"
+              className="h-5 sm:h-6 w-auto"
             />
           </button>
 
