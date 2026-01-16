@@ -90,13 +90,13 @@ export const UserProfileHeader = ({
 
   if (state === 'collapsed') {
     return (
-      <div className="border-t border-border p-2">
+      <div className="border-t border-border p-3 flex justify-center">
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="w-full h-12 rounded-lg hover:bg-accent transition-colors"
+              className="h-12 w-12 rounded-lg hover:bg-accent transition-colors"
             >
               <Avatar className="h-8 w-8">
                 <AvatarImage src={AVATAR_DEFAULT_URL} alt="Profile" />
