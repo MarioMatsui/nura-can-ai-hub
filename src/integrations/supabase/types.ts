@@ -607,6 +607,36 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_settings: {
+        Row: {
+          created_at: string
+          display_name: string
+          display_order: number
+          id: string
+          is_active: boolean
+          plan_code: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          plan_code: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          plan_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       processed_webhooks: {
         Row: {
           created_at: string
