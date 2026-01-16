@@ -30,14 +30,11 @@ const Admin = () => {
         return;
       }
 
-      const { data: userRole } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
+      // Server-side admin verification via edge function
+      const { data, error } = await supabase.functions.invoke("verify-admin");
 
-      if (!userRole) {
+      if (error || !data?.admin) {
+        console.error("Admin verification failed:", error);
         toast.error("Acesso negado. Apenas administradores podem acessar esta página.");
         navigate("/app");
         return;
