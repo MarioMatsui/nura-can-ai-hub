@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { usePlanSettings } from "@/hooks/usePlanSettings";
 
 const plans = {
   free: {
@@ -104,6 +105,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
   const [userId, setUserId] = useState<string | null>(null);
   const [activePlans, setActivePlans] = useState<string[]>([]);
   const [scheduledCancellations, setScheduledCancellations] = useState<string[]>([]);
+  const { isPlanActive, isLoading: isLoadingPlanSettings } = usePlanSettings();
 
   // Calculate average discount percentage
   const calculateAverageDiscount = () => {
@@ -352,6 +354,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
         <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${showFree ? 'xl:grid-cols-5' : 'xl:grid-cols-4'} gap-6 max-w-7xl mx-auto`}>
           {Object.entries(plans)
             .filter(([key]) => showFree || key !== 'free')
+            .filter(([key]) => isPlanActive(key)) // Filter out inactive plans
             .map(([key, plan]) => {
               const planKey = key as PlanKey;
               const isActive = activePlans.includes(planKey);

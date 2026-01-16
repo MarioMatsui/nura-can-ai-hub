@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { MarkdownMessage } from './MarkdownMessage';
 import { TypingIndicator } from './TypingIndicator';
+import { usePlanSettings } from '@/hooks/usePlanSettings';
 
 interface Attachment {
   file_path: string;
@@ -53,6 +54,7 @@ export const ChatArea = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { isPlanActive } = usePlanSettings();
 
   // Determine the default model based on active subscriptions
   const getDefaultModelFromSubscriptions = (): ModelType => {
@@ -319,6 +321,15 @@ export const ChatArea = ({
     'especialista': 'specialist',
   };
 
+  // Map model types to plan codes for isPlanActive check
+  const modelToPlanCode: Record<ModelType, string> = {
+    'generic': 'free',
+    'medical': 'medico',
+    'legal': 'juridico',
+    'veterinary': 'veterinario',
+    'specialist': 'especialista',
+  };
+
   const userName = profile?.full_name?.split(' ')[0] || 'Doutor(a)';
   const selectedModelData = models.find(m => m.type === selectedModel);
   const SelectedIcon = selectedModelData?.icon || Sparkles;
@@ -357,7 +368,14 @@ export const ChatArea = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[280px] bg-background z-50">
-            {models.map((model) => {
+            {models
+              .filter((model) => {
+                // Filter out inactive plans (but always show if user already has access)
+                const planCode = modelToPlanCode[model.type];
+                const userHasAccess = hasAccess(model.type);
+                return isPlanActive(planCode) || userHasAccess;
+              })
+              .map((model) => {
               const accessible = hasAccess(model.type);
               const isSelected = selectedModel === model.type;
               const ModelIcon = model.icon;
