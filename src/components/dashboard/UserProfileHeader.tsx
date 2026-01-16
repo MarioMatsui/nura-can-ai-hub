@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Settings, LogOut, Sun, Moon, CreditCard, X } from 'lucide-react';
+import { Settings, LogOut, Sun, Moon, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -124,17 +124,6 @@ export const UserProfileHeader = ({
               variant="ghost"
               className="w-full justify-start rounded-lg hover:bg-accent transition-colors"
               onClick={() => {
-                navigate('/planos');
-                setPopoverOpen(false);
-              }}
-            >
-              <CreditCard className="h-4 w-4 mr-3" />
-              Mudar de plano
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full justify-start rounded-lg hover:bg-accent transition-colors"
-              onClick={() => {
                 onThemeToggle();
               }}
             >
@@ -216,17 +205,6 @@ export const UserProfileHeader = ({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <Button
-            variant="ghost"
-            className="w-full justify-start rounded-lg hover:bg-accent transition-colors"
-            onClick={() => {
-              navigate('/planos');
-              setPopoverOpen(false);
-            }}
-          >
-            <CreditCard className="h-4 w-4 mr-3" />
-            Mudar de plano
-          </Button>
           <Button
             variant="ghost"
             className="w-full justify-start rounded-lg hover:bg-accent transition-colors"
