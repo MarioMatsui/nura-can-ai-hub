@@ -90,14 +90,13 @@ export const UserProfileHeader = ({
 
   if (state === 'collapsed') {
     return (
-      <div className="mt-auto border-t border-border">
-        <div className="p-3 flex justify-center">
+      <div className="border-t border-border p-2">
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-12 w-12 rounded-lg hover:bg-accent transition-colors"
+              className="w-full h-12 rounded-lg hover:bg-accent transition-colors"
             >
               <Avatar className="h-8 w-8">
                 <AvatarImage src={AVATAR_DEFAULT_URL} alt="Profile" />
@@ -167,14 +166,12 @@ export const UserProfileHeader = ({
           appTheme={appTheme}
           onThemeToggle={onThemeToggle}
         />
-        </div>
       </div>
     );
   }
 
   return (
-    <div className="mt-auto border-t border-border">
-      <div className="p-3">
+    <div className="border-t border-border p-3">
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
           <button className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent transition-all duration-200 hover:shadow-sm group">
@@ -254,7 +251,6 @@ export const UserProfileHeader = ({
         appTheme={appTheme}
         onThemeToggle={onThemeToggle}
       />
-      </div>
     </div>
   );
 };
