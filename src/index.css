@@ -297,6 +297,18 @@ All colors MUST be HSL.
   .gradient-card {
     background: var(--gradient-card);
   }
+
+  /* Disable hover/transition effects for Benefits cards */
+  .benefits-card {
+    box-shadow: var(--shadow-card) !important;
+    transition: none !important;
+  }
+
+  .benefits-card:hover {
+    box-shadow: var(--shadow-card) !important;
+    border-color: hsl(var(--border)) !important;
+    transform: none !important;
+  }
   
   .shadow-glow {
     box-shadow: var(--shadow-lg);

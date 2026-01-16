@@ -42,7 +42,7 @@ const Benefits = () => {
           {benefits.map((benefit, index) => (
             <Card
               key={index}
-              className="gradient-card border-border relative overflow-hidden"
+              className="gradient-card benefits-card border-border relative overflow-hidden cursor-default transition-none hover:border-border hover:shadow-sm"
             >
               <div
                 className={`absolute inset-0 bg-gradient-to-br ${benefit.gradient} opacity-100`}
