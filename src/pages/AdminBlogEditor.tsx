@@ -19,7 +19,7 @@ const AdminBlogEditor = () => {
 
       const { data, error } = await supabase.functions.invoke("verify-admin");
       
-      if (error || !data?.isAdmin) {
+      if (error || !data?.admin) {
         navigate("/");
         return;
       }
