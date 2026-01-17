@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-
+import DOMPurify from "dompurify";
 interface BlogPost {
   id: string;
   title: string;
@@ -17,6 +17,39 @@ interface BlogPost {
   cover_image_url: string | null;
   published_at: string | null;
 }
+
+// Separate component to handle sanitized HTML content
+const SanitizedContent = ({ content }: { content: string }) => {
+  const sanitizedContent = useMemo(() => {
+    // Configure DOMPurify to allow safe HTML tags used by TipTap editor
+    return DOMPurify.sanitize(content, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'strike', 's',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li',
+        'a', 'img',
+        'blockquote', 'pre', 'code',
+        'table', 'thead', 'tbody', 'tr', 'th', 'td',
+        'hr', 'div', 'span'
+      ],
+      ALLOWED_ATTR: [
+        'href', 'src', 'alt', 'title', 'class', 'target', 'rel',
+        'width', 'height', 'style'
+      ],
+      ALLOW_DATA_ATTR: false,
+      ADD_ATTR: ['target'],
+      // Force links to open in new tab safely
+      FORCE_BODY: true,
+    });
+  }, [content]);
+
+  return (
+    <article 
+      className="prose prose-lg dark:prose-invert max-w-none"
+      dangerouslySetInnerHTML={{ __html: sanitizedContent }}
+    />
+  );
+};
 
 const BlogPost = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -120,10 +153,7 @@ const BlogPost = () => {
           </p>
         )}
 
-        <article 
-          className="prose prose-lg dark:prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: post.content }}
-        />
+        <SanitizedContent content={post.content} />
       </main>
 
       <Footer />

@@ -552,6 +552,51 @@ Em caso de pergunta claramente fora de escopo, responda com:
 };
 
 // =============================================================================
+// RATE LIMITING (In-memory, per-user)
+// =============================================================================
+
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+
+// Simple in-memory rate limiter (per user, per minute)
+const rateLimitMap = new Map<string, RateLimitEntry>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 20; // 20 requests per minute for paid, 10 for free
+
+function checkRateLimit(userId: string, isPaidUser: boolean): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const maxRequests = isPaidUser ? RATE_LIMIT_MAX_REQUESTS : 10;
+  
+  const entry = rateLimitMap.get(userId);
+  
+  if (!entry || now > entry.resetTime) {
+    // New window
+    rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+  
+  if (entry.count >= maxRequests) {
+    const retryAfter = Math.ceil((entry.resetTime - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+  
+  entry.count++;
+  return { allowed: true };
+}
+
+// Cleanup old entries periodically (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, entry] of rateLimitMap.entries()) {
+    if (now > entry.resetTime) {
+      rateLimitMap.delete(userId);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// =============================================================================
 // HANDLER PRINCIPAL
 // =============================================================================
 
@@ -561,6 +606,16 @@ serve(async (req) => {
   }
 
   try {
+    // Validate authorization header first
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('Missing or invalid authorization header');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { conversationId, message, modelType, attachments = [] } = await req.json();
 
     if (!conversationId || !message || !modelType) {
@@ -583,6 +638,20 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Verify the user's JWT token
+    const token = authHeader.replace('Bearer ', '');
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Invalid or expired token:', userError);
+      return new Response(JSON.stringify({ error: 'Unauthorized - Invalid token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const authenticatedUserId = userData.user.id;
+
     // Get conversation to check user_id
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -600,6 +669,15 @@ serve(async (req) => {
 
     const userId = conversation.user_id;
 
+    // SECURITY: Verify that the authenticated user owns this conversation
+    if (authenticatedUserId !== userId) {
+      console.error('User does not own this conversation:', { authenticatedUserId, conversationUserId: userId });
+      return new Response(JSON.stringify({ error: 'Forbidden - Access denied' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Check if user has active paid subscription
     const { data: activePlans, error: plansError } = await supabase
       .from('user_plans')
@@ -613,6 +691,24 @@ serve(async (req) => {
 
     const hasActivePaidPlan = activePlans && activePlans.length > 0 && 
       activePlans.some(plan => plan.plan_type !== 'free');
+
+    // SECURITY: Apply rate limiting at edge function level
+    const rateLimitResult = checkRateLimit(userId, hasActivePaidPlan ?? false);
+    if (!rateLimitResult.allowed) {
+      console.log(`Rate limit exceeded for user ${userId}`);
+      return new Response(JSON.stringify({ 
+        error: 'rate_limit',
+        message: 'Muitas solicitações. Por favor, aguarde um momento.',
+        retryAfter: rateLimitResult.retryAfter
+      }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'Retry-After': String(rateLimitResult.retryAfter || 60)
+        },
+      });
+    }
 
     // If free plan, check daily message limit
     if (!hasActivePaidPlan) {
