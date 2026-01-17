@@ -8,6 +8,10 @@ import SignUp from "./pages/auth/SignUp";
 import Login from "./pages/auth/Login";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import Admin from "./pages/Admin";
+import AdminBlog from "./pages/AdminBlog";
+import AdminBlogEditor from "./pages/AdminBlogEditor";
+import Blog from "./pages/Blog";
+import BlogPost from "./pages/BlogPost";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
@@ -15,6 +19,8 @@ const App = () => (
     <Route path="/" element={<Index />} />
     <Route path="/planos" element={<Planos />} />
     <Route path="/app" element={<Dashboard />} />
+    <Route path="/blog" element={<Blog />} />
+    <Route path="/blog/:slug" element={<BlogPost />} />
     <Route path="/checkout/sucesso" element={<PaymentSuccess />} />
     <Route path="/checkout/cancelado" element={<PaymentCanceled />} />
     <Route path="/auth/signup" element={<SignUp />} />
@@ -25,6 +31,9 @@ const App = () => (
     <Route path="/admin/knowledge" element={<Admin />} />
     <Route path="/admin/plans" element={<Admin />} />
     <Route path="/admin/finance" element={<Admin />} />
+    <Route path="/admin/blog" element={<AdminBlog />} />
+    <Route path="/admin/blog/new" element={<AdminBlogEditor />} />
+    <Route path="/admin/blog/edit/:id" element={<AdminBlogEditor />} />
     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
     <Route path="*" element={<NotFound />} />
   </Routes>

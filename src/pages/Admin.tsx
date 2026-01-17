@@ -7,6 +7,7 @@ import UserManagement from "@/components/admin/UserManagement";
 import KnowledgeManagement from "@/components/admin/KnowledgeManagement";
 import Dashboard from "@/components/admin/Dashboard";
 import PlanManagement from "@/components/admin/PlanManagement";
+import BlogManagement from "@/components/admin/BlogManagement";
 import AdminFinance from "./AdminFinance";
 
 const Admin = () => {
@@ -18,6 +19,7 @@ const Admin = () => {
                    : location.pathname === "/admin/users" ? "users"
                    : location.pathname === "/admin/finance" ? "finance"
                    : location.pathname === "/admin/plans" ? "plans"
+                   : location.pathname === "/admin/blog" ? "blog"
                    : "dashboard";
 
   useEffect(() => {
@@ -58,6 +60,8 @@ const Admin = () => {
       navigate("/admin/finance");
     } else if (value === "plans") {
       navigate("/admin/plans");
+    } else if (value === "blog") {
+      navigate("/admin/blog");
     } else {
       navigate("/admin");
     }
@@ -85,11 +89,12 @@ const Admin = () => {
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="users">Gestão de Usuários</TabsTrigger>
             <TabsTrigger value="knowledge">Base de Conhecimento</TabsTrigger>
             <TabsTrigger value="plans">Planos</TabsTrigger>
+            <TabsTrigger value="blog">Blog</TabsTrigger>
             <TabsTrigger value="finance">Financeiro</TabsTrigger>
           </TabsList>
 
@@ -107,6 +112,10 @@ const Admin = () => {
 
           <TabsContent value="plans">
             <PlanManagement />
+          </TabsContent>
+
+          <TabsContent value="blog">
+            <BlogManagement />
           </TabsContent>
 
           <TabsContent value="finance">

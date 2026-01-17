@@ -48,6 +48,11 @@ const Footer = () => {
                   FAQ
                 </a>
               </li>
+              <li>
+                <a href="/blog" className="text-muted-foreground hover:text-primary transition-smooth">
+                  Blog
+                </a>
+              </li>
             </ul>
           </div>
 
