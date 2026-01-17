@@ -83,6 +83,12 @@ const Admin = () => {
             <h1 className="text-3xl font-bold">Painel Administrativo</h1>
             <span className="text-muted-foreground">|</span>
             <button
+              onClick={() => navigate("/")}
+              className="text-primary hover:text-primary/80 hover:underline transition-all font-medium"
+            >
+              Início
+            </button>
+            <button
               onClick={() => navigate("/admin/blog")}
               className="text-primary hover:text-primary/80 hover:underline transition-all font-medium"
             >
