@@ -7,7 +7,7 @@ import UserManagement from "@/components/admin/UserManagement";
 import KnowledgeManagement from "@/components/admin/KnowledgeManagement";
 import Dashboard from "@/components/admin/Dashboard";
 import PlanManagement from "@/components/admin/PlanManagement";
-import BlogManagement from "@/components/admin/BlogManagement";
+
 import AdminFinance from "./AdminFinance";
 
 const Admin = () => {
@@ -19,7 +19,6 @@ const Admin = () => {
                    : location.pathname === "/admin/users" ? "users"
                    : location.pathname === "/admin/finance" ? "finance"
                    : location.pathname === "/admin/plans" ? "plans"
-                   : location.pathname === "/admin/blog" ? "blog"
                    : "dashboard";
 
   useEffect(() => {
@@ -60,8 +59,6 @@ const Admin = () => {
       navigate("/admin/finance");
     } else if (value === "plans") {
       navigate("/admin/plans");
-    } else if (value === "blog") {
-      navigate("/admin/blog");
     } else {
       navigate("/admin");
     }
@@ -82,7 +79,16 @@ const Admin = () => {
     <div className="min-h-screen bg-muted/30">
       <div className="max-w-7xl mx-auto p-6">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Painel Administrativo</h1>
+          <div className="flex items-center gap-4 mb-2">
+            <h1 className="text-3xl font-bold">Painel Administrativo</h1>
+            <span className="text-muted-foreground">|</span>
+            <button
+              onClick={() => navigate("/admin/blog")}
+              className="text-primary hover:text-primary/80 hover:underline transition-all font-medium"
+            >
+              Blog
+            </button>
+          </div>
           <p className="text-muted-foreground">
             Gerencie usuários, planos e base de conhecimento
           </p>
@@ -94,7 +100,6 @@ const Admin = () => {
             <TabsTrigger value="users">Gestão de Usuários</TabsTrigger>
             <TabsTrigger value="knowledge">Base de Conhecimento</TabsTrigger>
             <TabsTrigger value="plans">Planos</TabsTrigger>
-            <TabsTrigger value="blog">Blog</TabsTrigger>
             <TabsTrigger value="finance">Financeiro</TabsTrigger>
           </TabsList>
 
@@ -112,10 +117,6 @@ const Admin = () => {
 
           <TabsContent value="plans">
             <PlanManagement />
-          </TabsContent>
-
-          <TabsContent value="blog">
-            <BlogManagement />
           </TabsContent>
 
           <TabsContent value="finance">
