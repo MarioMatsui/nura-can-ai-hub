@@ -159,6 +159,68 @@ serve(async (req) => {
 
     console.log(`[${requestId}] User created successfully: ${authData.user.id}`);
 
+    // Sync contact to Brevo (server-side, no need for client call)
+    try {
+      const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY");
+      const BREVO_LIST_ID = 15;
+
+      if (BREVO_API_KEY) {
+        const brevoPayload: {
+          email: string;
+          attributes: {
+            contato: string;
+            nascimento: string;
+            CPF: string;
+            CRM?: string;
+            sms?: string;
+          };
+          listIds: number[];
+          updateEnabled: boolean;
+        } = {
+          email: data.email,
+          attributes: {
+            contato: data.full_name,
+            nascimento: data.birth_date,
+            CPF: data.cpf,
+            ...(data.crm_crv && { CRM: data.crm_crv }),
+          },
+          listIds: [BREVO_LIST_ID],
+          updateEnabled: true,
+        };
+
+        // Only add phone if provided and valid
+        if (data.phone && data.phone.trim() !== '') {
+          const cleanPhone = data.phone.replace(/\D/g, '');
+          if (cleanPhone.length >= 10) {
+            brevoPayload.attributes.sms = `+55${cleanPhone}`;
+          }
+        }
+
+        const brevoResponse = await fetch("https://api.brevo.com/v3/contacts", {
+          method: "POST",
+          headers: {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(brevoPayload),
+        });
+
+        if (!brevoResponse.ok) {
+          const errorData = await brevoResponse.text();
+          // Contact already exists is fine
+          if (!errorData.includes("already exist")) {
+            console.error(`[${requestId}] Brevo sync failed: ${brevoResponse.status}`);
+          }
+        } else {
+          console.log(`[${requestId}] Contact synced to Brevo`);
+        }
+      }
+    } catch (brevoError) {
+      // Don't block signup if Brevo fails
+      console.error(`[${requestId}] Brevo sync error (non-blocking)`);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true,

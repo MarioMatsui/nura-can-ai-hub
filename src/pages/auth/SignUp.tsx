@@ -135,27 +135,7 @@ const SignUp = () => {
         return;
       }
 
-      // Add contact to Brevo
-      try {
-        const { error: brevoError } = await supabase.functions.invoke("add-brevo-contact", {
-          body: {
-            email: data.email,
-            fullName: data.fullName,
-            phone: data.phone || undefined,
-            birthDate: data.birthDate,
-            cpf: data.cpf,
-            crmCrv: data.crmCrv || undefined,
-          },
-        });
-
-        if (brevoError) {
-          // Log error without sensitive data
-          console.error("Failed to sync contact to mailing list");
-        }
-      } catch (brevoError) {
-        // Don't block signup if Brevo fails
-        console.error("Mailing list sync failed");
-      }
+      // Brevo contact sync is now handled server-side in validate-signup function
 
       toast.success("Cadastro realizado com sucesso! Você já pode fazer login.");
       navigate("/auth/login");

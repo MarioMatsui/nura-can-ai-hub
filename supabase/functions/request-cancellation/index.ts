@@ -138,8 +138,9 @@ serve(async (req) => {
       status: "unread",
     });
 
-    // Send confirmation email
+    // Send confirmation email with internal secret
     const emailPayload = {
+      type: "scheduled",
       to: profile?.email || user.email,
       name: profile?.full_name || "Usuário",
       plan_name: subscription.plan_type === "medical" ? "Médico" :
@@ -149,9 +150,19 @@ serve(async (req) => {
       effective_date: new Date(effectiveCancelAt).toLocaleDateString("pt-BR"),
     };
 
-    await supabase.functions.invoke("send-cancellation-email", {
-      body: { type: "scheduled", ...emailPayload },
+    const internalSecret = Deno.env.get("INTERNAL_FUNCTIONS_SECRET");
+    const emailResponse = await fetch(`${supabaseUrl}/functions/v1/send-cancellation-email`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": internalSecret || "",
+      },
+      body: JSON.stringify(emailPayload),
     });
+
+    if (!emailResponse.ok) {
+      console.error("Failed to send cancellation email");
+    }
 
     return new Response(
       JSON.stringify({

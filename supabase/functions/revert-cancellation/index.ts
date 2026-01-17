@@ -113,8 +113,9 @@ serve(async (req) => {
       status: "unread",
     });
 
-    // Send email
+    // Send email with internal secret
     const emailPayload = {
+      type: "reverted",
       to: profile?.email || user.email,
       name: profile?.full_name || "Usuário",
       plan_name: subscription.plan_type === "medical" ? "Médico" :
@@ -123,9 +124,19 @@ serve(async (req) => {
                   subscription.plan_type === "specialist" ? "Especialista" : "Plano",
     };
 
-    await supabase.functions.invoke("send-cancellation-email", {
-      body: { type: "reverted", ...emailPayload },
+    const internalSecret = Deno.env.get("INTERNAL_FUNCTIONS_SECRET");
+    const emailResponse = await fetch(`${supabaseUrl}/functions/v1/send-cancellation-email`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": internalSecret || "",
+      },
+      body: JSON.stringify(emailPayload),
     });
+
+    if (!emailResponse.ok) {
+      console.error("Failed to send revert email");
+    }
 
     return new Response(
       JSON.stringify({ success: true }),
