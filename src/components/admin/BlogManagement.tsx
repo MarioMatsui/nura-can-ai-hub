@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -77,10 +77,20 @@ const BlogManagement = () => {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Gerenciamento de Blog
-        </CardTitle>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/admin")}
+            title="Voltar para o painel"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Gerenciamento de Blog
+          </CardTitle>
+        </div>
         <Button onClick={() => navigate("/admin/blog/new")}>
           <Plus className="mr-2 h-4 w-4" />
           Novo Post
