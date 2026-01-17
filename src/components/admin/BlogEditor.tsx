@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -33,6 +33,9 @@ import {
   ArrowLeft,
   Save,
   Send,
+  Upload,
+  Loader2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -63,6 +66,11 @@ const BlogEditor = () => {
   const [hasChanges, setHasChanges] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingContent, setUploadingContent] = useState(false);
+
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const contentImageInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -134,6 +142,95 @@ const BlogEditor = () => {
     if (!isEditing) {
       setSlug(generateSlug(value));
     }
+  };
+
+  const uploadImage = async (file: File, folder: string): Promise<string | null> => {
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("blog-images")
+      .upload(fileName, file);
+
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      toast.error("Erro ao fazer upload da imagem");
+      return null;
+    }
+
+    const { data: publicUrl } = supabase.storage
+      .from("blog-images")
+      .getPublicUrl(fileName);
+
+    return publicUrl.publicUrl;
+  };
+
+  const handleCoverImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor, selecione um arquivo de imagem");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 5MB");
+      return;
+    }
+
+    setUploadingCover(true);
+    const url = await uploadImage(file, "covers");
+    setUploadingCover(false);
+
+    if (url) {
+      setCoverImageUrl(url);
+      setHasChanges(true);
+      toast.success("Imagem de capa enviada com sucesso!");
+    }
+
+    // Reset input
+    if (coverInputRef.current) {
+      coverInputRef.current.value = "";
+    }
+  };
+
+  const handleContentImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast.error("Por favor, selecione um arquivo de imagem");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 5MB");
+      return;
+    }
+
+    setUploadingContent(true);
+    const url = await uploadImage(file, "content");
+    setUploadingContent(false);
+
+    if (url && editor) {
+      editor.chain().focus().setImage({ src: url }).run();
+      toast.success("Imagem inserida com sucesso!");
+    }
+
+    // Reset input
+    if (contentImageInputRef.current) {
+      contentImageInputRef.current.value = "";
+    }
+  };
+
+  const removeCoverImage = () => {
+    setCoverImageUrl("");
+    setHasChanges(true);
   };
 
   const savePost = async (publishStatus: "draft" | "published") => {
@@ -213,13 +310,6 @@ const BlogEditor = () => {
     }
   };
 
-  const addImage = useCallback(() => {
-    const url = window.prompt("URL da imagem:");
-    if (url && editor) {
-      editor.chain().focus().setImage({ src: url }).run();
-    }
-  }, [editor]);
-
   const addLink = useCallback(() => {
     const url = window.prompt("URL do link:");
     if (url && editor) {
@@ -237,6 +327,22 @@ const BlogEditor = () => {
 
   return (
     <div className="space-y-6">
+      {/* Hidden file inputs */}
+      <input
+        ref={coverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleCoverImageUpload}
+      />
+      <input
+        ref={contentImageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleContentImageUpload}
+      />
+
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={handleBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -353,9 +459,14 @@ const BlogEditor = () => {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={addImage}
+                      onClick={() => contentImageInputRef.current?.click()}
+                      disabled={uploadingContent}
                     >
-                      <ImageIcon className="h-4 w-4" />
+                      {uploadingContent ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ImageIcon className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                   {/* Editor */}
@@ -373,18 +484,9 @@ const BlogEditor = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="cover">URL da Imagem de Capa</Label>
-                <Input
-                  id="cover"
-                  value={coverImageUrl}
-                  onChange={(e) => {
-                    setCoverImageUrl(e.target.value);
-                    setHasChanges(true);
-                  }}
-                  placeholder="https://exemplo.com/imagem.jpg"
-                />
-                {coverImageUrl && (
-                  <div className="mt-2 aspect-video rounded-lg overflow-hidden bg-muted">
+                <Label>Imagem de Capa</Label>
+                {coverImageUrl ? (
+                  <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
                     <img
                       src={coverImageUrl}
                       alt="Preview da capa"
@@ -393,7 +495,36 @@ const BlogEditor = () => {
                         (e.target as HTMLImageElement).style.display = "none";
                       }}
                     />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8"
+                      onClick={removeCoverImage}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
                   </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    disabled={uploadingCover}
+                    className="w-full aspect-video rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 transition-colors flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
+                  >
+                    {uploadingCover ? (
+                      <>
+                        <Loader2 className="h-8 w-8 animate-spin" />
+                        <span className="text-sm">Enviando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-8 w-8" />
+                        <span className="text-sm">Clique para enviar imagem</span>
+                        <span className="text-xs text-muted-foreground">PNG, JPG até 5MB</span>
+                      </>
+                    )}
+                  </button>
                 )}
               </div>
 
