@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useTheme } from "@/components/theme-provider";
 import logoLight from "@/assets/logo-light.png";
 import logoDark from "@/assets/logo-dark.png";
+import { usePromoBannerHeight } from "@/hooks/usePromoBannerHeight";
 
 interface HeaderProps {
   isLoggedIn?: boolean;
@@ -18,6 +19,19 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const bannerHeight = usePromoBannerHeight();
+  
+  // Track scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 0);
+    };
+    
+    handleScroll(); // Check initial state
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
   
   // Track actual theme (resolve "system" to actual value)
   useEffect(() => {
@@ -82,8 +96,14 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
     }
   };
 
+  // Calculate top position: when at top and banner exists, offset by banner height
+  const topPosition = !isScrolled && bannerHeight > 0 ? bannerHeight : 0;
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+    <header 
+      className="fixed left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border transition-[top] duration-150 ease-out"
+      style={{ top: `${topPosition}px` }}
+    >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
