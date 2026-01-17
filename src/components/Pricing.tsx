@@ -340,11 +340,11 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                 variant="secondary" 
                 className={`font-semibold transition-all ${
                   isAnnual 
-                    ? "bg-primary/20 text-foreground border-primary/30" 
+                    ? "bg-primary/20 text-primary border-primary/30" 
                     : "bg-muted-foreground/20 text-muted-foreground border-muted-foreground/30"
                 }`}
               >
-                -{discountPercentage}%
+                -17%
               </Badge>
             </div>
           </div>
