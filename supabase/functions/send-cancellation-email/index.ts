@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-internal-secret",
 };
 
 interface EmailRequest {
@@ -19,7 +19,36 @@ serve(async (req) => {
   }
 
   try {
+    // Validate internal secret for server-to-server calls
+    const internalSecret = req.headers.get("x-internal-secret");
+    const expectedSecret = Deno.env.get("INTERNAL_FUNCTIONS_SECRET");
+    
+    if (!expectedSecret || internalSecret !== expectedSecret) {
+      console.error("Unauthorized: Invalid or missing internal secret");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { type, to, name, plan_name, effective_date }: EmailRequest = await req.json();
+
+    // Validate required fields
+    if (!type || !to || !name || !plan_name) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(to) || to.length > 255) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email format" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     let subject = "";
     let html = "";
@@ -73,6 +102,11 @@ serve(async (req) => {
           </p>
         </div>
       `;
+    } else {
+      return new Response(
+        JSON.stringify({ error: "Invalid email type" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Send email using Brevo API
@@ -94,6 +128,8 @@ serve(async (req) => {
       const error = await brevoResponse.text();
       throw new Error(`Failed to send email: ${error}`);
     }
+
+    console.log(`Email sent successfully to ${to} (type: ${type})`);
 
     return new Response(
       JSON.stringify({ success: true }),

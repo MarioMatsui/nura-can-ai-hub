@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-internal-secret",
 };
 
 serve(async (req) => {
@@ -12,6 +12,26 @@ serve(async (req) => {
   }
 
   try {
+    // Validate authentication - accept either internal secret OR authorization header from cron
+    const internalSecret = req.headers.get("x-internal-secret");
+    const authHeader = req.headers.get("Authorization");
+    const expectedSecret = Deno.env.get("INTERNAL_FUNCTIONS_SECRET");
+    
+    // Check for internal secret (server-to-server calls)
+    const hasValidInternalSecret = expectedSecret && internalSecret === expectedSecret;
+    
+    // Check for authorization header (cron job calls with anon key)
+    // The cron job uses the anon key but this function uses service role for operations
+    const hasValidAuthHeader = authHeader?.startsWith("Bearer ");
+    
+    if (!hasValidInternalSecret && !hasValidAuthHeader) {
+      console.error("Unauthorized: Invalid or missing authentication");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -77,7 +97,7 @@ serve(async (req) => {
           .delete()
           .eq("subscription_id", subscription.id);
 
-        // Send completion email
+        // Send completion email with internal secret
         const profile = subscription.profiles as any;
         const emailPayload = {
           to: profile?.email,
@@ -88,9 +108,20 @@ serve(async (req) => {
                       subscription.plan_type === "specialist" ? "Especialista" : "Plano",
         };
 
-        await supabase.functions.invoke("send-cancellation-email", {
-          body: { type: "completed", ...emailPayload },
+        // Call send-cancellation-email with internal secret
+        const internalFunctionsSecret = Deno.env.get("INTERNAL_FUNCTIONS_SECRET") || "";
+        const emailResponse = await fetch(`${supabaseUrl}/functions/v1/send-cancellation-email`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": internalFunctionsSecret,
+          },
+          body: JSON.stringify({ type: "completed", ...emailPayload }),
         });
+
+        if (!emailResponse.ok) {
+          console.error(`Failed to send email for subscription ${subscription.id}`);
+        }
 
         processed++;
         console.log(`Successfully finalized subscription ${subscription.id}`);
