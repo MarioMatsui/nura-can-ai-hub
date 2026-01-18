@@ -41,9 +41,10 @@ const KnowledgeManagement = () => {
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // Load documents whenever knowledgeType changes
   useEffect(() => {
-    loadDocuments();
-  }, []);
+    loadDocuments(knowledgeType);
+  }, [knowledgeType]);
 
   // Auto-fill title when file is selected
   useEffect(() => {
@@ -53,12 +54,13 @@ const KnowledgeManagement = () => {
     }
   }, [fileName]);
 
-  const loadDocuments = async () => {
+  const loadDocuments = async (filterType: KnowledgeType) => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from("knowledge_documents")
         .select("*")
+        .eq("knowledge_type", filterType)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -148,7 +150,7 @@ const KnowledgeManagement = () => {
       setContent("");
       setFileName("");
       setSelectedFile(null);
-      loadDocuments();
+      loadDocuments(knowledgeType);
     } catch (error: any) {
       toast.error("Erro: " + error.message);
     } finally {
@@ -167,7 +169,7 @@ const KnowledgeManagement = () => {
 
       if (error) throw error;
       toast.success("Documento excluído com sucesso");
-      loadDocuments();
+      loadDocuments(knowledgeType);
     } catch (error: any) {
       toast.error("Erro ao excluir documento: " + error.message);
     }
@@ -265,9 +267,9 @@ const KnowledgeManagement = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Documentos Cadastrados</CardTitle>
+          <CardTitle>Documentos Cadastrados - {getKnowledgeTypeLabel(knowledgeType)}</CardTitle>
           <CardDescription>
-            {documents.length} documento(s) na base
+            {documents.length} documento(s) na base {getKnowledgeTypeLabel(knowledgeType).toLowerCase()}
           </CardDescription>
         </CardHeader>
         <CardContent>
