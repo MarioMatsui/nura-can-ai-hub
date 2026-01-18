@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Upload, FileText, Trash2 } from "lucide-react";
+import { Loader2, Upload, FileText, Trash2, Search } from "lucide-react";
 
 type KnowledgeType = "medical" | "legal" | "veterinary";
 
@@ -27,6 +27,7 @@ interface Document {
   id: string;
   title: string;
   file_name: string;
+  content?: string;
   knowledge_type: KnowledgeType;
   created_at: string;
 }
@@ -40,6 +41,7 @@ const KnowledgeManagement = () => {
   const [content, setContent] = useState("");
   const [fileName, setFileName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Load documents whenever knowledgeType changes
   useEffect(() => {
@@ -56,10 +58,11 @@ const KnowledgeManagement = () => {
 
   const loadDocuments = async (filterType: KnowledgeType) => {
     setIsLoading(true);
+    setSearchQuery(""); // Reset search when changing type
     try {
       const { data, error } = await supabase
         .from("knowledge_documents")
-        .select("*")
+        .select("id, title, file_name, content, knowledge_type, created_at")
         .eq("knowledge_type", filterType)
         .order("created_at", { ascending: false });
 
@@ -71,6 +74,19 @@ const KnowledgeManagement = () => {
       setIsLoading(false);
     }
   };
+
+  // Filter documents based on search query (title, file_name, and content)
+  const filteredDocuments = useMemo(() => {
+    if (!searchQuery.trim()) return documents;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return documents.filter((doc) => {
+      const titleMatch = doc.title.toLowerCase().includes(query);
+      const fileNameMatch = doc.file_name.toLowerCase().includes(query);
+      const contentMatch = doc.content?.toLowerCase().includes(query) || false;
+      return titleMatch || fileNameMatch || contentMatch;
+    });
+  }, [documents, searchQuery]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -269,10 +285,22 @@ const KnowledgeManagement = () => {
         <CardHeader>
           <CardTitle>Documentos Cadastrados - {getKnowledgeTypeLabel(knowledgeType)}</CardTitle>
           <CardDescription>
-            {documents.length} documento(s) na base {getKnowledgeTypeLabel(knowledgeType).toLowerCase()}
+            {filteredDocuments.length} documento(s) {searchQuery && `encontrado(s) de ${documents.length}`} na base {getKnowledgeTypeLabel(knowledgeType).toLowerCase()}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Buscar por título, arquivo ou conteúdo..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
           {isLoading ? (
             <div className="flex justify-center p-8">
               <Loader2 className="h-8 w-8 animate-spin" />
@@ -281,9 +309,13 @@ const KnowledgeManagement = () => {
             <p className="text-center text-muted-foreground p-8">
               Nenhum documento cadastrado
             </p>
+          ) : filteredDocuments.length === 0 ? (
+            <p className="text-center text-muted-foreground p-8">
+              Nenhum documento encontrado para "{searchQuery}"
+            </p>
           ) : (
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {documents.map((doc) => (
+              {filteredDocuments.map((doc) => (
                 <div
                   key={doc.id}
                   className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
