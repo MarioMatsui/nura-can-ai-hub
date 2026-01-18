@@ -200,6 +200,27 @@ const KnowledgeManagement = () => {
     return labels[type];
   };
 
+  // Highlight search term in title
+  const highlightTitle = (title: string) => {
+    if (!searchQuery.trim()) return title;
+    
+    const query = searchQuery.trim();
+    const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    const parts = title.split(regex);
+    
+    if (parts.length === 1) return title; // No match found
+    
+    return parts.map((part, index) => 
+      regex.test(part) ? (
+        <mark key={index} className="bg-yellow-200 dark:bg-yellow-700 rounded px-0.5">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+
   return (
     <div className="grid md:grid-cols-2 gap-6">
       <Card>
@@ -322,7 +343,7 @@ const KnowledgeManagement = () => {
                 >
                   <FileText className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{doc.title}</h4>
+                    <h4 className="font-medium truncate">{highlightTitle(doc.title)}</h4>
                     <p className="text-sm text-muted-foreground">
                       {getKnowledgeTypeLabel(doc.knowledge_type)} • {doc.file_name}
                     </p>
