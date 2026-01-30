@@ -164,7 +164,13 @@ const UserManagement = () => {
     return activePlans
       .map(sub => {
         const labels: Record<string, string> = {
+          // Portuguese values (stored in database)
           free: "Gratuito",
+          medico: "Médico",
+          juridico: "Jurídico",
+          veterinario: "Veterinário",
+          especialista: "Especialista",
+          // English values (for compatibility)
           medical: "Médico",
           legal: "Jurídico",
           veterinary: "Veterinário",

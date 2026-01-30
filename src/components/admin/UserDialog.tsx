@@ -75,10 +75,24 @@ const UserDialog = ({ user, open, onOpenChange, onUpdate }: UserDialogProps) => 
         return true;
       });
 
+      // Map Portuguese plan types from database to English for form
+      const planTypeFromDb: Record<string, PlanForm["plan_type"]> = {
+        medico: "medical",
+        juridico: "legal",
+        veterinario: "veterinary",
+        especialista: "specialist",
+        free: "free",
+        // Also handle English values
+        medical: "medical",
+        legal: "legal",
+        veterinary: "veterinary",
+        specialist: "specialist",
+      };
+
       setPlans(
         activePlans.map((sub) => ({
           id: sub.id,
-          plan_type: sub.plan_type as PlanForm["plan_type"],
+          plan_type: planTypeFromDb[sub.plan_type] || "medical",
           status: sub.status as PlanForm["status"],
           expires_at: sub.expires_at
             ? new Date(sub.expires_at).toISOString().split("T")[0]
