@@ -749,8 +749,8 @@ export type Database = {
       }
       profiles: {
         Row: {
-          birth_date: string
-          cpf: string
+          birth_date: string | null
+          cpf: string | null
           created_at: string
           crm_crv: string | null
           email: string
@@ -761,8 +761,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          birth_date: string
-          cpf: string
+          birth_date?: string | null
+          cpf?: string | null
           created_at?: string
           crm_crv?: string | null
           email: string
@@ -773,8 +773,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          birth_date?: string
-          cpf?: string
+          birth_date?: string | null
+          cpf?: string | null
           created_at?: string
           crm_crv?: string | null
           email?: string
