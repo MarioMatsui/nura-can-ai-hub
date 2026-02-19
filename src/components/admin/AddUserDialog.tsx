@@ -14,10 +14,12 @@ const addUserSchema = z.object({
   fullName: z.string().min(3, "Nome deve ter no mínimo 3 caracteres").max(100),
   email: z.string().email("E-mail inválido").max(255),
   phone: z.string().optional(),
-  birthDate: z.string().min(1, "Data de nascimento é obrigatória"),
+  birthDate: z.string().optional(),
   cpf: z
     .string()
-    .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/, "CPF inválido (use 000.000.000-00 ou 00000000000)"),
+    .regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/, "CPF inválido (use 000.000.000-00 ou 00000000000)")
+    .optional()
+    .or(z.literal("")),
   crmCrv: z.string().optional(),
   password: z
     .string()
@@ -64,8 +66,8 @@ const AddUserDialog = ({ open, onOpenChange, onUserCreated }: AddUserDialogProps
           password: data.password,
           full_name: data.fullName,
           phone: data.phone || null,
-          birth_date: data.birthDate,
-          cpf: data.cpf,
+          birth_date: data.birthDate || null,
+          cpf: data.cpf || null,
           crm_crv: data.crmCrv || null,
         },
       });
@@ -153,7 +155,7 @@ const AddUserDialog = ({ open, onOpenChange, onUserCreated }: AddUserDialogProps
               name="birthDate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Data de Nascimento *</FormLabel>
+                  <FormLabel>Data de Nascimento (opcional)</FormLabel>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -167,7 +169,7 @@ const AddUserDialog = ({ open, onOpenChange, onUserCreated }: AddUserDialogProps
               name="cpf"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>CPF *</FormLabel>
+                  <FormLabel>CPF (opcional)</FormLabel>
                   <FormControl>
                     <Input placeholder="000.000.000-00" {...field} />
                   </FormControl>

@@ -58,9 +58,9 @@ Deno.serve(async (req) => {
     const { email, password, full_name, phone, birth_date, cpf, crm_crv } = await req.json();
 
     // Validate required fields
-    if (!email || !password || !full_name || !birth_date || !cpf) {
+    if (!email || !password || !full_name) {
       return new Response(
-        JSON.stringify({ error: "Campos obrigatórios: email, senha, nome completo, data de nascimento, CPF." }),
+        JSON.stringify({ error: "Campos obrigatórios: email, senha, nome completo." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -82,8 +82,8 @@ Deno.serve(async (req) => {
       user_metadata: {
         full_name,
         phone: phone || null,
-        birth_date,
-        cpf,
+        birth_date: birth_date || null,
+        cpf: cpf || null,
         crm_crv: crm_crv || null,
       },
     });
