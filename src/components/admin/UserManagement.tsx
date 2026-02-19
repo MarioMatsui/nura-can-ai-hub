@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Loader2, User } from "lucide-react";
+import { Search, Loader2, User, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import UserDialog from "./UserDialog";
+import AddUserDialog from "./AddUserDialog";
 
 interface UserProfile {
   id: string;
@@ -42,6 +43,7 @@ const UserManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -191,8 +193,8 @@ const UserManagement = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <div className="relative">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nome ou e-mail..."
@@ -201,6 +203,10 @@ const UserManagement = () => {
                 className="pl-10"
               />
             </div>
+            <Button onClick={() => setAddDialogOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Adicionar Usuário
+            </Button>
           </div>
 
           {isLoading ? (
@@ -271,6 +277,12 @@ const UserManagement = () => {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onUpdate={loadUsers}
+      />
+
+      <AddUserDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onUserCreated={loadUsers}
       />
     </>
   );

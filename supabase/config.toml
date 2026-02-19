@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.sync-stripe-subscription]
 verify_jwt = true
+
+[functions.admin-create-user]
+verify_jwt = false
