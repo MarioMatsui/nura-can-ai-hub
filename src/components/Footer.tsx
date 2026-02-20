@@ -1,10 +1,25 @@
+import { useEffect, useState } from "react";
 import logoLight from "@/assets/logo-light.png";
 import logoDark from "@/assets/logo-dark.png";
 import { useTheme } from "@/components/theme-provider";
 
 const Footer = () => {
   const { theme } = useTheme();
-  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      if (theme === "system") {
+        setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+      } else {
+        setIsDark(theme === "dark");
+      }
+    };
+    check();
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", check);
+    return () => mq.removeEventListener("change", check);
+  }, [theme]);
 
   return (
     <footer className="bg-muted/30 border-t border-border py-12 sm:py-16">
