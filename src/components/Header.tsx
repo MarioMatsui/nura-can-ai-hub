@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { LogOut, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { useTheme } from "@/components/theme-provider";
 import logoLight from "@/assets/logo-light.png";
 import logoDark from "@/assets/logo-dark.png";
 import { usePromoBannerHeight } from "@/hooks/usePromoBannerHeight";
@@ -15,10 +14,8 @@ interface HeaderProps {
 
 const Header = ({ isLoggedIn = false }: HeaderProps) => {
   const navigate = useNavigate();
-  const { theme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDark, setIsDark] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const bannerHeight = usePromoBannerHeight();
   
@@ -32,23 +29,8 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
   
-  // Track actual theme (resolve "system" to actual value)
-  useEffect(() => {
-    const checkTheme = () => {
-      if (theme === "system") {
-        setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
-      } else {
-        setIsDark(theme === "dark");
-      }
-    };
-    
-    checkTheme();
-    
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    mediaQuery.addEventListener("change", checkTheme);
-    return () => mediaQuery.removeEventListener("change", checkTheme);
-  }, [theme]);
   
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -112,9 +94,14 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
             className="flex items-center gap-2 sm:gap-3 hover:opacity-80 transition-smooth"
           >
             <img 
-              src={isDark ? logoDark : logoLight} 
+              src={logoLight} 
               alt="NuraCan AI" 
-              className="h-5 sm:h-6 w-auto"
+              className="h-5 sm:h-6 w-auto dark:hidden"
+            />
+            <img 
+              src={logoDark} 
+              alt="NuraCan AI" 
+              className="h-5 sm:h-6 w-auto hidden dark:block"
             />
           </button>
 
