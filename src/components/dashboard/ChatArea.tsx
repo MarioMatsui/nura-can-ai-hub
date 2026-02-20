@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Lock, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { Send, Lock, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +16,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { MarkdownMessage } from './MarkdownMessage';
 import { TypingIndicator } from './TypingIndicator';
 import { usePlanSettings } from '@/hooks/usePlanSettings';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Attachment {
   file_path: string;
@@ -55,6 +57,8 @@ export const ChatArea = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { isPlanActive } = usePlanSettings();
+  const { toggleSidebar } = useSidebar();
+  const isMobile = useIsMobile();
 
   // Determine the default model based on active subscriptions
   const getDefaultModelFromSubscriptions = (): ModelType => {
@@ -355,8 +359,19 @@ export const ChatArea = ({
 
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
-      {/* Minimal header with just model dropdown */}
-      <div className="p-4">
+      {/* Header with hamburger menu on mobile + model dropdown */}
+      <div className="p-4 flex items-center gap-2">
+        {isMobile && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="h-10 w-10 shrink-0"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-full sm:w-64 justify-between gap-2 h-10">
