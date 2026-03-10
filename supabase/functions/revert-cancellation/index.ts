@@ -6,10 +6,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const responseHeaders = { ...corsHeaders, ...securityHeaders, "Content-Type": "application/json" };
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -17,8 +25,11 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("No authorization header");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Não autorizado" }),
+        { status: 401, headers: responseHeaders }
+      );
     }
 
     const { data: { user }, error: userError } = await supabase.auth.getUser(
@@ -26,16 +37,19 @@ serve(async (req) => {
     );
 
     if (userError || !user) {
-      throw new Error("Unauthorized");
+      return new Response(
+        JSON.stringify({ error: "Não autorizado" }),
+        { status: 401, headers: responseHeaders }
+      );
     }
 
     // Get subscription_id from request body
     const { subscription_id } = await req.json();
     
-    if (!subscription_id) {
+    if (!subscription_id || typeof subscription_id !== "string" || subscription_id.length > 100) {
       return new Response(
         JSON.stringify({ error: "subscription_id é obrigatório" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -53,7 +67,7 @@ serve(async (req) => {
     if (!subscriptions || subscriptions.length === 0) {
       return new Response(
         JSON.stringify({ error: "Nenhum cancelamento pendente encontrado" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -63,11 +77,11 @@ serve(async (req) => {
     if (new Date() >= new Date(subscription.cancel_at)) {
       return new Response(
         JSON.stringify({ error: "O prazo para reverter o cancelamento expirou" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: responseHeaders }
       );
     }
 
-    // Delete cancellation request - check both 'pending' and 'processed' statuses
+    // Delete cancellation request
     console.log('Deleting cancellation request for subscription:', subscription.id);
     const { error: cancelReqError } = await supabase
       .from("cancellation_requests")
@@ -140,13 +154,17 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: responseHeaders }
     );
   } catch (error) {
-    console.error("Error in revert-cancellation:", error);
+    const requestId = crypto.randomUUID();
+    console.error(`[${requestId}] Error in revert-cancellation:`, error);
     return new Response(
-      JSON.stringify({ error: (error as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ 
+        error: "Erro ao reverter cancelamento. Tente novamente.",
+        request_id: requestId
+      }),
+      { status: 500, headers: responseHeaders }
     );
   }
 });

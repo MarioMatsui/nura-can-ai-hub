@@ -6,6 +6,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+};
+
 interface SignupData {
   email: string;
   password: string;
@@ -27,7 +33,6 @@ function validateCpf(cpf: string): boolean {
   if (cleanCpf.length !== 11) return false;
   if (/^(\d)\1{10}$/.test(cleanCpf)) return false;
   
-  // Validate first check digit
   let sum = 0;
   for (let i = 0; i < 9; i++) {
     sum += parseInt(cleanCpf[i]) * (10 - i);
@@ -36,7 +41,6 @@ function validateCpf(cpf: string): boolean {
   if (remainder === 10 || remainder === 11) remainder = 0;
   if (remainder !== parseInt(cleanCpf[9])) return false;
   
-  // Validate second check digit
   sum = 0;
   for (let i = 0; i < 10; i++) {
     sum += parseInt(cleanCpf[i]) * (11 - i);
@@ -48,19 +52,91 @@ function validateCpf(cpf: string): boolean {
   return true;
 }
 
+// --- RATE LIMITING ---
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+
+const rateLimitMap = new Map<string, RateLimitEntry>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 5; // 5 signups per minute per IP
+
+function checkRateLimit(key: string): { allowed: boolean } {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+
+  if (!entry || now > entry.resetTime) {
+    rateLimitMap.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return { allowed: false };
+  }
+
+  entry.count++;
+  return { allowed: true };
+}
+
+// Cleanup old entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitMap.entries()) {
+    if (now > entry.resetTime) rateLimitMap.delete(key);
+  }
+}, 5 * 60 * 1000);
+// --- END RATE LIMITING ---
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const responseHeaders = { ...corsHeaders, ...securityHeaders, "Content-Type": "application/json" };
   const requestId = crypto.randomUUID();
 
   try {
+    // Rate limit by IP
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    if (!checkRateLimit(clientIp).allowed) {
+      return new Response(
+        JSON.stringify({ error: "Muitas tentativas. Aguarde um momento.", request_id: requestId }),
+        { status: 429, headers: responseHeaders }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const data: SignupData = await req.json();
+
+    // Input length validation
+    if (typeof data.full_name !== "string" || data.full_name.length > 200) {
+      return new Response(
+        JSON.stringify({ error: "Nome inválido.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+    if (typeof data.password !== "string" || data.password.length < 8 || data.password.length > 128) {
+      return new Response(
+        JSON.stringify({ error: "Senha deve ter entre 8 e 128 caracteres.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+    if (typeof data.phone !== "string" || data.phone.length > 30) {
+      return new Response(
+        JSON.stringify({ error: "Telefone inválido.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+    if (data.crm_crv && (typeof data.crm_crv !== "string" || data.crm_crv.length > 50)) {
+      return new Response(
+        JSON.stringify({ error: "CRM/CRV inválido.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
 
     // Validate email server-side
     if (!validateEmail(data.email)) {
@@ -69,7 +145,7 @@ serve(async (req) => {
           error: "E-mail inválido. Por favor, verifique o endereço informado.",
           request_id: requestId
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -80,12 +156,19 @@ serve(async (req) => {
           error: "CPF inválido. Por favor, verifique o número informado.",
           request_id: requestId
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: responseHeaders }
       );
     }
 
     // Validate age (18+)
     const birthDate = new Date(data.birth_date);
+    if (isNaN(birthDate.getTime())) {
+      return new Response(
+        JSON.stringify({ error: "Data de nascimento inválida.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
@@ -99,7 +182,7 @@ serve(async (req) => {
           error: "Você deve ter pelo menos 18 anos para se cadastrar.",
           request_id: requestId
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -116,7 +199,7 @@ serve(async (req) => {
           error: "Este CPF já está cadastrado.",
           request_id: requestId
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -137,14 +220,13 @@ serve(async (req) => {
     if (authError) {
       console.error(`[${requestId}] Auth error: ${authError.message}`);
       
-      // Return specific errors for user-correctable issues
       if (authError.message.includes("already registered")) {
         return new Response(
           JSON.stringify({ 
             error: "Este e-mail já está cadastrado.",
             request_id: requestId
           }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: responseHeaders }
         );
       }
       
@@ -153,7 +235,7 @@ serve(async (req) => {
           error: "Erro ao criar conta. Por favor, tente novamente.",
           request_id: requestId
         }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: responseHeaders }
       );
     }
 
@@ -188,7 +270,6 @@ serve(async (req) => {
           updateEnabled: true,
         };
 
-        // Only add phone if provided and valid
         if (data.phone && data.phone.trim() !== '') {
           const cleanPhone = data.phone.replace(/\D/g, '');
           if (cleanPhone.length >= 10) {
@@ -208,7 +289,6 @@ serve(async (req) => {
 
         if (!brevoResponse.ok) {
           const errorData = await brevoResponse.text();
-          // Contact already exists is fine
           if (!errorData.includes("already exist")) {
             console.error(`[${requestId}] Brevo sync failed: ${brevoResponse.status}`);
           }
@@ -217,7 +297,6 @@ serve(async (req) => {
         }
       }
     } catch (brevoError) {
-      // Don't block signup if Brevo fails
       console.error(`[${requestId}] Brevo sync error (non-blocking)`);
     }
 
@@ -227,7 +306,7 @@ serve(async (req) => {
         user: authData.user,
         request_id: requestId
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: responseHeaders }
     );
   } catch (error) {
     console.error(`[${requestId}] Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -236,7 +315,7 @@ serve(async (req) => {
         error: "Erro inesperado. Por favor, tente novamente mais tarde.",
         request_id: requestId
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: responseHeaders }
     );
   }
 });

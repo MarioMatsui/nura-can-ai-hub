@@ -7,30 +7,80 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const responseHeaders = { ...corsHeaders, ...securityHeaders, 'Content-Type': 'application/json' };
+
   try {
+    // --- AUTH: Verify caller is authenticated and is admin ---
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'Não autorizado' }),
+        { status: 401, headers: responseHeaders }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify user token
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Token inválido' }),
+        { status: 401, headers: responseHeaders }
+      );
+    }
+
+    // Check admin role
+    const { data: roleData } = await supabaseClient
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+
+    if (!roleData) {
+      return new Response(
+        JSON.stringify({ error: 'Acesso negado' }),
+        { status: 403, headers: responseHeaders }
+      );
+    }
+    // --- END AUTH ---
+
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
     if (!stripeKey) {
-      throw new Error('STRIPE_SECRET_KEY not configured');
+      return new Response(
+        JSON.stringify({ error: 'Serviço não configurado' }),
+        { status: 503, headers: responseHeaders }
+      );
     }
 
     const stripe = new Stripe(stripeKey, {
       apiVersion: '2023-10-16',
     });
 
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
     const { userId } = await req.json();
 
-    if (!userId) {
-      throw new Error('userId is required');
+    if (!userId || typeof userId !== 'string' || userId.length > 100) {
+      return new Response(
+        JSON.stringify({ error: 'Parâmetro userId inválido' }),
+        { status: 400, headers: responseHeaders }
+      );
     }
 
     // Get user's current plans from database
@@ -66,7 +116,6 @@ serve(async (req) => {
         .map((sub: any) => sub.id)
     );
 
-    // Track which plans to keep
     const plansToKeep: string[] = [];
     const plansToDeactivate: string[] = [];
 
@@ -80,7 +129,6 @@ serve(async (req) => {
       }
     }
 
-    // Deactivate plans that are not active in Stripe
     if (plansToDeactivate.length > 0) {
       const { error: updateError } = await supabaseClient
         .from('user_plans')
@@ -93,7 +141,6 @@ serve(async (req) => {
       }
     }
 
-    // Get updated plans
     const { data: updatedPlans, error: updatedError } = await supabaseClient
       .from('user_plans')
       .select('*')
@@ -111,36 +158,19 @@ serve(async (req) => {
         message: `Cleaned up subscriptions. ${plansToKeep.length} active, ${plansToDeactivate.length} deactivated`,
         activePlans: updatedPlans,
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { headers: responseHeaders }
     );
 
   } catch (error: any) {
     const requestId = crypto.randomUUID();
     console.error(`[${requestId}] Error in clean-duplicate-subscriptions:`, error);
     
-    // Map to user-friendly error message
-    let userMessage = 'Erro ao limpar assinaturas duplicadas';
-    let statusCode = 500;
-    
-    if (error?.message?.includes('required')) {
-      userMessage = 'Parâmetros obrigatórios ausentes';
-      statusCode = 400;
-    } else if (error?.message?.includes('not configured')) {
-      userMessage = 'Serviço não configurado corretamente';
-      statusCode = 503;
-    }
-    
     return new Response(
       JSON.stringify({ 
-        error: userMessage,
+        error: 'Erro ao limpar assinaturas duplicadas',
         request_id: requestId
       }),
-      {
-        status: statusCode,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 500, headers: { ...corsHeaders, ...securityHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
