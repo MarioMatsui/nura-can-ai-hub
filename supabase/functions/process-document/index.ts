@@ -6,6 +6,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+};
+
 interface ProcessDocumentRequest {
   documentId: string;
 }
@@ -14,8 +20,6 @@ interface ProcessDocumentRequest {
 function splitIntoChunks(text: string, chunkSize: number = 800, overlap: number = 150): string[] {
   const chunks: string[] = [];
   let start = 0;
-
-  // Limit total chunks to avoid memory issues
   const maxChunks = 50;
   let chunkCount = 0;
 
@@ -24,7 +28,6 @@ function splitIntoChunks(text: string, chunkSize: number = 800, overlap: number 
     chunks.push(text.slice(start, end));
     start = end - overlap;
     chunkCount++;
-    
     if (start >= text.length) break;
   }
 
@@ -36,25 +39,72 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const responseHeaders = { "Content-Type": "application/json", ...corsHeaders, ...securityHeaders };
+
   try {
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+    // --- AUTH: Verify caller is admin ---
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: responseHeaders }
+      );
+    }
+
+    const anonClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: userError } = await anonClient.auth.getUser();
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: responseHeaders }
+      );
+    }
+
+    // Check admin role
+    const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: roleData } = await serviceClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (!roleData) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden" }),
+        { status: 403, headers: responseHeaders }
+      );
+    }
+    // --- END AUTH ---
 
     const { documentId }: ProcessDocumentRequest = await req.json();
+
+    // Input validation
+    if (!documentId || typeof documentId !== "string" || documentId.length > 100) {
+      return new Response(
+        JSON.stringify({ error: "Invalid documentId" }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
 
     console.log("Starting document processing");
 
     // Get document
-    const { data: document, error: docError } = await supabaseClient
+    const { data: document, error: docError } = await serviceClient
       .from("knowledge_documents")
       .select("id, content")
       .eq("id", documentId)
       .single();
 
     if (docError || !document) {
-      throw new Error(`Document not found: ${docError?.message}`);
+      throw new Error(`Document not found`);
     }
 
     let textContent = document.content;
@@ -63,7 +113,6 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("No valid text content found in document");
     }
 
-    // Limit content size to avoid memory issues (first 100KB)
     const maxContentLength = 100000;
     if (textContent.length > maxContentLength) {
       console.log(`Content too long (${textContent.length}), truncating to ${maxContentLength} characters`);
@@ -72,24 +121,20 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Document found, content length:", textContent.length);
 
-    // Split document into chunks
     const chunks = splitIntoChunks(textContent);
     console.log(`Created ${chunks.length} chunks`);
 
-    // Store chunks without embeddings (we'll use text-based search instead)
     const batchSize = 10;
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, Math.min(i + batchSize, chunks.length));
       console.log(`Processing batch ${Math.floor(i/batchSize) + 1}, chunks ${i}-${i + batch.length - 1}`);
       
-      // Process batch in parallel
       await Promise.all(
         batch.map(async (chunkContent, batchIndex) => {
           const chunkIndex = i + batchIndex;
           
           try {
-            // Store chunk without embedding (relying on Gemini's understanding)
-            const { error: chunkError } = await supabaseClient
+            const { error: chunkError } = await serviceClient
               .from("document_chunks")
               .insert({
                 document_id: documentId,
@@ -119,19 +164,13 @@ const handler = async (req: Request): Promise<Response> => {
         message: `Document processed: ${chunks.length} chunks created`,
         chunks: chunks.length
       }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      { status: 200, headers: responseHeaders }
     );
   } catch (error: any) {
     console.error("Error in process-document function:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
+      JSON.stringify({ error: "Erro ao processar documento." }),
+      { status: 500, headers: responseHeaders }
     );
   }
 };

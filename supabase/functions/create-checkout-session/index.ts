@@ -6,35 +6,101 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const securityHeaders = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+};
+
 function validateEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email) && email.length <= 255;
 }
 
+// --- RATE LIMITING ---
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+
+const rateLimitMap = new Map<string, RateLimitEntry>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 10; // 10 checkout attempts per minute per IP
+
+function checkRateLimit(key: string): { allowed: boolean } {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+
+  if (!entry || now > entry.resetTime) {
+    rateLimitMap.set(key, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return { allowed: false };
+  }
+
+  entry.count++;
+  return { allowed: true };
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitMap.entries()) {
+    if (now > entry.resetTime) rateLimitMap.delete(key);
+  }
+}, 5 * 60 * 1000);
+// --- END RATE LIMITING ---
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const responseHeaders = { ...corsHeaders, ...securityHeaders, 'Content-Type': 'application/json' };
+
   try {
+    // Rate limit by IP
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    if (!checkRateLimit(clientIp).allowed) {
+      return new Response(
+        JSON.stringify({ error: 'Muitas tentativas. Aguarde um momento.' }),
+        { status: 429, headers: responseHeaders }
+      );
+    }
+
     const { price_id, customer_email, metadata = {}, mode = 'subscription' } = await req.json();
 
     console.log('[create-checkout-session] Request:', { price_id, mode });
 
     // Validate required fields
     if (!price_id || !customer_email) {
-      throw new Error('Missing required fields: price_id and customer_email');
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields: price_id and customer_email' }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+
+    // Input validation
+    if (typeof price_id !== 'string' || price_id.length > 100) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid price_id' }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+
+    if (typeof mode !== 'string' || !['subscription', 'payment'].includes(mode)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid mode' }),
+        { status: 400, headers: responseHeaders }
+      );
     }
 
     // Validate email server-side
     if (!validateEmail(customer_email)) {
       return new Response(
         JSON.stringify({ error: 'Invalid email address' }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        { status: 400, headers: responseHeaders }
       );
     }
 
@@ -44,10 +110,7 @@ serve(async (req) => {
       console.error('[create-checkout-session] STRIPE_SECRET_KEY not configured');
       return new Response(
         JSON.stringify({ error: 'Stripe não configurado.' }),
-        { 
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
+        { status: 500, headers: responseHeaders }
       );
     }
 
@@ -75,7 +138,7 @@ serve(async (req) => {
       console.log('[create-checkout-session] Created new customer:', customer.id);
     }
 
-    // Get URLs from environment (without VITE_ prefix for edge functions)
+    // Get URLs from environment
     const baseUrl = Deno.env.get('APP_BASE_URL') || 'https://nuracan.ai';
     const successUrl = Deno.env.get('STRIPE_SUCCESS_URL') || `${baseUrl}/checkout/sucesso`;
     const cancelUrl = Deno.env.get('STRIPE_CANCEL_URL') || `${baseUrl}/checkout/cancelado`;
@@ -84,8 +147,6 @@ serve(async (req) => {
       mode,
       customer: customer.id,
       price_id,
-      successUrl,
-      cancelUrl
     });
 
     // Update customer metadata with user_id if provided
@@ -96,7 +157,7 @@ serve(async (req) => {
       console.log('[create-checkout-session] Updated customer metadata with user_id');
     }
 
-    // Create checkout session with subscription_data to pass metadata to subscription
+    // Create checkout session
     const session = await stripe.checkout.sessions.create({
       mode,
       customer: customer.id,
@@ -120,10 +181,7 @@ serve(async (req) => {
         url: session.url,
         session_id: session.id 
       }),
-      { 
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      { status: 200, headers: responseHeaders }
     );
 
   } catch (err) {
@@ -131,12 +189,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Falha ao criar sessão de checkout.',
-        details: err instanceof Error ? err.message : 'Unknown error'
       }),
-      { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      { status: 500, headers: responseHeaders }
     );
   }
 });
