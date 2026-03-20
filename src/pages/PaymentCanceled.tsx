@@ -61,7 +61,7 @@ const PaymentCanceled = () => {
           <p>
             Precisa de ajuda?{" "}
             <a
-              href="https://wa.me/5511999999999"
+              href="https://wa.me/5511936206026"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline font-medium"
