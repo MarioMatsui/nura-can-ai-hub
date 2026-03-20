@@ -28,10 +28,8 @@ const faqItems = [
 
 const FAQ = () => {
   const handleWhatsAppContact = () => {
-    // Adicione o número de WhatsApp aqui
-    const phoneNumber = "5511999999999"; // Formato: código do país + DDD + número
     const message = encodeURIComponent("Olá! Vim através do site da NuraCan AI e gostaria de saber mais informações.");
-    window.open(`https://wa.me/${phoneNumber}?text=${message}`, "_blank");
+    window.open(`https://wa.me/5511936206026?text=${message}`, "_blank");
   };
 
   return (
