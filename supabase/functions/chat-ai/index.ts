@@ -297,7 +297,7 @@ const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
 function getKnowledgeType(modelType: string): string | null {
   const mapping: Record<string, string> = {
-    "generic": "medical",
+    "generic": "all",
     "medical": "medical",
     "legal": "legal",
     "veterinary": "veterinary",
