@@ -501,10 +501,12 @@ function buildUserMessage(opts: {
 
   return `# CONSULTA DE RECEITUÁRIO
 
-## PRONTUÁRIO DO PACIENTE (analisar PRIMEIRO, sem restrições)
-${recordMetadata && Object.keys(recordMetadata).length > 0 ? '**Estrutura extraída:**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```\n' : ''}
-**Conteúdo bruto do prontuário:**
-${recordContent.slice(0, 12000) || '(conteúdo não extraído)'}
+> **IMPORTANTE:** Os arquivos originais do PRONTUÁRIO e do CATÁLOGO foram anexados a esta mensagem como documentos multimodais. Sempre que possível, **leia os arquivos originais** — o texto extraído abaixo é apenas um auxílio. Se houver divergência, prevaleça o original.
+
+## PRONTUÁRIO DO PACIENTE (analisar primeiro, sem restrições)
+${recordMetadata && Object.keys(recordMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```\n' : ''}
+**Texto extraído do prontuário (auxiliar — confirme no arquivo original anexo):**
+${recordContent.slice(0, 30000) || '(conteúdo não extraído — use o arquivo anexo)'}
 
 ---
 
@@ -513,19 +515,19 @@ ${observations?.trim() || '(Nenhuma observação adicional fornecida.)'}
 
 ---
 
-## BASE CIENTÍFICA RECUPERADA (consultar para embasar a Etapa 2 — NÃO citar identificadores)
+## BASE CIENTÍFICA RECUPERADA (consultar para embasar — NÃO citar identificadores)
 ${ragSection}
 
 ---
 
-## CATÁLOGO DE PRODUTOS DISPONÍVEIS (aplicar SOMENTE na Etapa 3 — universo permitido para a receita final)
-${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '**Estrutura extraída:**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```\n' : ''}
-**Conteúdo bruto do catálogo:**
-${catalogContent.slice(0, 12000) || '(conteúdo não extraído)'}
+## CATÁLOGO DE PRODUTOS DISPONÍVEIS (universo permitido para a receita final)
+${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```\n' : ''}
+**Texto extraído do catálogo (auxiliar — confirme no arquivo original anexo):**
+${catalogContent.slice(0, 40000) || '(conteúdo não extraído — use o arquivo anexo)'}
 
 ---
 
-Agora execute internamente as 4 etapas do MODO DE OPERAÇÃO ATUAL e produza a receita final no formato exigido. Lembre-se: prefira combinações de múltiplos produtos quando clinicamente plausível.`;
+Execute o raciocínio nas etapas indicadas e produza a sugestão de receituário. Combinações múltiplas são bem-vindas quando clinicamente plausíveis; um único produto também é aceitável quando o quadro pedir.`;
 }
 
 // =============================================================================
