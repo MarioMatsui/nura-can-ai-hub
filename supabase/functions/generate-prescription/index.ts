@@ -123,7 +123,8 @@ function sanitizeRAGContent(content: string): string {
   ];
   let sanitized = content;
   dangerousPatterns.forEach(p => { sanitized = sanitized.replace(p, '[REDACTED]'); });
-  const maxLength = 6000;
+  // CORREÇÃO 2: limite por chunk subiu de 6k para 8k
+  const maxLength = 8000;
   if (sanitized.length > maxLength) sanitized = sanitized.substring(0, maxLength) + '... [conteúdo truncado]';
   return sanitized;
 }
@@ -247,7 +248,15 @@ async function ensureExtraction(
   table: 'prescription_catalogs' | 'prescription_records',
   row: any,
 ): Promise<any> {
-  if (row.extracted_content && row.extracted_metadata && Object.keys(row.extracted_metadata || {}).length > 0) {
+  // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
+  // Catálogo precisa ter pelo menos 1 produto extraído. Prontuário precisa ter queixa OU sintomas.
+  const meta = row.extracted_metadata || {};
+  const isCatalog = table === 'prescription_catalogs';
+  const cacheValid = isCatalog
+    ? Array.isArray(meta.products) && meta.products.length > 0 && (row.extracted_content?.length || 0) > 200
+    : (!!meta.main_complaint || (Array.isArray(meta.symptoms) && meta.symptoms.length > 0)) && (row.extracted_content?.length || 0) > 200;
+
+  if (cacheValid) {
     return row;
   }
 
@@ -257,14 +266,13 @@ async function ensureExtraction(
   let raw = '';
   let metadata: any = {};
 
-  const isCatalog = table === 'prescription_catalogs';
   const prompt = isCatalog ? CATALOG_EXTRACTION_PROMPT : RECORD_EXTRACTION_PROMPT;
 
   if (isTextual(file.mimeType)) {
     try {
       const decoded = atob(file.base64);
       raw = decoded;
-      const structured = await extractWithGemini(file.base64, file.mimeType, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 8000));
+      const structured = await extractWithGemini(file.base64, file.mimeType, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 12000));
       metadata = structured.metadata;
     } catch (e) {
       console.error('Text decode error', e);
@@ -276,7 +284,8 @@ async function ensureExtraction(
   }
 
   const updates: any = {
-    extracted_content: raw.slice(0, 50000),
+    // CORREÇÃO 2: extracted_content sobe de 50k para 80k
+    extracted_content: raw.slice(0, 80000),
     extracted_metadata: metadata,
   };
 
@@ -443,55 +452,31 @@ const PRESCRIPTION_TASK_LAYER = `
 
 Você está atuando como apoio à decisão clínica para gerar uma SUGESTÃO DE RECEITUÁRIO. Mantenha 100% do seu rigor clínico e científico habitual — esta tarefa NÃO simplifica seu raciocínio.
 
-### ORDEM OBRIGATÓRIA DE RACIOCÍNIO (siga internamente nesta sequência):
+### ORDEM DE RACIOCÍNIO (interna, flexível):
 
-**ETAPA 1 — Análise clínica completa (livre, sem restrições):**
-- Estude o prontuário em profundidade: queixa principal, sintomas, histórico, comorbidades, medicações em uso, alergias, contraindicações.
-- Identifique os mecanismos fisiopatológicos envolvidos.
-- Defina objetivos terapêuticos clínicos sem se limitar ao catálogo nesta fase.
+1. **Análise clínica completa do prontuário** — leia o documento original (anexado abaixo como arquivo) com atenção: queixa, sintomas, histórico, comorbidades, medicações em uso, alergias. Identifique mecanismos fisiopatológicos e objetivos terapêuticos sem se prender ao catálogo.
+2. **Embasamento científico via base de conhecimento recuperada** — use a evidência para definir quais perfis canabinoides (CBD, THC, CBG, CBN, full/broad-spectrum), proporções, vias e posologias têm respaldo para o quadro.
+3. **Cruzamento com o catálogo enviado** — só agora filtre os produtos do catálogo (anexado como arquivo) que melhor atendem ao perfil terapêutico definido. Se o catálogo for limitado, deixe claro o que falta.
+4. **Composição da receita** — articule produtos, posologias e justificativa.
 
-**ETAPA 2 — Embasamento científico via base de conhecimento:**
-- Consulte a base científica recuperada para fundamentar quais classes de canabinoides, perfis (CBD, THC, CBG, CBN, full-spectrum, broad-spectrum, isolados), proporções e vias de administração têm evidência para o quadro.
-- Identifique posologias de referência, titulação recomendada, interações relevantes.
+### REGRAS
 
-**ETAPA 3 — Cruzamento clínico × catálogo:**
-- SOMENTE AGORA filtre os produtos disponíveis no catálogo que melhor atendem ao perfil terapêutico definido nas Etapas 1 e 2.
-- Selecione os produtos do catálogo cujo perfil farmacológico mais se aproxima do ideal clínico.
+- **Recomende SOMENTE produtos presentes no catálogo enviado.** Se nenhum produto do catálogo atender bem a um objetivo, declare a lacuna em vez de inventar.
+- **Combinações são bem-vindas quando clinicamente plausíveis** (ex: óleo basal CBD-rico + ajuste THC noturno; oral + tópico). Quando o quadro pedir um único produto, recomende um único — não force múltiplos por obrigação.
+- **NUNCA exiba identificadores como "(Fonte 1)", "(Fonte 2)"** — incorpore evidência de forma natural.
+- **NÃO simplifique** o raciocínio para caber no formato. Profundidade clínica é prioridade sobre estrutura.
+- **NÃO alucine.** Se algo não puder ser inferido com segurança, deixe explícito.
 
-**ETAPA 4 — Composição da receita final:**
-- Estruture a receita com os produtos selecionados, posologia detalhada e justificativa clínica ancorada na evidência.
+### FORMATO DE SAÍDA SUGERIDO (Markdown — adapte conforme o caso)
 
-### REGRAS CRÍTICAS DA RECEITA
+A estrutura abaixo é uma referência. Use as seções que fizerem sentido clínico para o caso; pode mesclar, omitir ou reordenar quando isso melhorar a precisão.
 
-- **NÃO recomende produtos fora do catálogo.** Se o catálogo não tiver produto adequado para algum objetivo, declare explicitamente.
-- **PREFIRA RECOMENDAR MÚLTIPLOS PRODUTOS quando clinicamente plausível** — combinações sinérgicas (ex: óleo basal CBD-rico + ajuste THC para dor noturna; oral + tópico; titulação diurna vs noturna). Recomendar UM ÚNICO produto deve ser exceção, justificada apenas quando a clínica não suportar combinação.
-- **NÃO exiba identificadores como "(Fonte 1)", "(Fonte 2)"** — incorpore a evidência de forma natural.
-- **NÃO simplifique** o raciocínio para caber no formato. A profundidade clínica do chat médico deve estar presente.
-- **NÃO alucine.** Quando algo não puder ser inferido com segurança, deixe claro.
-
-### ESTRUTURA OBRIGATÓRIA DA RESPOSTA (Markdown)
-
-### 1. Resumo do caso
-Síntese clínica em 3-5 linhas (paciente, queixa principal, achados relevantes, hipóteses).
-
-### 2. Análise clínica e objetivos terapêuticos
-Discussão técnica do quadro à luz da evidência científica disponível (mecanismos, alvos terapêuticos do sistema endocanabinoide envolvidos, racional para cannabis medicinal). 4-8 linhas.
-
-### 3. Produtos sugeridos
-Para CADA produto recomendado (preferencialmente 2 ou mais):
-- **Nome do produto** (exatamente como aparece no catálogo) — apresentação/concentração.
-- **Posologia sugerida**: dose inicial, esquema de titulação, frequência, via de administração, horário (diurno/noturno).
-- **Justificativa clínica**: por que este produto para este paciente, ancorada na evidência (perfil canabinoide, mecanismo, estudos pertinentes).
-- **Papel no plano terapêutico**: como ele se integra com os outros produtos sugeridos (sinergia, complementaridade).
-
-### 4. Observações de uso e monitoramento
-Cuidados, sinais de alerta, ajustes esperados, marcadores clínicos para reavaliação, tempo até resposta esperada.
-
-### 5. Considerações finais
-Limitações da análise (dados ausentes no prontuário, lacunas no catálogo), contraindicações relevantes, interações potenciais com medicações em uso, populações especiais.
-
-### 6. Aviso
-Frase clara de que esta é uma SUGESTÃO de apoio à decisão e que a prescrição final cabe ao médico responsável, com avaliação direta do paciente.
+- **Resumo do caso** — síntese clínica curta.
+- **Análise clínica e objetivos terapêuticos** — discussão técnica do quadro à luz da evidência.
+- **Produtos sugeridos** — para cada produto: nome (exatamente como no catálogo), apresentação/concentração, posologia (dose inicial, titulação, frequência, via, horário), justificativa clínica e papel no plano.
+- **Observações de uso e monitoramento** — sinais de alerta, marcadores de reavaliação, tempo até resposta esperada.
+- **Considerações finais** — limitações da análise, contraindicações, interações com medicações em uso.
+- **Aviso** — esta é uma sugestão de apoio à decisão; a prescrição final cabe ao médico responsável.
 `;
 
 // =============================================================================
@@ -516,10 +501,12 @@ function buildUserMessage(opts: {
 
   return `# CONSULTA DE RECEITUÁRIO
 
-## PRONTUÁRIO DO PACIENTE (analisar PRIMEIRO, sem restrições)
-${recordMetadata && Object.keys(recordMetadata).length > 0 ? '**Estrutura extraída:**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```\n' : ''}
-**Conteúdo bruto do prontuário:**
-${recordContent.slice(0, 12000) || '(conteúdo não extraído)'}
+> **IMPORTANTE:** Os arquivos originais do PRONTUÁRIO e do CATÁLOGO foram anexados a esta mensagem como documentos multimodais. Sempre que possível, **leia os arquivos originais** — o texto extraído abaixo é apenas um auxílio. Se houver divergência, prevaleça o original.
+
+## PRONTUÁRIO DO PACIENTE (analisar primeiro, sem restrições)
+${recordMetadata && Object.keys(recordMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```\n' : ''}
+**Texto extraído do prontuário (auxiliar — confirme no arquivo original anexo):**
+${recordContent.slice(0, 30000) || '(conteúdo não extraído — use o arquivo anexo)'}
 
 ---
 
@@ -528,19 +515,19 @@ ${observations?.trim() || '(Nenhuma observação adicional fornecida.)'}
 
 ---
 
-## BASE CIENTÍFICA RECUPERADA (consultar para embasar a Etapa 2 — NÃO citar identificadores)
+## BASE CIENTÍFICA RECUPERADA (consultar para embasar — NÃO citar identificadores)
 ${ragSection}
 
 ---
 
-## CATÁLOGO DE PRODUTOS DISPONÍVEIS (aplicar SOMENTE na Etapa 3 — universo permitido para a receita final)
-${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '**Estrutura extraída:**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```\n' : ''}
-**Conteúdo bruto do catálogo:**
-${catalogContent.slice(0, 12000) || '(conteúdo não extraído)'}
+## CATÁLOGO DE PRODUTOS DISPONÍVEIS (universo permitido para a receita final)
+${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```\n' : ''}
+**Texto extraído do catálogo (auxiliar — confirme no arquivo original anexo):**
+${catalogContent.slice(0, 40000) || '(conteúdo não extraído — use o arquivo anexo)'}
 
 ---
 
-Agora execute internamente as 4 etapas do MODO DE OPERAÇÃO ATUAL e produza a receita final no formato exigido. Lembre-se: prefira combinações de múltiplos produtos quando clinicamente plausível.`;
+Execute o raciocínio nas etapas indicadas e produza a sugestão de receituário. Combinações múltiplas são bem-vindas quando clinicamente plausíveis; um único produto também é aceitável quando o quadro pedir.`;
 }
 
 // =============================================================================
@@ -637,7 +624,7 @@ serve(async (req) => {
     const ragChunks = ragQuery ? await searchMedicalKnowledgeBase(supabase, ragQuery) : [];
     console.log(`RAG retornou ${ragChunks.length} chunks`);
 
-    const userMessage = buildUserMessage({
+    const userMessageText = buildUserMessage({
       catalogContent: catalogFull.extracted_content || '',
       catalogMetadata: catalogFull.extracted_metadata || {},
       recordContent: recordFull.extracted_content || '',
@@ -645,6 +632,33 @@ serve(async (req) => {
       observations: observations || '',
       ragChunks,
     });
+
+    // CORREÇÃO 1: enviar os ARQUIVOS ORIGINAIS (PDF/imagem) como multimodal direto pro gemini-2.5-pro,
+    // não apenas o texto extraído pelo flash. O cérebro principal precisa "ver" o documento original.
+    const userContent: any[] = [{ type: 'text', text: userMessageText }];
+
+    const [recordFile, catalogFile] = await Promise.all([
+      downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
+      downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
+    ]);
+
+    const attachIfMultimodal = (file: { base64: string; mimeType: string } | null, label: string) => {
+      if (!file) return;
+      const mt = file.mimeType;
+      // Gemini lê PDF e imagens nativamente via image_url base64
+      if (mt === 'application/pdf' || mt.startsWith('image/')) {
+        userContent.push({
+          type: 'image_url',
+          image_url: { url: `data:${mt};base64,${file.base64}` },
+        });
+        console.log(`Anexado ${label} multimodal (${mt})`);
+      } else {
+        console.log(`${label} não-multimodal (${mt}) — confiando no texto extraído`);
+      }
+    };
+
+    attachIfMultimodal(recordFile, 'PRONTUÁRIO');
+    attachIfMultimodal(catalogFile, 'CATÁLOGO');
 
     // Chamada à Lovable AI — mesma estrutura do chat-ai (system + user), modelo de alta capacidade
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -657,9 +671,10 @@ serve(async (req) => {
         model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: MEDICAL_SYSTEM_PROMPT + '\n\n' + PRESCRIPTION_TASK_LAYER },
-          { role: 'user', content: userMessage },
+          { role: 'user', content: userContent },
         ],
-        temperature: 0.4,
+        // CORREÇÃO 4: temperature 0.4 → 0.7 (alinhado ao chat médico, mais exploração clínica)
+        temperature: 0.7,
       }),
     });
 
