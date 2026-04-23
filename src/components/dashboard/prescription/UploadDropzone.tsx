@@ -59,10 +59,14 @@ export const UploadDropzone = ({
   onChange,
   label,
   description,
+  onSaved,
+  isSaved = false,
+  savedLimitReached = false,
 }: UploadDropzoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const validate = (file: File): string | null => {
