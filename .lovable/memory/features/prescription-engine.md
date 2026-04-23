@@ -1,6 +1,6 @@
 ---
 name: Prescription engine
-description: Receituário+ — RAG sanitizado por termo, anexos alinhados ao chat-ai (PDF/img/DOC multimodal, TXT inline), max_tokens 8000, sem temperature fixa, prioridade de anexos no system layer
+description: Receituário+ — RAG sanitizado por termo, anexos via signed URL para arquivos > 2MB (memória constante), base64 inline só para arquivos pequenos
 type: feature
 ---
 
@@ -14,10 +14,34 @@ A função `generate-prescription` foi alinhada com `chat-ai` para reduzir diver
 - User: texto do caso + anexos multimodais
 - Sem histórico (one-shot por natureza da tarefa)
 
-## Anexos (igual ao chat-ai)
-- PDF / imagem → multimodal via `image_url` base64
+## Anexos: signed URL vs base64 inline (CRÍTICO)
+
+**Regra:** arquivos > 2MB **NUNCA** são carregados em base64 dentro do edge function. Em vez disso, geramos uma **signed URL do Supabase Storage** (válida por 600s) e passamos como `image_url.url` no payload OpenAI-compatible. O Gemini busca o arquivo direto do Storage, sem passar pelo edge function nem pelo gateway como base64.
+
+| Tamanho | Caminho | Por quê |
+|---|---|---|
+| < 2 MB | Base64 inline (`data:mime;base64,...`) | Mais rápido, sem round-trip extra |
+| 2 MB – 2 GB | Signed URL (`https://...`) | Evita estouro de RAM e o limite prático de ~7MB do `inline_data` do Gemini |
+
+### Por que signed URL é obrigatório acima de 2MB
+1. **Memória do edge function (256MB):** materializar 16MB de PDF como base64 (~21MB) + buffer da response (~16MB) + string binária intermediária (~16MB) = pico > 60MB só para um arquivo. Com dois PDFs, estoura.
+2. **Limite do `inline_data` do Gemini:** o provider tem teto prático de ~7MB por parte. Acima disso responde com `400 Base64 decoding failed` (mensagem enganosa — o base64 está íntegro, mas tamanho excede). Signed URL bypassa esse limite e suporta arquivos até 2GB.
+
+### Fluxo de carregamento (`loadFile`)
+1. `getSignedUrl(bucket, path, 600s)` — sempre gera, é barato.
+2. `HEAD signedUrl` para descobrir `content-length` e `content-type` sem baixar.
+3. Se `size > 2MB`: retorna `{ base64: null, signedUrl, mimeType, sizeBytes, bucket, path }` — **sem download**.
+4. Se `size <= 2MB`: baixa, converte para base64, retorna ambos (`base64` E `signedUrl`).
+
+### Anexação no payload (`attachIfMultimodal`)
+- Se há `signedUrl` e (não tem base64 OU é > 2MB): usa signed URL.
+- Senão: usa `data:mime;base64,...`.
+- Logs explicitam o caminho usado e o tamanho.
+
+## Tipos de anexo (igual ao chat-ai)
+- PDF / imagem → multimodal (signed URL ou base64 conforme tamanho)
 - DOC / DOCX / RTF / ODT → multimodal binário (mesmo padrão do chat)
-- TXT / MD / CSV / JSON / XML → texto puro decodificado e embutido no prompt como FONTE PRIMÁRIA
+- TXT / MD / CSV / JSON / XML → texto puro decodificado e embutido no prompt como FONTE PRIMÁRIA (só funciona se o arquivo for pequeno o suficiente para ter base64; arquivos de texto > 2MB caem no caminho de URL)
 - Quando o original é anexado, o texto extraído entra apenas como APOIO resumido (8k chars prontuário, 12k catálogo)
 - Quando o original NÃO é anexado, o texto extraído é a FONTE PRIMÁRIA (30k prontuário, 40k catálogo)
 
@@ -30,22 +54,23 @@ A função `generate-prescription` foi alinhada com `chat-ai` para reduzir diver
 
 ## Parâmetros de inferência (alinhados ao chat-ai)
 - `max_tokens: 8000`
-- Sem `temperature` explícita (usa default do provedor) — antes era 0.7/0.4 fixo
+- Sem `temperature` explícita (usa default do provedor)
 
 ## Cache de extração + proteção de memória
 - `ensureExtraction` só reutiliza cache de qualidade:
   - catálogo: precisa ter `metadata.products.length > 0` E `extracted_content > 200 chars`
   - prontuário: precisa ter `main_complaint` ou `symptoms.length > 0` E `extracted_content > 200 chars`
 - `extracted_content` armazenado: até 80k chars
-- **CRÍTICO MEMÓRIA**: arquivos > 6MB pulam a extração com Gemini Flash. O Gemini Pro multimodal lê o PDF original direto, então a extração estruturada com Flash é redundante e dobra o uso de RAM.
-- **Download SEQUENCIAL** (não paralelo). Antes: 2 PDFs base64 + 2 extrações em paralelo + 2 anexos = pico > 256MB. Agora: 1 PDF na fase de extração, ambos só coexistem na chamada final do Pro.
-- `uint8ToBase64`: constrói a string binária inteira em chunks de 8KB (loop simples por byte, sem `String.fromCharCode.apply` que estoura stack do V8) e chama `btoa()` **UMA ÚNICA VEZ** no final. **NUNCA** chamar `btoa()` por chunk — cada chunk vira um bloco base64 com padding `=` próprio, corrompendo alinhamento de 3 bytes → 4 chars. Provider rejeita com HTTP 400 "Base64 decoding failed". Para PDF de 10MB a binary tem ~10MB e o base64 ~13MB, cabe folgado nos 256MB.
-- `assertValidBase64`: validação antes do envio ao Gemini. Confere `length === Math.ceil(bytes/3)*4` e que `=` só aparece nas últimas 2 posições. Aborta com erro claro em vez de mandar payload corrompido.
+- **Arquivos > 6MB pulam a extração com Gemini Flash.** O Gemini Pro multimodal lê o PDF original direto via signed URL, então a extração estruturada com Flash é redundante.
+- **Arquivos entre 2MB e 6MB:** se cache inválido, baixamos APENAS naquele momento (em escopo isolado via `downloadAsBase64Once`) para rodar a extração com Flash, e descartamos o base64 imediatamente após.
+- **Download SEQUENCIAL** (não paralelo) — record primeiro, catalog depois.
+- `uint8ToBase64`: chunks de 8KB, **um único `btoa()`** no final. Nunca chamar `btoa()` por chunk (corrompe alinhamento de 3 bytes → 4 chars).
+- `assertValidBase64`: validação só roda no caminho de base64 inline.
 
 ## Logs de comparação
 A função emite resumo objetivo a cada chamada:
+- Caminho usado por cada arquivo (signed URL ou base64 inline) + tamanho em MB
 - RAG chunks count
-- Tipo de anexo de cada arquivo (multimodal? texto puro?)
 - Tamanho do system prompt e do user text
 - finish_reason + tokens input/output da resposta
 
