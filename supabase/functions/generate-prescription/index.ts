@@ -262,11 +262,17 @@ Retorne APENAS um bloco \`\`\`json com:
 
 Não invente dados. Se algo não estiver no documento, use null ou array vazio.`;
 
+// Limite de segurança para rodar Gemini Flash de extração.
+// Acima disso (~6MB), pulamos a extração para evitar pico de memória —
+// o Gemini Pro multimodal já vai ler o PDF original na chamada principal,
+// então a extração estruturada com Flash é redundante para arquivos grandes.
+const MAX_EXTRACTION_FILE_BYTES = 6 * 1024 * 1024;
+
 async function ensureExtraction(
   supabase: any,
   table: 'prescription_catalogs' | 'prescription_records',
   row: any,
-  preloadedFile: { base64: string; mimeType: string } | null,
+  preloadedFile: { base64: string; mimeType: string; sizeBytes: number } | null,
 ): Promise<any> {
   // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
   // Catálogo precisa ter pelo menos 1 produto extraído. Prontuário precisa ter queixa OU sintomas.
@@ -283,6 +289,14 @@ async function ensureExtraction(
   // CORREÇÃO MEMÓRIA: reutiliza arquivo já baixado em vez de baixar de novo.
   const file = preloadedFile;
   if (!file) return row;
+
+  // CORREÇÃO MEMÓRIA: pula extração se arquivo é grande demais. O Gemini Pro
+  // multimodal lê o PDF original diretamente e produz uma sugestão completa
+  // sem precisar do JSON estruturado intermediário.
+  if (file.sizeBytes > MAX_EXTRACTION_FILE_BYTES) {
+    console.log(`Pulando extração de ${table} (${(file.sizeBytes / 1024 / 1024).toFixed(2)}MB > limite). Pro multimodal lerá direto.`);
+    return row;
+  }
 
   let raw = '';
   let metadata: any = {};
