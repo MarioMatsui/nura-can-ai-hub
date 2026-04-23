@@ -133,6 +133,19 @@ function sanitizeRAGContent(content: string): string {
 // EXTRAÇÃO DE CONTEÚDO DOS ARQUIVOS (Gemini multimodal)
 // =============================================================================
 
+// Conversão Uint8Array -> base64 em CHUNKS pequenos.
+// Loop char-by-char (`binary += String.fromCharCode(buf[i])`) explode a memória
+// para PDFs grandes (cada concat realoca string). Chunked é O(n) com pico baixo.
+function uint8ToBase64(buf: Uint8Array): string {
+  const CHUNK = 0x8000; // 32KB por chunk
+  let binary = '';
+  for (let i = 0; i < buf.length; i += CHUNK) {
+    const slice = buf.subarray(i, Math.min(i + CHUNK, buf.length));
+    binary += String.fromCharCode.apply(null, slice as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
 async function downloadFileAsBase64(
   supabase: any,
   bucket: string,
@@ -143,11 +156,10 @@ async function downloadFileAsBase64(
     console.error('Failed to download file:', path, error);
     return null;
   }
-  const buf = new Uint8Array(await data.arrayBuffer());
-  let binary = '';
-  for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
-  const base64 = btoa(binary);
+  const ab = await data.arrayBuffer();
+  const buf = new Uint8Array(ab);
   const mimeType = data.type || 'application/octet-stream';
+  const base64 = uint8ToBase64(buf);
   return { base64, mimeType };
 }
 
@@ -247,6 +259,7 @@ async function ensureExtraction(
   supabase: any,
   table: 'prescription_catalogs' | 'prescription_records',
   row: any,
+  preloadedFile: { base64: string; mimeType: string } | null,
 ): Promise<any> {
   // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
   // Catálogo precisa ter pelo menos 1 produto extraído. Prontuário precisa ter queixa OU sintomas.
@@ -260,7 +273,8 @@ async function ensureExtraction(
     return row;
   }
 
-  const file = await downloadFileAsBase64(supabase, 'prescription-files', row.file_path);
+  // CORREÇÃO MEMÓRIA: reutiliza arquivo já baixado em vez de baixar de novo.
+  const file = preloadedFile;
   if (!file) return row;
 
   let raw = '';
@@ -640,10 +654,18 @@ serve(async (req) => {
       });
     }
 
-    console.log('Extraindo conteúdo dos arquivos...');
+    console.log('Baixando arquivos uma única vez...');
+    // CORREÇÃO MEMÓRIA: download único por arquivo. Antes baixávamos até 2x cada
+    // (uma vez em ensureExtraction e outra para anexar como multimodal).
+    const [recordFile, catalogFile] = await Promise.all([
+      downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
+      downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
+    ]);
+
+    console.log('Extraindo conteúdo dos arquivos (reutilizando download)...');
     const [catalogFull, recordFull] = await Promise.all([
-      ensureExtraction(supabase, 'prescription_catalogs', catalogRow),
-      ensureExtraction(supabase, 'prescription_records', recordRow),
+      ensureExtraction(supabase, 'prescription_catalogs', catalogRow, catalogFile),
+      ensureExtraction(supabase, 'prescription_records', recordRow, recordFile),
     ]);
 
     // Constrói query RAG a partir do prontuário + observações.
@@ -668,11 +690,6 @@ serve(async (req) => {
     //  - PDF/imagem  → multimodal nativo
     //  - DOC/DOCX/RTF/ODT → multimodal binário (mesmo padrão do chat)
     //  - TXT/MD/CSV/JSON/XML → leitura direta como texto, embutida no prompt
-    const [recordFile, catalogFile] = await Promise.all([
-      downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
-      downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
-    ]);
-
     const isMultimodalMime = (mt: string) =>
       mt === 'application/pdf' ||
       mt.startsWith('image/') ||
