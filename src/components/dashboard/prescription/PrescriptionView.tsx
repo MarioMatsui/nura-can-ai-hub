@@ -133,6 +133,16 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleNewPrescription = () => {
+    setCatalog(null);
+    setRecord(null);
+    setObservations('');
+    setAiResponse('');
+    setSelectedHistoryId(null);
+    setCopied(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleConfirmDelete = async () => {
     if (!historyToDelete) return;
     setIsDeleting(true);
