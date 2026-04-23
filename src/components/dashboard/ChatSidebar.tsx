@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, PanelLeft, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, PanelLeft, Search, FilePlus2, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 import logoIcon from '@/assets/logo-icon.png';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -37,6 +38,8 @@ interface ChatSidebarProps {
   user: any;
   subscriptions: any[];
   onOpenSearch: () => void;
+  activeView: 'chat' | 'prescription';
+  onOpenPrescription: () => void;
 }
 
 export const ChatSidebar = ({
@@ -52,6 +55,8 @@ export const ChatSidebar = ({
   user,
   subscriptions,
   onOpenSearch,
+  activeView,
+  onOpenPrescription,
 }: ChatSidebarProps) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -59,6 +64,18 @@ export const ChatSidebar = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const { state, toggleSidebar } = useSidebar();
+
+  const hasPrescriptionAccess = (subscriptions || []).some(
+    (s) => s?.status === 'active' && (s?.plan_type === 'medical' || s?.plan_type === 'specialist')
+  );
+
+  const handlePrescriptionClick = () => {
+    if (!hasPrescriptionAccess) {
+      toast.error('Receituário + disponível apenas no plano Médico.');
+      return;
+    }
+    onOpenPrescription();
+  };
 
   const getModelLabel = (modelType: string) => {
     const labels = {
