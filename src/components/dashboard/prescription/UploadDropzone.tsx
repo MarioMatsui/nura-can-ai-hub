@@ -49,6 +49,7 @@ export const UploadDropzone = ({
 }: UploadDropzoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const validate = (file: File): string | null => {
