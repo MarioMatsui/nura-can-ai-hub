@@ -1,74 +1,79 @@
 
 
-## Novo bloco "Resumo Copiável" no Receituário +
+## Suporte a múltiplos produtos no Resumo Copiável
 
-### Posicionamento
-Inserir entre os botões de ação e o `Card` com o resultado completo (entre as `<section>` das linhas ~241-278 e a `<section>` do response na linha ~281 em `PrescriptionView.tsx`).
+### Mudança no extrator (`src/lib/prescriptionExtract.ts`)
 
-### Estrutura visual
-- Container com 2 linhas (Produto + Posologia)
-- Cada linha: label à esquerda (largura fixa ~120px no desktop, full width mobile) + campo readonly + botão copiar
-- Campo `Produto`: input readonly de uma linha
-- Campo `Posologia`: textarea readonly multilinha (auto-altura ou min-height)
-- Visível apenas quando `aiResponse` tem conteúdo (mesma condição de exibição que faz sentido)
+Trocar a interface e função para retornar **array de pares**:
 
-### Lógica de extração
+```ts
+export interface PrescriptionItem {
+  produto: string;
+  posologia: string;
+}
+export const extractPrescriptionSummary = (text): PrescriptionItem[]
+```
 
-Criar utilitário `extractPrescriptionSummary(text: string): { produto: string; posologia: string }` em arquivo novo `src/lib/prescriptionExtract.ts`:
+**Nova lógica:**
+1. Localizar **todas** as ocorrências de `Produto:` no texto (regex global, case-insensitive, tolerante a markdown/bullets/numeração tipo `Produto 1:`, `**Produto:**`, `### Produto`).
+2. Para cada ocorrência, definir o **bloco daquele produto** = trecho entre o início desse `Produto:` e o início do próximo `Produto:` (ou fim do texto).
+3. Dentro do bloco:
+   - **Produto**: aplicar a lógica atual de `extractProduto` (primeira linha após `Produto:`, com prefixação opcional da `Marca:` encontrada **dentro daquele bloco**).
+   - **Posologia**: aplicar a lógica atual de `extractPosologia` restrita ao bloco — captura entre `Posologia:` e o próximo cabeçalho conhecido (`Observações`, `Justificativa`, etc.) **dentro do bloco**, mantendo bullets normalizados.
+4. Filtrar itens onde ambos `produto` e `posologia` estão vazios.
+5. Fallback: se nenhuma ocorrência de `Produto:` for encontrada, retornar `[]`.
 
-**Produto:**
-- Regex: localizar primeira ocorrência de `Produto:` (case-insensitive, ignorando `**Produto:**` markdown)
-- Capturar texto até primeira quebra de linha dupla, próximo campo conhecido (`Posologia:`, `Marca:`, `Concentração:`, `Indicação:`) ou fim
-- Tentar capturar também `Marca:` próximo (até 5 linhas antes/depois) para compor `{marca} + {produto}` se a marca não estiver já contida no nome
-- Limpar: remover markdown (`**`, `*`, `-`, `•`), prefixos, espaços extras, quebras múltiplas
-- Resultado: linha única limpa
+Refatorar funções helpers já existentes (`findFieldStart`, `findNextFieldIndex`, `extractProduto`, `extractPosologia`) para aceitarem um sub-trecho/offset, evitando duplicação. Adicionar `findAllFieldStarts(text, 'produto')` que devolve lista de índices.
 
-**Posologia:**
-- Regex: localizar `Posologia:` (case-insensitive, com/sem markdown)
-- Capturar até próximo cabeçalho conhecido (`Observações:`, `Justificativa:`, `Contraindicações:`, `Acompanhamento:`, headings markdown `##`, `###`) ou fim do texto
-- Limpar markdown bold/italic mas **manter bullets** (`- `, `• `, `* ` no início de linha → normalizar para `• `)
-- Preservar quebras de linha entre itens
+### Mudança na UI (`PrescriptionView.tsx`)
 
-### UI
+**1. Estado derivado (linha 56-57):**
+```tsx
+const summaryItems = useMemo(() => extractPrescriptionSummary(aiResponse), [aiResponse]);
+const hasSummary = !!aiResponse && summaryItems.length > 0;
+```
 
-Novo subcomponente inline (ou pequeno componente) dentro do `PrescriptionView`:
+**2. Render do bloco (linhas 285-294):**
+Renderizar um `Card` por item. Quando há mais de 1 produto, exibir título `Produto 1`, `Produto 2`, etc. Quando há só 1, manter `Produto` / `Posologia` simples (comportamento atual preservado).
 
 ```tsx
-{aiResponse && (summary.produto || summary.posologia) && (
+{hasSummary && (
   <section className="space-y-3">
-    <h2 className="text-sm font-medium text-muted-foreground">Resumo</h2>
-    <Card className="p-4 md:p-5 space-y-3">
-      <SummaryRow label="Produto" value={summary.produto} multiline={false} />
-      <SummaryRow label="Posologia" value={summary.posologia} multiline={true} />
-    </Card>
+    <h2 className="text-sm font-medium text-muted-foreground">
+      Resumo {summaryItems.length > 1 && `(${summaryItems.length} produtos)`}
+    </h2>
+    <div className="space-y-3">
+      {summaryItems.map((item, idx) => (
+        <Card key={idx} className="p-4 md:p-5 space-y-3">
+          <SummaryRow
+            label={summaryItems.length > 1 ? `Produto ${idx + 1}` : 'Produto'}
+            value={item.produto}
+            multiline={false}
+          />
+          <SummaryRow
+            label="Posologia"
+            value={item.posologia}
+            multiline={true}
+          />
+        </Card>
+      ))}
+    </div>
   </section>
 )}
 ```
 
-`SummaryRow`:
-- Layout `flex flex-col md:flex-row md:items-start gap-2 md:gap-4`
-- Label: `md:w-24 text-sm font-medium text-foreground`
-- Wrapper do campo: `relative flex-1`
-- Campo readonly: `Input` (single) ou `Textarea` (multi) com `pr-10` para o botão
-- Botão copiar: `absolute top-2 right-2`, ghost size sm, ícone `Copy`/`Check`, feedback "Copiado!" por 2s (estado local por linha)
-
-### Estado e atualização
-
-```ts
-const summary = useMemo(
-  () => extractPrescriptionSummary(aiResponse),
-  [aiResponse]
-);
-```
-
-Sempre que `aiResponse` mudar (nova geração ou abertura de item do histórico), o `useMemo` recalcula. Se ambos vierem vazios, o bloco não renderiza.
+**3. `SummaryRow` (linhas 441+):** sem alterações — cada linha continua com seu próprio botão de copiar e feedback "Copiado!" individual.
 
 ### Garantias
-- Não toca em `handleGenerate`, prompts da edge function, nem no `Card` de resultado existente
-- Não altera o histórico nem o reset (`handleNewPrescription` já zera `aiResponse`, então o resumo some junto)
-- Extração é puramente client-side sobre o texto já gerado
+
+- Se o receituário tiver 1 produto → comportamento idêntico ao atual (1 card com Produto + Posologia).
+- Se tiver N produtos → N cards independentes, cada um com seu par e seus botões de copiar.
+- Continua não tocando em prompts da IA, edge function, histórico, reset ou bloco de resultado completo.
+- Continua puramente client-side, recalcula via `useMemo` quando `aiResponse` muda.
+- Posologia de cada produto fica **isolada no bloco do seu produto** — evita "vazar" posologia do produto 2 para o resumo do produto 1.
 
 ### Arquivos
-- **Novo:** `src/lib/prescriptionExtract.ts` — função de extração + testes manuais cobertos via regex robusto
-- **Editado:** `src/components/dashboard/prescription/PrescriptionView.tsx` — import, `useMemo`, novo bloco entre botões e resultado, subcomponente `SummaryRow` interno
+
+- **Editado:** `src/lib/prescriptionExtract.ts` — refator para múltiplos produtos, exporta `PrescriptionItem[]`
+- **Editado:** `src/components/dashboard/prescription/PrescriptionView.tsx` — `summaryItems` array, render via `.map()`, label dinâmico
 
