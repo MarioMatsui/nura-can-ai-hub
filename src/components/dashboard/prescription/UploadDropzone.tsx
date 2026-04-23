@@ -279,14 +279,49 @@ export const UploadDropzone = ({
   const handleRemove = useCallback(async () => {
     if (!value) return;
     try {
-      await supabase.storage.from('prescription-files').remove([value.file_path]);
-      const table = kind === 'catalog' ? 'prescription_catalogs' : 'prescription_records';
-      await supabase.from(table).delete().eq('id', value.id);
+      // Não deletamos do banco — o catálogo pode estar referenciado em saved_catalogs
+      // ou em prescription_results. Apenas removemos da seleção atual.
+      // Storage também é mantido para reaproveitamento.
     } catch (e) {
       console.error('Remove error', e);
     }
     onChange(null);
-  }, [value, kind, onChange]);
+  }, [value, onChange]);
+
+  const handleSave = useCallback(async () => {
+    if (!value || kind !== 'catalog') return;
+    if (isSaved) {
+      toast.info('Catálogo já salvo.');
+      return;
+    }
+    if (savedLimitReached) {
+      toast.error('Limite de 3 catálogos salvos atingido. Remova um para salvar este.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('saved_catalogs').insert({
+        user_id: userId,
+        catalog_id: value.id,
+        display_name: value.file_name,
+      });
+      if (error) {
+        if ((error as any).code === '23505') {
+          toast.info('Catálogo já salvo.');
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success('Catálogo salvo nos favoritos.');
+      }
+      onSaved?.();
+    } catch (e: any) {
+      console.error('Save catalog error', e);
+      toast.error(e?.message || 'Falha ao salvar catálogo.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [value, kind, userId, isSaved, savedLimitReached, onSaved]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
