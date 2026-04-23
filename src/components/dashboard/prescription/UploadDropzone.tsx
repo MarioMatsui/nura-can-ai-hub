@@ -99,40 +99,80 @@ export const UploadDropzone = ({
 
       const uploaded = data as UploadedFile;
 
-      // Para catálogos PDF, dispara pré-renderização em páginas PNG.
-      // Sem isso, a IA não consegue ler o PDF (limite de 7MB do inline_data).
+      // Para catálogos PDF, dispara pré-renderização em páginas PNG (em LOTES).
       const isPdf = (uploaded.file_type || '').toLowerCase().includes('pdf')
         || uploaded.file_name.toLowerCase().endsWith('.pdf');
 
       if (kind === 'catalog' && isPdf) {
-        // Marca como em processamento e devolve já — o usuário pode esperar.
-        onChange({ ...uploaded, isProcessing: true });
+        onChange({ ...uploaded, isProcessing: true, pages_count: 0 });
         toast.success('Catálogo enviado. Processando páginas…');
         setIsProcessing(true);
+
+        let startPage = 0;
+        let processed = 0;
+        let total = 0;
+        let done = false;
+        let lastError: any = null;
+
         try {
-          const { data: procData, error: procError } = await supabase.functions.invoke(
-            'process-catalog-pdf',
-            { body: { catalogId: uploaded.id } },
-          );
-          if (procError) throw procError;
-          const pagesCount = (procData as any)?.pages_count || 0;
-          onChange({ ...uploaded, pages_count: pagesCount, isProcessing: false });
-          toast.success(`Catálogo pronto (${pagesCount} páginas).`);
-        } catch (procErr: any) {
-          console.error('process-catalog-pdf error', procErr);
-          // Tenta extrair a mensagem real retornada pela edge function
-          const detail =
-            procErr?.context?.message
-            || procErr?.context?.error
-            || procErr?.message
-            || (typeof procErr === 'string' ? procErr : '');
-          toast.error(
-            detail
-              ? `Falha ao processar catálogo: ${detail}`
-              : 'Falha ao processar páginas do catálogo. Tente reenviar.',
-          );
-          // Mantém o registro mas marca como não-processado para bloquear a geração.
-          onChange({ ...uploaded, pages_count: 0, isProcessing: false });
+          // Loop de batches — cada chamada processa ~8 páginas (~5-7s CPU).
+          while (!done) {
+            const { data: procData, error: procError } = await supabase.functions.invoke(
+              'process-catalog-pdf',
+              { body: { catalogId: uploaded.id, startPage, batchSize: 8 } },
+            );
+            if (procError) {
+              lastError = procError;
+              break;
+            }
+            const r = procData as any;
+            if (r?.error) {
+              lastError = r;
+              break;
+            }
+            processed = r?.processed ?? processed;
+            total = r?.total ?? total;
+            done = !!r?.done;
+            startPage = r?.next_page ?? (startPage + 8);
+
+            onChange({
+              ...uploaded,
+              pages_count: processed,
+              total_pages: total,
+              isProcessing: !done,
+            });
+
+            if (done) break;
+            // Safety: se não avançou, evita loop infinito.
+            if (r?.next_page != null && r.next_page <= 0) break;
+          }
+
+          if (lastError) {
+            const detail =
+              lastError?.context?.message
+              || lastError?.context?.error
+              || lastError?.message
+              || (typeof lastError === 'string' ? lastError : '');
+            toast.error(
+              detail
+                ? `Falha ao processar catálogo: ${detail}`
+                : 'Falha ao processar páginas do catálogo. Tente reenviar.',
+            );
+            onChange({
+              ...uploaded,
+              pages_count: processed,
+              total_pages: total,
+              isProcessing: false,
+            });
+          } else {
+            onChange({
+              ...uploaded,
+              pages_count: processed,
+              total_pages: total,
+              isProcessing: false,
+            });
+            toast.success(`Catálogo pronto (${processed} páginas).`);
+          }
         } finally {
           setIsProcessing(false);
         }
