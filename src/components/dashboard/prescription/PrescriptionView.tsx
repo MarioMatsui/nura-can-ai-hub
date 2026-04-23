@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
@@ -11,6 +12,7 @@ import { SavedCatalogs, useSavedCatalogs, SAVED_CATALOGS_LIMIT } from './SavedCa
 import { MarkdownMessage } from '@/components/dashboard/MarkdownMessage';
 import { cn } from '@/lib/utils';
 import { playSfx } from '@/lib/sfx';
+import { extractPrescriptionSummary } from '@/lib/prescriptionExtract';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +52,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
   const isCurrentCatalogSaved = !!catalog && savedCatalogs.some((s) => s.catalog_id === catalog.id);
   const savedLimitReached = savedCatalogs.length >= SAVED_CATALOGS_LIMIT;
+
+  const summary = useMemo(() => extractPrescriptionSummary(aiResponse), [aiResponse]);
+  const hasSummary = !!aiResponse && (!!summary.produto || !!summary.posologia);
 
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
@@ -277,6 +282,17 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             )}
           </section>
 
+          {/* Resumo copiável */}
+          {hasSummary && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium text-muted-foreground">Resumo</h2>
+              <Card className="p-4 md:p-5 space-y-3">
+                <SummaryRow label="Produto" value={summary.produto} multiline={false} />
+                <SummaryRow label="Posologia" value={summary.posologia} multiline={true} />
+              </Card>
+            </section>
+          )}
+
           {/* Response area */}
           <section>
             <Card className="relative min-h-[400px] p-6 md:p-8">
@@ -418,6 +434,77 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+};
+
+interface SummaryRowProps {
+  label: string;
+  value: string;
+  multiline: boolean;
+}
+
+const SummaryRow = ({ label, value, multiline }: SummaryRowProps) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar.');
+    }
+  };
+
+  const lineCount = multiline ? Math.min(Math.max(value.split('\n').length, 3), 10) : 1;
+
+  return (
+    <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-4">
+      <label className="md:w-24 md:pt-2 text-sm font-medium text-foreground shrink-0">
+        {label}
+      </label>
+      <div className="relative flex-1 min-w-0">
+        {multiline ? (
+          <Textarea
+            readOnly
+            value={value}
+            placeholder={`Sem ${label.toLowerCase()} identificado.`}
+            rows={lineCount}
+            className="pr-24 resize-none bg-muted/40 cursor-text"
+          />
+        ) : (
+          <Input
+            readOnly
+            value={value}
+            placeholder={`Sem ${label.toLowerCase()} identificado.`}
+            className="pr-24 bg-muted/40 cursor-text"
+          />
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleCopy}
+          disabled={!value}
+          className={cn(
+            'absolute right-1 gap-1.5 h-8 px-2',
+            multiline ? 'top-1' : 'top-1/2 -translate-y-1/2',
+          )}
+          title={`Copiar ${label.toLowerCase()}`}
+          aria-label={`Copiar ${label.toLowerCase()}`}
+        >
+          {copied ? (
+            <>
+              <Check className="w-4 h-4 text-primary" />
+              <span className="text-xs">Copiado!</span>
+            </>
+          ) : (
+            <Copy className="w-4 h-4" />
+          )}
+        </Button>
+      </div>
     </div>
   );
 };
