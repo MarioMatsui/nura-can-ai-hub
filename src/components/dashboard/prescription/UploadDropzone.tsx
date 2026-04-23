@@ -422,10 +422,37 @@ export const UploadDropzone = ({
             && value.pages_count > 0 && (
               <div className="text-xs text-muted-foreground">{value.pages_count} páginas prontas</div>
             )}
-          <Button variant="ghost" size="sm" onClick={handleRemove} className="gap-1">
-            <X className="w-4 h-4" />
-            Remover
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {kind === 'catalog' && (
+              <Button
+                variant={isSaved ? 'secondary' : 'outline'}
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving || isSaved || (savedLimitReached && !isSaved)}
+                className="gap-1"
+                title={
+                  isSaved
+                    ? 'Catálogo já salvo'
+                    : savedLimitReached
+                      ? 'Limite de 3 catálogos salvos atingido'
+                      : 'Salvar catálogo nos favoritos'
+                }
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isSaved ? (
+                  <BookmarkCheck className="w-4 h-4" />
+                ) : (
+                  <Bookmark className="w-4 h-4" />
+                )}
+                {isSaved ? 'Salvo' : 'Salvar'}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleRemove} className="gap-1">
+              <X className="w-4 h-4" />
+              Remover
+            </Button>
+          </div>
         </div>
       ) : (
         <button
