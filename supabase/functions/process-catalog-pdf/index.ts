@@ -11,7 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
-import { PDFiumLibrary } from "npm:@hyzyla/pdfium@2.1.7";
+import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7?target=deno";
 import { encode as encodePng } from "https://deno.land/x/pngs@0.1.1/mod.ts";
 
 const corsHeaders = {
