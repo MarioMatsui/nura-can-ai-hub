@@ -205,7 +205,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             </Button>
             {!canGenerate && !isGenerating && (
               <p className="text-xs text-muted-foreground mt-2">
-                {catalog && !catalogReady
+                {catalog && !catalogReady && !catalog.skipPageRender
                   ? (typeof catalog.total_pages === 'number' && catalog.total_pages > 0
                       ? `Processando páginas do catálogo (${catalog.pages_count ?? 0}/${catalog.total_pages})…`
                       : 'Processando páginas do catálogo…')

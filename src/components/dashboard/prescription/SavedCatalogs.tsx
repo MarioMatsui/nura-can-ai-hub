@@ -114,14 +114,16 @@ export const SavedCatalogs = ({ userId, items, loading, onRefresh, onUse }: Save
     }
     const meta = item.catalog.extracted_metadata || {};
     const pages = Array.isArray(meta.pages) ? meta.pages : [];
+    const isFastPath = meta?.skip_page_render === true;
     const file: UploadedFile = {
       id: item.catalog.id,
       file_name: item.catalog.file_name,
       file_path: item.catalog.file_path,
       file_type: item.catalog.file_type,
-      pages_count: Number(meta.pages_count ?? pages.length) || 0,
-      total_pages: Number(meta.total_pages ?? 0) || 0,
+      pages_count: isFastPath ? 1 : (Number(meta.pages_count ?? pages.length) || 0),
+      total_pages: isFastPath ? 1 : (Number(meta.total_pages ?? 0) || 0),
       isProcessing: false,
+      skipPageRender: isFastPath,
     };
     onUse(file);
     toast.success(`Catálogo "${item.display_name}" carregado.`);
