@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { Upload, FileText, X, Loader2 } from 'lucide-react';
+import { Upload, FileText, X, Loader2, PlayCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -18,6 +18,11 @@ const ACCEPTED_TYPES = [
 
 const ACCEPTED_EXT = '.pdf,.jpg,.jpeg,.png,.webp,.txt,.doc,.docx';
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+
+const MAX_RETRIES_PER_BATCH = 3;
+const RETRY_DELAY_MS = 1500;
+
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 export interface UploadedFile {
   id: string;
@@ -64,6 +69,150 @@ export const UploadDropzone = ({
     return null;
   };
 
+  /** Lê o progresso atual do catálogo direto do banco. */
+  const fetchCatalogProgress = useCallback(
+    async (catalogId: string): Promise<{ pages_count: number; total_pages: number }> => {
+      const { data, error } = await supabase
+        .from('prescription_catalogs')
+        .select('extracted_metadata')
+        .eq('id', catalogId)
+        .single();
+      if (error || !data) return { pages_count: 0, total_pages: 0 };
+      const meta = (data.extracted_metadata as any) || {};
+      return {
+        pages_count: Number(meta.pages_count ?? (Array.isArray(meta.pages) ? meta.pages.length : 0)) || 0,
+        total_pages: Number(meta.total_pages ?? 0) || 0,
+      };
+    },
+    [],
+  );
+
+  /** Loop reentrante de processamento do catálogo PDF, com retry por batch. */
+  const runCatalogProcessing = useCallback(
+    async (uploaded: UploadedFile, initialStartPage: number) => {
+      setIsProcessing(true);
+      onChange({ ...uploaded, isProcessing: true, pages_count: initialStartPage });
+
+      let startPage = initialStartPage;
+      let processed = initialStartPage;
+      let total = uploaded.total_pages ?? 0;
+      let done = false;
+      let lastError: any = null;
+
+      try {
+        while (!done) {
+          let attempt = 0;
+          let batchOk = false;
+
+          while (attempt < MAX_RETRIES_PER_BATCH && !batchOk) {
+            attempt++;
+            const { data: procData, error: procError } = await supabase.functions.invoke(
+              'process-catalog-pdf',
+              { body: { catalogId: uploaded.id, startPage, batchSize: 1 } },
+            );
+
+            const r = procData as any;
+            const hasError = !!procError || !!r?.error;
+
+            if (!hasError && r) {
+              processed = r?.processed ?? processed;
+              total = r?.total ?? total;
+              done = !!r?.done;
+              startPage = r?.next_page ?? (startPage + 1);
+              batchOk = true;
+              lastError = null;
+
+              onChange({
+                ...uploaded,
+                pages_count: processed,
+                total_pages: total,
+                isProcessing: !done,
+              });
+
+              if (done) break;
+              if (r?.next_page != null && r.next_page <= 0) {
+                done = true;
+                break;
+              }
+            } else {
+              lastError = procError || r;
+              // Antes de retentar, sincroniza progresso com o banco — o backend
+              // pode ter salvo checkpoint mesmo com a resposta HTTP falhando.
+              await sleep(RETRY_DELAY_MS);
+              const fresh = await fetchCatalogProgress(uploaded.id);
+              if (fresh.total_pages > 0) total = fresh.total_pages;
+              if (fresh.pages_count > processed) {
+                processed = fresh.pages_count;
+                startPage = fresh.pages_count;
+                onChange({
+                  ...uploaded,
+                  pages_count: processed,
+                  total_pages: total,
+                  isProcessing: true,
+                });
+                // Se o banco já mostra concluído, encerra.
+                if (total > 0 && processed >= total) {
+                  done = true;
+                  batchOk = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!batchOk) {
+            // Esgotou retries deste batch — pausa o loop, preserva progresso.
+            break;
+          }
+        }
+
+        if (!done && lastError) {
+          const detail =
+            lastError?.context?.message
+            || lastError?.context?.error
+            || lastError?.message
+            || (typeof lastError === 'string' ? lastError : '');
+          const progressMsg = total > 0
+            ? `Processamento pausado em ${processed}/${total} páginas.`
+            : 'Falha ao processar páginas do catálogo.';
+          toast.error(
+            detail
+              ? `${progressMsg} Clique em "Continuar processamento" para retomar. (${detail})`
+              : `${progressMsg} Clique em "Continuar processamento" para retomar.`,
+          );
+          onChange({
+            ...uploaded,
+            pages_count: processed,
+            total_pages: total,
+            isProcessing: false,
+          });
+        } else {
+          onChange({
+            ...uploaded,
+            pages_count: processed,
+            total_pages: total,
+            isProcessing: false,
+          });
+          if (done) toast.success(`Catálogo pronto (${processed} páginas).`);
+        }
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [onChange, fetchCatalogProgress],
+  );
+
+  const handleResume = useCallback(async () => {
+    if (!value) return;
+    const fresh = await fetchCatalogProgress(value.id);
+    const startPage = fresh.pages_count || value.pages_count || 0;
+    toast.info(`Retomando do ponto ${startPage}/${fresh.total_pages || value.total_pages || '?'}…`);
+    await runCatalogProcessing(
+      { ...value, total_pages: fresh.total_pages || value.total_pages },
+      startPage,
+    );
+  }, [value, fetchCatalogProgress, runCatalogProcessing]);
+
   const handleUpload = useCallback(async (file: File) => {
     const err = validate(file);
     if (err) {
@@ -99,87 +248,12 @@ export const UploadDropzone = ({
 
       const uploaded = data as UploadedFile;
 
-      // Para catálogos PDF, dispara pré-renderização em páginas PNG (em LOTES).
       const isPdf = (uploaded.file_type || '').toLowerCase().includes('pdf')
         || uploaded.file_name.toLowerCase().endsWith('.pdf');
 
       if (kind === 'catalog' && isPdf) {
-        onChange({ ...uploaded, isProcessing: true, pages_count: 0 });
         toast.success('Catálogo enviado. Processando páginas…');
-        setIsProcessing(true);
-
-        let startPage = 0;
-        let processed = 0;
-        let total = 0;
-        let done = false;
-        let lastError: any = null;
-
-        try {
-          // Loop de batches — cada chamada processa 1 página (runtime real ~6s, bootstrap PDFium ~4s).
-          while (!done) {
-            const { data: procData, error: procError } = await supabase.functions.invoke(
-              'process-catalog-pdf',
-              { body: { catalogId: uploaded.id, startPage, batchSize: 1 } },
-            );
-            if (procError) {
-              lastError = procError;
-              break;
-            }
-            const r = procData as any;
-            if (r?.error) {
-              lastError = r;
-              break;
-            }
-            processed = r?.processed ?? processed;
-            total = r?.total ?? total;
-            done = !!r?.done;
-            startPage = r?.next_page ?? (startPage + 1);
-
-            onChange({
-              ...uploaded,
-              pages_count: processed,
-              total_pages: total,
-              isProcessing: !done,
-            });
-
-            if (done) break;
-            // Safety: se não avançou, evita loop infinito.
-            if (r?.next_page != null && r.next_page <= 0) break;
-          }
-
-          if (lastError) {
-            const detail =
-              lastError?.context?.message
-              || lastError?.context?.error
-              || lastError?.message
-              || (typeof lastError === 'string' ? lastError : '');
-            const progressMsg = total > 0
-              ? `Processamento interrompido em ${processed}/${total} páginas.`
-              : 'Falha ao processar páginas do catálogo.';
-            toast.error(
-              detail
-                ? `${progressMsg} ${detail}`
-                : `${progressMsg} Tente reenviar.`,
-            );
-            // Mantém progresso visível mesmo após falha intermediária.
-            onChange({
-              ...uploaded,
-              pages_count: processed,
-              total_pages: total,
-              isProcessing: false,
-            });
-          } else {
-            onChange({
-              ...uploaded,
-              pages_count: processed,
-              total_pages: total,
-              isProcessing: false,
-            });
-            toast.success(`Catálogo pronto (${processed} páginas).`);
-          }
-        } finally {
-          setIsProcessing(false);
-        }
+        await runCatalogProcessing(uploaded, 0);
       } else {
         onChange(uploaded);
         toast.success(kind === 'catalog' ? 'Catálogo enviado.' : 'Prontuário enviado.');
@@ -190,7 +264,7 @@ export const UploadDropzone = ({
     } finally {
       setIsUploading(false);
     }
-  }, [userId, kind, onChange]);
+  }, [userId, kind, onChange, runCatalogProcessing]);
 
   const handleRemove = useCallback(async () => {
     if (!value) return;
@@ -210,6 +284,16 @@ export const UploadDropzone = ({
     const file = e.dataTransfer.files?.[0];
     if (file) handleUpload(file);
   };
+
+  // Catálogo PDF parcialmente processado (sem estar em loop ativo)?
+  const isCatalogPaused =
+    kind === 'catalog'
+    && !!value
+    && !isProcessing
+    && !value.isProcessing
+    && typeof value.total_pages === 'number'
+    && value.total_pages > 0
+    && (value.pages_count ?? 0) < value.total_pages;
 
   return (
     <div
@@ -264,9 +348,29 @@ export const UploadDropzone = ({
                 : 'Processando páginas…'}
             </div>
           )}
-          {kind === 'catalog' && !value.isProcessing && typeof value.pages_count === 'number' && value.pages_count > 0 && (
-            <div className="text-xs text-muted-foreground">{value.pages_count} páginas prontas</div>
+          {isCatalogPaused && (
+            <div className="flex flex-col items-center gap-2 w-full">
+              <div className="text-xs text-muted-foreground">
+                {value.pages_count ?? 0}/{value.total_pages} páginas processadas
+              </div>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleResume}
+                className="gap-1"
+              >
+                <PlayCircle className="w-4 h-4" />
+                Continuar processamento
+              </Button>
+            </div>
           )}
+          {kind === 'catalog'
+            && !value.isProcessing
+            && !isCatalogPaused
+            && typeof value.pages_count === 'number'
+            && value.pages_count > 0 && (
+              <div className="text-xs text-muted-foreground">{value.pages_count} páginas prontas</div>
+            )}
           <Button variant="ghost" size="sm" onClick={handleRemove} className="gap-1">
             <X className="w-4 h-4" />
             Remover
