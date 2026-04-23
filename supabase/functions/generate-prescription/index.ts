@@ -853,7 +853,8 @@ serve(async (req) => {
     // prescription_catalogs.extracted_metadata.pages = ['userId/catalogId/page-001.png', ...]
     let catalogFile: LoadedFile | null = null;
     const cMeta = catalogRow.extracted_metadata || {};
-    if (Array.isArray(cMeta.pages) && cMeta.pages.length > 0) {
+    const skipPageRender = cMeta.skip_page_render === true;
+    if (!skipPageRender && Array.isArray(cMeta.pages) && cMeta.pages.length > 0) {
       console.log(`CATALOG tem ${cMeta.pages.length} páginas pré-renderizadas — usando caminho de páginas.`);
       const pages = await loadCatalogPages(supabase, cMeta.pages);
       if (pages.length > 0) {
@@ -869,8 +870,12 @@ serve(async (req) => {
         console.log(`CATALOG pronto: ${pages.length} páginas PNG via signed URL`);
       }
     }
-    // Fallback: catálogo sem páginas pré-renderizadas (imagem direta, ou processamento ainda não rodou)
+    // Fallback / pipeline leve: catálogo sem páginas pré-renderizadas
+    // (PDF pequeno ≤ 5MB com skip_page_render, imagem direta, ou processamento ainda não rodou).
     if (!catalogFile) {
+      if (skipPageRender) {
+        console.log('CATALOG marcado com skip_page_render — carregando PDF original direto (≤ 5MB).');
+      }
       catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
       if (catalogFile) {
         const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
