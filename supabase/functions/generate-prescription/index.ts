@@ -793,17 +793,24 @@ serve(async (req) => {
     // - Antes: 2 downloads + 2 base64 + 2 extrações em paralelo + 2 anexos multimodais
     //   = pico de memória > 256MB com PDFs médios. Agora: pico = 1 PDF por vez na fase
     //   de extração, e ambos coexistem só na montagem final do payload do Gemini Pro.
-    console.log('Baixando RECORD...');
-    const recordFile = await downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path);
-    if (recordFile) console.log(`RECORD baixado: ${(recordFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${recordFile.mimeType})`);
+    console.log('Carregando RECORD...');
+    const recordFile = await loadFile(supabase, 'prescription-files', recordRow.file_path);
+    if (recordFile) {
+      const via = recordFile.base64 ? 'base64 inline' : 'signed URL';
+      console.log(`RECORD pronto: ${(recordFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${recordFile.mimeType}) via ${via}`);
+    }
     console.log('Extraindo RECORD (se cache inválido)...');
     const recordFull = await ensureExtraction(supabase, 'prescription_records', recordRow, recordFile);
 
-    console.log('Baixando CATALOG...');
-    const catalogFile = await downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path);
-    if (catalogFile) console.log(`CATALOG baixado: ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType})`);
+    console.log('Carregando CATALOG...');
+    const catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
+    if (catalogFile) {
+      const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
+      console.log(`CATALOG pronto: ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType}) via ${via}`);
+    }
     console.log('Extraindo CATALOG (se cache inválido)...');
     const catalogFull = await ensureExtraction(supabase, 'prescription_catalogs', catalogRow, catalogFile);
+
 
 
     // Constrói query RAG a partir do prontuário + observações.
