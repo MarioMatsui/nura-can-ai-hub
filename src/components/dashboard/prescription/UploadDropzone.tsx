@@ -184,12 +184,27 @@ export const UploadDropzone = ({
           <Loader2 className="w-6 h-6 animate-spin" />
           <span className="text-sm">Enviando…</span>
         </div>
+      ) : isProcessing ? (
+        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <span className="text-sm">Processando páginas do catálogo…</span>
+          <span className="text-[11px] opacity-70">Isso pode levar alguns segundos.</span>
+        </div>
       ) : value ? (
         <div className="flex flex-col items-center gap-3 text-center w-full">
           <FileText className="w-8 h-8 text-primary" />
           <div className="text-sm font-medium text-foreground break-all px-2 line-clamp-2">
             {value.file_name}
           </div>
+          {kind === 'catalog' && value.isProcessing && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Processando páginas…
+            </div>
+          )}
+          {kind === 'catalog' && !value.isProcessing && typeof value.pages_count === 'number' && value.pages_count > 0 && (
+            <div className="text-xs text-muted-foreground">{value.pages_count} páginas prontas</div>
+          )}
           <Button variant="ghost" size="sm" onClick={handleRemove} className="gap-1">
             <X className="w-4 h-4" />
             Remover
