@@ -417,6 +417,16 @@ async function ensureExtraction(
   // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
   const meta = row.extracted_metadata || {};
   const isCatalog = table === 'prescription_catalogs';
+
+  // CRÍTICO: catálogos em modo rápido (≤5MB, skip_page_render) NÃO devem passar
+  // pela extração estruturada. O Pro multimodal lê o PDF inteiro inline. Rodar
+  // a extração aqui sobrescreveria `extracted_metadata` e apagaria a flag
+  // `skip_page_render`, quebrando o reuso via "Catálogos salvos".
+  if (isCatalog && meta.skip_page_render === true) {
+    console.log(`[ensureExtraction] Pulando — catálogo em modo rápido (skip_page_render=true).`);
+    return row;
+  }
+
   const cacheValid = isCatalog
     ? Array.isArray(meta.products) && meta.products.length > 0 && (row.extracted_content?.length || 0) > 200
     : (!!meta.main_complaint || (Array.isArray(meta.symptoms) && meta.symptoms.length > 0)) && (row.extracted_content?.length || 0) > 200;
@@ -475,9 +485,12 @@ async function ensureExtraction(
   // Libera o base64 temporário se foi baixado só pra extração
   base64ForExtraction = null;
 
+  // Defensivo: merge em vez de overwrite preserva flags estruturais
+  // (skip_page_render, size_bytes, pages, pages_count, total_pages, etc.)
+  // que possam existir no extracted_metadata original.
   const updates: any = {
     extracted_content: raw.slice(0, 80000),
-    extracted_metadata: metadata,
+    extracted_metadata: { ...meta, ...metadata },
   };
 
   if (!isCatalog) {
