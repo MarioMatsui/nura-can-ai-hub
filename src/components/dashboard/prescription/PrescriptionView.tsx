@@ -237,24 +237,37 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
           {/* Action */}
           <section>
-            <Button
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              size="lg"
-              className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analisando documentos e cruzando com base científica…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Gerar Receituário
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col md:flex-row gap-3 md:items-center">
+              <Button
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                size="lg"
+                className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Analisando documentos e cruzando com base científica…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Gerar Receituário
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleNewPrescription}
+                disabled={isGenerating}
+                size="lg"
+                variant="outline"
+                className="w-full md:w-auto"
+                title="Limpar campos e iniciar um novo receituário"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Novo Receituário
+              </Button>
+            </div>
             {!canGenerate && !isGenerating && (!catalog || !record) && (
               <p className="text-xs text-muted-foreground mt-2">
                 Envie o catálogo e o prontuário para liberar a geração.
