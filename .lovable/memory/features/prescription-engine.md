@@ -1,6 +1,6 @@
 ---
 name: Prescription engine
-description: Receituário+ — catálogo PDF é pré-renderizado em páginas JPEG no upload (process-catalog-pdf, EM LOTES de 3); geração anexa cada página como image_url via signed URL
+description: Receituário+ — catálogo PDF pré-renderizado em JPEG (process-catalog-pdf, 1 página por invocação com checkpoint imediato); botão Gerar só libera quando pages_count===total_pages
 type: feature
 ---
 
@@ -11,17 +11,23 @@ type: feature
 - System: `MEDICAL_SYSTEM_PROMPT` + `PRESCRIPTION_TASK_LAYER` + `ATTACHMENT_PRIORITY_NOTE`
 - One-shot (sem histórico)
 
-## Catálogo PDF: pré-renderização em LOTES (CRÍTICO)
+## Catálogo PDF: pré-renderização página a página com checkpoint (CRÍTICO)
 
 O Lovable AI Gateway repassa para o Gemini, que **só aceita `image_url` HTTP quando o conteúdo é imagem** (PNG/JPEG/WebP/GIF). Para PDF, exige base64 inline — que estoura RAM (256MB) e o limite de ~7MB do `inline_data`. Solução: renderizar cada página como **JPEG** e enviar como signed URL.
 
-### Por que LOTES de 3?
-Edge functions do Supabase têm CPU time limit de ~10s. Bootstrap PDFium em base64 leva ~3-4s. Cada página leva ~1-2s (render + encode JPEG + upload). Batch=3 → ~7-9s, com folga. PNG era inviável: ~1.5s só de encode + 1.4MB upload = batch=1 efetivo, estourava CPU.
+### Por que 1 PÁGINA por invocação?
+Edge functions Supabase têm CPU time limit observado de **~6s** por invocação (não 10s como esperado). Bootstrap PDFium em base64 leva ~3-4s. Cada página leva ~1-2s (render + encode JPEG + upload). Batch=3 estava morrendo após 2 páginas com `CPU Time exceeded`. Batch=1 → ~5-6s, com folga.
 
-- Body: `{ catalogId, startPage?: number, batchSize?: number }` (default `startPage=0`, `batchSize=3`).
-- A cada chamada: inicializa PDFium (~3-4s), renderiza N páginas, encoda JPEG quality 80, faz upload, persiste progresso em `extracted_metadata`.
+- Body: `{ catalogId, startPage?: number, batchSize?: number }` (default `startPage=0`, `batchSize=1`).
+- A cada chamada: inicializa PDFium (~3-4s), renderiza 1 página, encoda JPEG quality 80, faz upload, **persiste checkpoint imediatamente em `extracted_metadata`**, responde.
 - Resposta: `{ ok, done, processed, total, next_page }`.
 - Frontend chama em loop até `done: true`.
+
+### Checkpoint imediato (anti-perda)
+Após cada upload bem-sucedido, `extracted_metadata` é atualizado **antes** da próxima página. Se a função morrer no meio (CPU/timeout), nada é perdido — a próxima invocação retoma exatamente de onde parou.
+
+### Retomada defensiva
+A função calcula `effectiveStartPage = max(startPage_recebido, existingPages.length)`. Mesmo se o frontend mandar `startPage` desatualizado, nunca recomeça do zero.
 
 ### Render
 - `@hyzyla/pdfium@2.1.7/browser/base64` (WASM embutido — evita `createRequire` e fetch externo). `disableBase64Warning: true`.
@@ -50,8 +56,8 @@ Se `processing_complete && pages.length > 0` na entrada, retorna `done: true` im
 - Fallback: se não-PDF ou ainda não processado, cai no caminho legado de `loadFile`.
 
 ### Frontend
-- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 3`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…".
-- `PrescriptionView`: botão "Gerar Receituário" só habilita quando `pages_count > 0` (e não-isProcessing). Texto auxiliar mostra progresso real "Processando páginas do catálogo (X/Y)…".
+- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 1`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…". Em caso de erro intermediário, mantém progresso visível com mensagem "Processamento interrompido em X/Y páginas".
+- `PrescriptionView`: botão "Gerar Receituário" só habilita quando catálogo PDF está **100% processado** (`!isProcessing && pages_count === total_pages && total_pages > 0`). Não-PDF não exige processamento.
 - Tipo `UploadedFile` inclui `total_pages?: number`.
 
 ## Prontuário (sem mudança)

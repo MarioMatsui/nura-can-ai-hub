@@ -28,7 +28,7 @@ const PAGES_BUCKET = 'prescription-files-pages';
 const RENDER_SCALE = 0.75;   // ~54 DPI — JPEGs ~150-300KB, suficiente para Gemini ler texto
 const JPEG_QUALITY = 80;     // bom equilíbrio nitidez/tamanho
 const MAX_PAGES = 200;       // hard cap defensivo
-const DEFAULT_BATCH = 3;     // 3 páginas por invocação cabem com folga em ~10s de CPU
+const DEFAULT_BATCH = 1;     // 1 página por invocação — runtime real ~6s, bootstrap PDFium ~4s
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -136,13 +136,16 @@ serve(async (req) => {
 
     const pageObjs = Array.from(document.pages());
     const totalPages = Math.min(pageObjs.length, MAX_PAGES);
-    const endPage = Math.min(startPage + batchSize, totalPages);
 
-    console.log(`PDF tem ${pageObjs.length} páginas. Processando ${startPage + 1}–${endPage} de ${totalPages}.`);
+    // Retomada defensiva: nunca recomeçar do zero se já houver progresso salvo.
+    const effectiveStartPage = Math.max(startPage, existingPages.length);
+    const endPage = Math.min(effectiveStartPage + batchSize, totalPages);
 
-    const newlyUploaded: string[] = [];
+    console.log(`PDF tem ${pageObjs.length} páginas. Processando ${effectiveStartPage + 1}–${endPage} de ${totalPages} (já processadas: ${existingPages.length}).`);
 
-    for (let i = startPage; i < endPage; i++) {
+    let accumulatedPages: string[] = [...existingPages];
+
+    for (let i = effectiveStartPage; i < endPage; i++) {
       const page = pageObjs[i];
       const pageNumber = i + 1;
       try {
@@ -169,8 +172,31 @@ serve(async (req) => {
           continue;
         }
 
-        newlyUploaded.push(path);
-        console.log(`Página ${pageNumber}/${totalPages}: ${rendered.width}x${rendered.height}, JPEG ${(jpeg.length / 1024).toFixed(0)}KB`);
+        // CHECKPOINT: salva progresso IMEDIATAMENTE após cada página.
+        // Garante que se a função morrer no meio, nada é perdido.
+        if (!accumulatedPages.includes(path)) {
+          accumulatedPages.push(path);
+        }
+        const isLast = (i + 1) >= totalPages;
+        const checkpointMeta = {
+          ...existingMeta,
+          pages: accumulatedPages,
+          pages_count: accumulatedPages.length,
+          total_pages: totalPages,
+          processing_complete: isLast,
+          pages_render_scale: RENDER_SCALE,
+          pages_format: 'image/jpeg',
+          ...(isLast ? { pages_processed_at: new Date().toISOString() } : {}),
+        };
+        const { error: cpErr } = await supabase
+          .from('prescription_catalogs')
+          .update({ extracted_metadata: checkpointMeta })
+          .eq('id', catalogId);
+        if (cpErr) {
+          console.error(`Checkpoint falhou na página ${pageNumber}:`, cpErr);
+        }
+
+        console.log(`Página ${pageNumber}/${totalPages}: ${rendered.width}x${rendered.height}, JPEG ${(jpeg.length / 1024).toFixed(0)}KB ✓ checkpoint salvo`);
       } catch (e) {
         console.error(`Erro renderizando página ${pageNumber}:`, e);
       }
@@ -179,40 +205,15 @@ serve(async (req) => {
     document.destroy();
     library.destroy();
 
-    // Mescla com o que já existia (sem duplicar)
-    const allPages = Array.from(new Set([...existingPages, ...newlyUploaded]));
     const nextPage = endPage;
     const done = nextPage >= totalPages;
 
-    const newMeta = {
-      ...existingMeta,
-      pages: allPages,
-      pages_count: allPages.length,
-      total_pages: totalPages,
-      processing_complete: done,
-      pages_render_scale: RENDER_SCALE,
-      pages_format: 'image/jpeg',
-      ...(done ? { pages_processed_at: new Date().toISOString() } : {}),
-    };
-
-    const { error: updErr } = await supabase
-      .from('prescription_catalogs')
-      .update({ extracted_metadata: newMeta })
-      .eq('id', catalogId);
-
-    if (updErr) {
-      console.error('Update metadata error', updErr);
-      return new Response(JSON.stringify({ error: 'Falha ao salvar progresso' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log(`[batch ok] processed=${allPages.length}/${totalPages} done=${done}`);
+    console.log(`[batch ok] processed=${accumulatedPages.length}/${totalPages} done=${done}`);
 
     return new Response(JSON.stringify({
       ok: true,
       done,
-      processed: allPages.length,
+      processed: accumulatedPages.length,
       total: totalPages,
       next_page: nextPage,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

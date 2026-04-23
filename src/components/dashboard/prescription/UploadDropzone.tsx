@@ -115,11 +115,11 @@ export const UploadDropzone = ({
         let lastError: any = null;
 
         try {
-          // Loop de batches — cada chamada processa ~3 páginas (JPEG, ~7-9s CPU).
+          // Loop de batches — cada chamada processa 1 página (runtime real ~6s, bootstrap PDFium ~4s).
           while (!done) {
             const { data: procData, error: procError } = await supabase.functions.invoke(
               'process-catalog-pdf',
-              { body: { catalogId: uploaded.id, startPage, batchSize: 3 } },
+              { body: { catalogId: uploaded.id, startPage, batchSize: 1 } },
             );
             if (procError) {
               lastError = procError;
@@ -133,7 +133,7 @@ export const UploadDropzone = ({
             processed = r?.processed ?? processed;
             total = r?.total ?? total;
             done = !!r?.done;
-            startPage = r?.next_page ?? (startPage + 3);
+            startPage = r?.next_page ?? (startPage + 1);
 
             onChange({
               ...uploaded,
@@ -153,11 +153,15 @@ export const UploadDropzone = ({
               || lastError?.context?.error
               || lastError?.message
               || (typeof lastError === 'string' ? lastError : '');
+            const progressMsg = total > 0
+              ? `Processamento interrompido em ${processed}/${total} páginas.`
+              : 'Falha ao processar páginas do catálogo.';
             toast.error(
               detail
-                ? `Falha ao processar catálogo: ${detail}`
-                : 'Falha ao processar páginas do catálogo. Tente reenviar.',
+                ? `${progressMsg} ${detail}`
+                : `${progressMsg} Tente reenviar.`,
             );
+            // Mantém progresso visível mesmo após falha intermediária.
             onChange({
               ...uploaded,
               pages_count: processed,
