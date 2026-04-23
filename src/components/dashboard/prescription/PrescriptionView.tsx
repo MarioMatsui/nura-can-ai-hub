@@ -43,10 +43,19 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
+  const isCatalogPdf = !!catalog && (
+    (catalog.file_type || '').toLowerCase().includes('pdf')
+    || catalog.file_name.toLowerCase().endsWith('.pdf')
+  );
   const catalogReady = !!catalog && !catalog.isProcessing && (
-    // PDFs precisam ter pages_count > 0; outros formatos não exigem processamento.
-    !((catalog.file_type || '').toLowerCase().includes('pdf') || catalog.file_name.toLowerCase().endsWith('.pdf'))
-    || (typeof catalog.pages_count === 'number' && catalog.pages_count > 0)
+    // PDFs precisam estar 100% processados (pages_count === total_pages); outros formatos não exigem processamento.
+    !isCatalogPdf
+    || (
+      typeof catalog.pages_count === 'number'
+      && typeof catalog.total_pages === 'number'
+      && catalog.total_pages > 0
+      && catalog.pages_count === catalog.total_pages
+    )
   );
   const canGenerate = catalogReady && !!record && !isGenerating;
 
