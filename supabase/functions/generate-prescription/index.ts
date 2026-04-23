@@ -259,6 +259,7 @@ async function ensureExtraction(
   supabase: any,
   table: 'prescription_catalogs' | 'prescription_records',
   row: any,
+  preloadedFile: { base64: string; mimeType: string } | null,
 ): Promise<any> {
   // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
   // Catálogo precisa ter pelo menos 1 produto extraído. Prontuário precisa ter queixa OU sintomas.
@@ -272,7 +273,8 @@ async function ensureExtraction(
     return row;
   }
 
-  const file = await downloadFileAsBase64(supabase, 'prescription-files', row.file_path);
+  // CORREÇÃO MEMÓRIA: reutiliza arquivo já baixado em vez de baixar de novo.
+  const file = preloadedFile;
   if (!file) return row;
 
   let raw = '';
