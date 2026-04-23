@@ -1,6 +1,6 @@
 ---
 name: Prescription engine
-description: Receituário+ — catálogo PDF é pré-renderizado em páginas JPEG no upload (process-catalog-pdf, EM LOTES de 3); geração anexa cada página como image_url via signed URL
+description: Receituário+ — catálogo PDF pré-renderizado em JPEG (process-catalog-pdf, 1 página por invocação com checkpoint imediato); botão Gerar só libera quando pages_count===total_pages
 type: feature
 ---
 
