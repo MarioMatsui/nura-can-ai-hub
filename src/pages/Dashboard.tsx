@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ChatSidebar } from '@/components/dashboard/ChatSidebar';
 import { ChatArea } from '@/components/dashboard/ChatArea';
 import { SearchModal } from '@/components/dashboard/SearchModal';
+import { PrescriptionView } from '@/components/dashboard/prescription/PrescriptionView';
 import { useToast } from '@/hooks/use-toast';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -45,6 +46,7 @@ const Dashboard = () => {
   const [subscriptions, setSubscriptions] = useState<UserSubscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'chat' | 'prescription'>('chat');
   const isMobile = useIsMobile();
   const [appTheme, setAppTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme:/app');
@@ -238,11 +240,13 @@ const Dashboard = () => {
   };
 
   const handleSelectConversation = async (conversation: Conversation) => {
+    setActiveView('chat');
     setCurrentConversation(conversation);
     await fetchMessages(conversation.id);
   };
 
   const handleNewConversation = () => {
+    setActiveView('chat');
     setCurrentConversation(null);
     setMessages([]);
   };
@@ -489,17 +493,23 @@ const Dashboard = () => {
           user={user}
           subscriptions={subscriptions}
           onOpenSearch={() => setSearchModalOpen(true)}
+          activeView={activeView}
+          onOpenPrescription={() => setActiveView('prescription')}
         />
-        
-        <ChatArea
-          user={user}
-          profile={profile}
-          messages={messages}
-          subscriptions={subscriptions}
-          currentConversation={currentConversation}
-          onSendMessage={handleSendMessage}
-          onOpenSidebar={() => {}}
-        />
+
+        {activeView === 'prescription' && user ? (
+          <PrescriptionView userId={user.id} />
+        ) : (
+          <ChatArea
+            user={user}
+            profile={profile}
+            messages={messages}
+            subscriptions={subscriptions}
+            currentConversation={currentConversation}
+            onSendMessage={handleSendMessage}
+            onOpenSidebar={() => {}}
+          />
+        )}
 
         <SearchModal
           open={searchModalOpen}

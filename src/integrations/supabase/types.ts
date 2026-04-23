@@ -679,6 +679,141 @@ export type Database = {
         }
         Relationships: []
       }
+      prescription_catalogs: {
+        Row: {
+          created_at: string
+          extracted_content: string | null
+          extracted_metadata: Json | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          extracted_content?: string | null
+          extracted_metadata?: Json | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          extracted_content?: string | null
+          extracted_metadata?: Json | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      prescription_records: {
+        Row: {
+          created_at: string
+          extracted_content: string | null
+          extracted_metadata: Json | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string
+          id: string
+          main_complaint: string | null
+          patient_name: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          extracted_content?: string | null
+          extracted_metadata?: Json | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          main_complaint?: string | null
+          patient_name?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          extracted_content?: string | null
+          extracted_metadata?: Json | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          main_complaint?: string | null
+          patient_name?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      prescription_results: {
+        Row: {
+          ai_response: string
+          catalog_id: string | null
+          created_at: string
+          id: string
+          main_complaint: string | null
+          model_used: string | null
+          patient_name: string | null
+          record_id: string | null
+          suggested_products: Json | null
+          user_id: string
+          user_observations: string | null
+        }
+        Insert: {
+          ai_response: string
+          catalog_id?: string | null
+          created_at?: string
+          id?: string
+          main_complaint?: string | null
+          model_used?: string | null
+          patient_name?: string | null
+          record_id?: string | null
+          suggested_products?: Json | null
+          user_id: string
+          user_observations?: string | null
+        }
+        Update: {
+          ai_response?: string
+          catalog_id?: string | null
+          created_at?: string
+          id?: string
+          main_complaint?: string | null
+          model_used?: string | null
+          patient_name?: string | null
+          record_id?: string | null
+          suggested_products?: Json | null
+          user_id?: string
+          user_observations?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prescription_results_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "prescription_catalogs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescription_results_record_id_fkey"
+            columns: ["record_id"]
+            isOneToOne: false
+            referencedRelation: "prescription_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       processed_webhooks: {
         Row: {
           created_at: string

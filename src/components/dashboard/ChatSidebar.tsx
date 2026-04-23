@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, PanelLeft, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, PanelLeft, Search, FilePlus2, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 import logoIcon from '@/assets/logo-icon.png';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -37,6 +38,8 @@ interface ChatSidebarProps {
   user: any;
   subscriptions: any[];
   onOpenSearch: () => void;
+  activeView: 'chat' | 'prescription';
+  onOpenPrescription: () => void;
 }
 
 export const ChatSidebar = ({
@@ -52,6 +55,8 @@ export const ChatSidebar = ({
   user,
   subscriptions,
   onOpenSearch,
+  activeView,
+  onOpenPrescription,
 }: ChatSidebarProps) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -59,6 +64,18 @@ export const ChatSidebar = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const { state, toggleSidebar } = useSidebar();
+
+  const hasPrescriptionAccess = (subscriptions || []).some(
+    (s) => s?.status === 'active' && (s?.plan_type === 'medical' || s?.plan_type === 'specialist')
+  );
+
+  const handlePrescriptionClick = () => {
+    if (!hasPrescriptionAccess) {
+      toast.error('Receituário + disponível apenas no plano Médico.');
+      return;
+    }
+    onOpenPrescription();
+  };
 
   const getModelLabel = (modelType: string) => {
     const labels = {
@@ -156,6 +173,22 @@ export const ChatSidebar = ({
                 <Search className="mr-2 h-4 w-4" />
                 Buscar em chats
               </Button>
+              <Button
+                onClick={handlePrescriptionClick}
+                variant="ghost"
+                className={cn(
+                  'w-full justify-start',
+                  activeView === 'prescription' && hasPrescriptionAccess && 'bg-accent',
+                  !hasPrescriptionAccess && 'opacity-50 cursor-not-allowed hover:bg-transparent',
+                )}
+                size="sm"
+                title={hasPrescriptionAccess ? 'Receituário +' : 'Disponível no plano Médico'}
+                aria-label="Receituário +"
+              >
+                <FilePlus2 className="mr-2 h-4 w-4" />
+                Receituário +
+                {!hasPrescriptionAccess && <Lock className="ml-auto h-3.5 w-3.5" />}
+              </Button>
             </>
           ) : (
             <div className="flex flex-col gap-2">
@@ -185,6 +218,20 @@ export const ChatSidebar = ({
                 aria-label="Buscar em chats"
               >
                 <Search className="h-5 w-5" />
+              </Button>
+              <Button
+                onClick={handlePrescriptionClick}
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  'w-full h-10',
+                  activeView === 'prescription' && hasPrescriptionAccess && 'bg-accent',
+                  !hasPrescriptionAccess && 'opacity-50 cursor-not-allowed hover:bg-transparent',
+                )}
+                title={hasPrescriptionAccess ? 'Receituário +' : 'Disponível no plano Médico'}
+                aria-label="Receituário +"
+              >
+                <FilePlus2 className="h-5 w-5" />
               </Button>
             </div>
           )}
