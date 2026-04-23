@@ -413,6 +413,13 @@ async function ensureExtraction(
 
   if (!loadedFile) return row;
 
+  // Catálogo já pré-renderizado em páginas: pula a extração via Flash —
+  // o Pro multimodal verá cada página diretamente.
+  if (loadedFile.pages && loadedFile.pages.length > 0) {
+    console.log(`Pulando extração de ${table} — usando ${loadedFile.pages.length} páginas pré-renderizadas.`);
+    return row;
+  }
+
   // Pula extração para arquivos grandes (> 6MB). O Gemini Pro multimodal lerá
   // o PDF original direto via signed URL, sem precisar de JSON estruturado intermediário.
   if (loadedFile.sizeBytes > MAX_EXTRACTION_FILE_BYTES) {
