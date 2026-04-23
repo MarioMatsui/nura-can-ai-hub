@@ -19,6 +19,11 @@ const ACCEPTED_TYPES = [
 const ACCEPTED_EXT = '.pdf,.jpg,.jpeg,.png,.webp,.txt,.doc,.docx';
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
+// Pipeline condicional: PDFs ≤ 5MB pulam a renderização página-por-página
+// (process-catalog-pdf) e vão direto pro Gemini Pro como inline base64.
+// Acima disso, mantém o pipeline atual de rasterização incremental.
+const PDF_SMALL_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
 const MAX_RETRIES_PER_BATCH = 3;
 const RETRY_DELAY_MS = 1500;
 
@@ -262,8 +267,34 @@ export const UploadDropzone = ({
         || uploaded.file_name.toLowerCase().endsWith('.pdf');
 
       if (kind === 'catalog' && isPdf) {
-        toast.success('Catálogo enviado. Processando páginas…');
-        await runCatalogProcessing(uploaded, 0);
+        // Pipeline condicional: PDFs ≤ 5MB são leves o bastante pra ir direto
+        // pro Gemini Pro multimodal — sem rasterização, sem batch, sem checkpoint.
+        if (file.size <= PDF_SMALL_THRESHOLD) {
+          // Marca o catálogo como "renderização pulada" — o backend vai usar
+          // o PDF original inline. extracted_metadata fica como sinal pro
+          // frontend liberar o botão de gerar imediatamente.
+          await supabase
+            .from('prescription_catalogs')
+            .update({
+              extracted_metadata: {
+                skip_page_render: true,
+                pages_count: 1,
+                total_pages: 1,
+                size_bytes: file.size,
+              },
+            })
+            .eq('id', uploaded.id);
+          onChange({
+            ...uploaded,
+            pages_count: 1,
+            total_pages: 1,
+            isProcessing: false,
+          });
+          toast.success('Catálogo pronto.');
+        } else {
+          toast.success('Catálogo enviado. Processando páginas…');
+          await runCatalogProcessing(uploaded, 0);
+        }
       } else {
         onChange(uploaded);
         toast.success(kind === 'catalog' ? 'Catálogo enviado.' : 'Prontuário enviado.');

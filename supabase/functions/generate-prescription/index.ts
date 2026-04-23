@@ -171,6 +171,12 @@ function assertValidBase64(b64: string, sizeBytes: number, label: string): void 
 // e o limite prático de ~7MB do inline_data do Gemini.
 const INLINE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 
+// Threshold específico para PDF: o Gemini NÃO aceita signed HTTP URL para
+// application/pdf (só inline). Por isso PDFs até 5MB vão obrigatoriamente
+// como base64 inline. Acima disso, o pipeline já pré-renderiza em páginas
+// (process-catalog-pdf), evitando a necessidade de inline.
+const PDF_INLINE_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
 // Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos),
 // apontado por signed URL (arquivos grandes — Gemini busca direto do Storage),
 // ou — no caso especial do catálogo PDF — explodido em páginas PNG já pré-renderizadas
@@ -256,9 +262,14 @@ async function loadFile(
   if (!probe) return null;
   const { sizeBytes, mimeType, signedUrl } = probe;
 
+  // PDFs precisam de base64 inline (Gemini rejeita HTTP URL para application/pdf).
+  // Permitimos inline até 5MB; acima disso o catálogo já vem pré-renderizado em páginas.
+  const isPdf = mimeType === 'application/pdf' || path.toLowerCase().endsWith('.pdf');
+  const inlineLimit = isPdf ? PDF_INLINE_THRESHOLD : INLINE_THRESHOLD;
+
   // Arquivos grandes: NÃO baixar. Gemini buscará direto via signed URL.
-  if (sizeBytes > INLINE_THRESHOLD) {
-    console.log(`Arquivo grande (${(sizeBytes / 1024 / 1024).toFixed(2)}MB) — usando signed URL, sem materializar base64`);
+  if (sizeBytes > inlineLimit) {
+    console.log(`Arquivo grande (${(sizeBytes / 1024 / 1024).toFixed(2)}MB, mime=${mimeType}) — usando signed URL, sem materializar base64`);
     return { base64: null, signedUrl, mimeType, sizeBytes, bucket, path };
   }
 
@@ -842,7 +853,8 @@ serve(async (req) => {
     // prescription_catalogs.extracted_metadata.pages = ['userId/catalogId/page-001.png', ...]
     let catalogFile: LoadedFile | null = null;
     const cMeta = catalogRow.extracted_metadata || {};
-    if (Array.isArray(cMeta.pages) && cMeta.pages.length > 0) {
+    const skipPageRender = cMeta.skip_page_render === true;
+    if (!skipPageRender && Array.isArray(cMeta.pages) && cMeta.pages.length > 0) {
       console.log(`CATALOG tem ${cMeta.pages.length} páginas pré-renderizadas — usando caminho de páginas.`);
       const pages = await loadCatalogPages(supabase, cMeta.pages);
       if (pages.length > 0) {
@@ -858,8 +870,12 @@ serve(async (req) => {
         console.log(`CATALOG pronto: ${pages.length} páginas PNG via signed URL`);
       }
     }
-    // Fallback: catálogo sem páginas pré-renderizadas (imagem direta, ou processamento ainda não rodou)
+    // Fallback / pipeline leve: catálogo sem páginas pré-renderizadas
+    // (PDF pequeno ≤ 5MB com skip_page_render, imagem direta, ou processamento ainda não rodou).
     if (!catalogFile) {
+      if (skipPageRender) {
+        console.log('CATALOG marcado com skip_page_render — carregando PDF original direto (≤ 5MB).');
+      }
       catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
       if (catalogFile) {
         const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
