@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.verify-admin]
 verify_jwt = false
+
+[functions.generate-prescription]
+verify_jwt = true
