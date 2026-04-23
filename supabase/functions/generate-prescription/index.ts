@@ -654,10 +654,18 @@ serve(async (req) => {
       });
     }
 
-    console.log('Extraindo conteúdo dos arquivos...');
+    console.log('Baixando arquivos uma única vez...');
+    // CORREÇÃO MEMÓRIA: download único por arquivo. Antes baixávamos até 2x cada
+    // (uma vez em ensureExtraction e outra para anexar como multimodal).
+    const [recordFile, catalogFile] = await Promise.all([
+      downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
+      downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
+    ]);
+
+    console.log('Extraindo conteúdo dos arquivos (reutilizando download)...');
     const [catalogFull, recordFull] = await Promise.all([
-      ensureExtraction(supabase, 'prescription_catalogs', catalogRow),
-      ensureExtraction(supabase, 'prescription_records', recordRow),
+      ensureExtraction(supabase, 'prescription_catalogs', catalogRow, catalogFile),
+      ensureExtraction(supabase, 'prescription_records', recordRow, recordFile),
     ]);
 
     // Constrói query RAG a partir do prontuário + observações.
@@ -682,11 +690,6 @@ serve(async (req) => {
     //  - PDF/imagem  → multimodal nativo
     //  - DOC/DOCX/RTF/ODT → multimodal binário (mesmo padrão do chat)
     //  - TXT/MD/CSV/JSON/XML → leitura direta como texto, embutida no prompt
-    const [recordFile, catalogFile] = await Promise.all([
-      downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
-      downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
-    ]);
-
     const isMultimodalMime = (mt: string) =>
       mt === 'application/pdf' ||
       mt.startsWith('image/') ||
