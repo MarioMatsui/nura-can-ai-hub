@@ -852,9 +852,12 @@ serve(async (req) => {
     const recordHasOriginal = !!recordFile && isMultimodalMime(recordFile.mimeType);
     const catalogHasOriginal = !!catalogFile && isMultimodalMime(catalogFile.mimeType);
 
-    const decodeTextFile = (file: { base64: string; mimeType: string } | null): string | null => {
+    // Texto puro só pode ser decodificado se temos o base64 carregado.
+    // Para arquivos > 2MB de texto puro (raro), o Gemini buscará via URL.
+    const decodeTextFile = (file: LoadedFile | null): string | null => {
       if (!file) return null;
       if (!isPlainTextMime(file.mimeType)) return null;
+      if (!file.base64) return null;
       try { return atob(file.base64); } catch { return null; }
     };
     const recordPlainText = decodeTextFile(recordFile);
@@ -877,15 +880,29 @@ serve(async (req) => {
 
     const userContent: any[] = [{ type: 'text', text: userMessageText }];
 
-    const attachIfMultimodal = (file: { base64: string; mimeType: string } | null, label: string) => {
+    const attachIfMultimodal = (file: LoadedFile | null, label: string) => {
       if (!file) return false;
       const mt = file.mimeType;
       if (isMultimodalMime(mt)) {
-        userContent.push({
-          type: 'image_url',
-          image_url: { url: `data:${mt};base64,${file.base64}` },
-        });
-        console.log(`Anexado ${label} multimodal (${mt})`);
+        // Preferimos signed URL sempre que existir (evita carregar base64 grande no payload).
+        // Para arquivos pequenos com base64 já em mãos, ainda usamos inline (mais rápido).
+        let url: string;
+        let via: string;
+        if (file.signedUrl && (!file.base64 || file.sizeBytes > INLINE_THRESHOLD)) {
+          url = file.signedUrl;
+          via = 'signed URL';
+        } else if (file.base64) {
+          url = `data:${mt};base64,${file.base64}`;
+          via = 'base64 inline';
+        } else if (file.signedUrl) {
+          url = file.signedUrl;
+          via = 'signed URL (sem base64)';
+        } else {
+          console.log(`${label} sem URL nem base64 — não pode ser anexado`);
+          return false;
+        }
+        userContent.push({ type: 'image_url', image_url: { url } });
+        console.log(`Anexado ${label} multimodal (${mt}) via ${via} — ${(file.sizeBytes / 1024 / 1024).toFixed(2)}MB`);
         return true;
       }
       if (isPlainTextMime(mt)) {
@@ -898,6 +915,7 @@ serve(async (req) => {
 
     const recordAttached = attachIfMultimodal(recordFile, 'PRONTUÁRIO');
     const catalogAttached = attachIfMultimodal(catalogFile, 'CATÁLOGO');
+
 
     // CORREÇÃO 5: instrução de prioridade dos anexos vai para a camada de SISTEMA
     // (mesmo padrão do chat-ai). O prompt do usuário fica focado no caso clínico.
