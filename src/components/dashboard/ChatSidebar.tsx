@@ -173,6 +173,22 @@ export const ChatSidebar = ({
                 <Search className="mr-2 h-4 w-4" />
                 Buscar em chats
               </Button>
+              <Button
+                onClick={handlePrescriptionClick}
+                variant="ghost"
+                className={cn(
+                  'w-full justify-start',
+                  activeView === 'prescription' && hasPrescriptionAccess && 'bg-accent',
+                  !hasPrescriptionAccess && 'opacity-50 cursor-not-allowed hover:bg-transparent',
+                )}
+                size="sm"
+                title={hasPrescriptionAccess ? 'Receituário +' : 'Disponível no plano Médico'}
+                aria-label="Receituário +"
+              >
+                <FilePlus2 className="mr-2 h-4 w-4" />
+                Receituário +
+                {!hasPrescriptionAccess && <Lock className="ml-auto h-3.5 w-3.5" />}
+              </Button>
             </>
           ) : (
             <div className="flex flex-col gap-2">
@@ -202,6 +218,20 @@ export const ChatSidebar = ({
                 aria-label="Buscar em chats"
               >
                 <Search className="h-5 w-5" />
+              </Button>
+              <Button
+                onClick={handlePrescriptionClick}
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  'w-full h-10',
+                  activeView === 'prescription' && hasPrescriptionAccess && 'bg-accent',
+                  !hasPrescriptionAccess && 'opacity-50 cursor-not-allowed hover:bg-transparent',
+                )}
+                title={hasPrescriptionAccess ? 'Receituário +' : 'Disponível no plano Médico'}
+                aria-label="Receituário +"
+              >
+                <FilePlus2 className="h-5 w-5" />
               </Button>
             </div>
           )}
