@@ -179,7 +179,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             {!canGenerate && !isGenerating && (
               <p className="text-xs text-muted-foreground mt-2">
                 {catalog && !catalogReady
-                  ? 'Aguardando o processamento das páginas do catálogo…'
+                  ? (typeof catalog.total_pages === 'number' && catalog.total_pages > 0
+                      ? `Processando páginas do catálogo (${catalog.pages_count ?? 0}/${catalog.total_pages})…`
+                      : 'Processando páginas do catálogo…')
                   : 'Envie o catálogo e o prontuário para liberar a geração.'}
               </p>
             )}
