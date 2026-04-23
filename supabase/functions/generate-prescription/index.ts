@@ -123,7 +123,8 @@ function sanitizeRAGContent(content: string): string {
   ];
   let sanitized = content;
   dangerousPatterns.forEach(p => { sanitized = sanitized.replace(p, '[REDACTED]'); });
-  const maxLength = 6000;
+  // CORREÇÃO 2: limite por chunk subiu de 6k para 8k
+  const maxLength = 8000;
   if (sanitized.length > maxLength) sanitized = sanitized.substring(0, maxLength) + '... [conteúdo truncado]';
   return sanitized;
 }
