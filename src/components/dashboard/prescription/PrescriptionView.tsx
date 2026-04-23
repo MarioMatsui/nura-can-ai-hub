@@ -159,6 +159,15 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             />
           </section>
 
+          {/* Catálogos salvos */}
+          <SavedCatalogs
+            userId={userId}
+            items={savedCatalogs}
+            loading={savedLoading}
+            onRefresh={refreshSaved}
+            onUse={(file) => setCatalog(file)}
+          />
+
           {/* Observações */}
           <section className="space-y-2">
             <label className="text-sm font-medium text-foreground">
