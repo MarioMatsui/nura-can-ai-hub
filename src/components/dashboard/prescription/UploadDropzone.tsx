@@ -118,7 +118,17 @@ export const UploadDropzone = ({
           toast.success(`Catálogo pronto (${pagesCount} páginas).`);
         } catch (procErr: any) {
           console.error('process-catalog-pdf error', procErr);
-          toast.error('Falha ao processar páginas do catálogo. Tente reenviar.');
+          // Tenta extrair a mensagem real retornada pela edge function
+          const detail =
+            procErr?.context?.message
+            || procErr?.context?.error
+            || procErr?.message
+            || (typeof procErr === 'string' ? procErr : '');
+          toast.error(
+            detail
+              ? `Falha ao processar catálogo: ${detail}`
+              : 'Falha ao processar páginas do catálogo. Tente reenviar.',
+          );
           // Mantém o registro mas marca como não-processado para bloquear a geração.
           onChange({ ...uploaded, pages_count: 0, isProcessing: false });
         } finally {
