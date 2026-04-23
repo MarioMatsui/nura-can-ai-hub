@@ -1,84 +1,60 @@
 ---
 name: Prescription engine
-description: Receituário+ — RAG sanitizado por termo, anexos via signed URL para arquivos > 2MB (memória constante), base64 inline só para arquivos pequenos
+description: Receituário+ — catálogo PDF é pré-renderizado em páginas PNG no upload (process-catalog-pdf); geração anexa cada página como image_url via signed URL
 type: feature
 ---
 
 # Receituário+ engine — alinhamento com chat-ai
 
-A função `generate-prescription` foi alinhada com `chat-ai` para reduzir divergência clínica.
-
 ## Arquitetura
 - Modelo: `google/gemini-2.5-pro`
-- System: `MEDICAL_SYSTEM_PROMPT` + `PRESCRIPTION_TASK_LAYER` + `ATTACHMENT_PRIORITY_NOTE` (mesma camada de prioridade que o chat usa)
-- User: texto do caso + anexos multimodais
-- Sem histórico (one-shot por natureza da tarefa)
+- System: `MEDICAL_SYSTEM_PROMPT` + `PRESCRIPTION_TASK_LAYER` + `ATTACHMENT_PRIORITY_NOTE`
+- One-shot (sem histórico)
 
-## Anexos: signed URL vs base64 inline (CRÍTICO)
+## Catálogo PDF: pré-renderização obrigatória (CRÍTICO)
 
-**Regra:** arquivos > 2MB **NUNCA** são carregados em base64 dentro do edge function. Em vez disso, geramos uma **signed URL do Supabase Storage** (válida por 600s) e passamos como `image_url.url` no payload OpenAI-compatible. O Gemini busca o arquivo direto do Storage, sem passar pelo edge function nem pelo gateway como base64.
+O Lovable AI Gateway repassa para o Gemini, que **só aceita `image_url` HTTP quando o conteúdo é imagem** (PNG/JPEG/WebP/GIF). Para PDF, exige `data:application/pdf;base64,...` — que estoura RAM (256MB) e o limite de ~7MB do `inline_data` em catálogos médios. Resultado: PDFs de catálogo entre 7MB e 16MB ficam numa "zona morta" sem solução inline.
 
-| Tamanho | Caminho | Por quê |
-|---|---|---|
-| < 2 MB | Base64 inline (`data:mime;base64,...`) | Mais rápido, sem round-trip extra |
-| 2 MB – 2 GB | Signed URL (`https://...`) | Evita estouro de RAM e o limite prático de ~7MB do `inline_data` do Gemini |
+**Solução:** ao subir um catálogo PDF, o frontend dispara `process-catalog-pdf` (edge function), que:
+1. Baixa o PDF do bucket `prescription-files`.
+2. Usa `@hyzyla/pdfium` (WASM) para renderizar cada página como bitmap RGBA em escala 1.5 (~108 DPI).
+3. Codifica via `deno.land/x/pngs` (WASM puro) e faz upload de cada página em `prescription-files-pages/{userId}/{catalogId}/page-NNN.png`.
+4. Persiste a lista em `prescription_catalogs.extracted_metadata.pages: string[]` + `pages_count`.
 
-### Por que signed URL é obrigatório acima de 2MB
-1. **Memória do edge function (256MB):** materializar 16MB de PDF como base64 (~21MB) + buffer da response (~16MB) + string binária intermediária (~16MB) = pico > 60MB só para um arquivo. Com dois PDFs, estoura.
-2. **Limite do `inline_data` do Gemini:** o provider tem teto prático de ~7MB por parte. Acima disso responde com `400 Base64 decoding failed` (mensagem enganosa — o base64 está íntegro, mas tamanho excede). Signed URL bypassa esse limite e suporta arquivos até 2GB.
+Cap de segurança: 120 páginas por catálogo. Se já há páginas processadas, retorna cached.
 
-### Fluxo de carregamento (`loadFile`)
-1. `getSignedUrl(bucket, path, 600s)` — sempre gera, é barato.
-2. `HEAD signedUrl` para descobrir `content-length` e `content-type` sem baixar.
-3. Se `size > 2MB`: retorna `{ base64: null, signedUrl, mimeType, sizeBytes, bucket, path }` — **sem download**.
-4. Se `size <= 2MB`: baixa, converte para base64, retorna ambos (`base64` E `signedUrl`).
+### Bucket `prescription-files-pages`
+- Privado, RLS por pasta `{user_id}/...` (mesmo padrão do `prescription-files`).
+- Admins têm SELECT global.
 
-### Anexação no payload (`attachIfMultimodal`)
-- Se há `signedUrl` e (não tem base64 OU é > 2MB): usa signed URL.
-- Senão: usa `data:mime;base64,...`.
-- Logs explicitam o caminho usado e o tamanho.
+### Geração (`generate-prescription`)
+- Se `extracted_metadata.pages` existe, monta `LoadedFile.pages = [{ signedUrl, mimeType: 'image/png', path }]` e pula extração via Flash.
+- `attachIfMultimodal`: quando há `pages`, faz push de **uma `image_url` por página** no `userContent` — cada uma é uma imagem independente sob o limite do provider.
+- Fallback: se o catálogo não for PDF (ex: imagem direta) ou ainda não foi processado, cai no caminho legado de `loadFile`.
+- Para arquivos não-PDF: imagens grandes podem ir como signed URL HTTP; outros mimes (DOC/DOCX) ainda exigem base64 inline.
 
-## Tipos de anexo (igual ao chat-ai)
-- PDF / imagem → multimodal (signed URL ou base64 conforme tamanho)
-- DOC / DOCX / RTF / ODT → multimodal binário (mesmo padrão do chat)
-- TXT / MD / CSV / JSON / XML → texto puro decodificado e embutido no prompt como FONTE PRIMÁRIA (só funciona se o arquivo for pequeno o suficiente para ter base64; arquivos de texto > 2MB caem no caminho de URL)
-- Quando o original é anexado, o texto extraído entra apenas como APOIO resumido (8k chars prontuário, 12k catálogo)
-- Quando o original NÃO é anexado, o texto extraído é a FONTE PRIMÁRIA (30k prontuário, 40k catálogo)
+### Frontend
+- `UploadDropzone`: após upload de catálogo PDF, invoca `process-catalog-pdf` e mostra "Processando páginas…". Marca `isProcessing` no `UploadedFile`.
+- `PrescriptionView`: botão "Gerar Receituário" só habilita quando `pages_count > 0` (ou quando o catálogo não é PDF).
+
+## Prontuário (sem mudança)
+Continua via `loadFile` normal — base64 inline para < 2MB, signed URL para > 2MB.
+Atenção: signed URL HTTP só funciona para mime image/*. Prontuários PDF grandes seguem a mesma limitação que motivou a pré-renderização do catálogo; tipicamente são pequenos (< 1MB) e não atingem isso.
 
 ## RAG médico
-- Reutiliza `searchKnowledgeBase` lógica do chat-ai (mesmo `TERM_ALIASES`, `generateSearchQueries`, score)
-- Query construída a partir de: queixa principal + sintomas + diagnósticos + comorbidades + histórico + observações
-- **CRÍTICO**: cada termo é sanitizado via `sanitizeSearchTerm` antes de entrar no `.or(content.ilike...)` — remove acentos, vírgulas, pontos e qualquer caractere não-alfanumérico. Sem isso, queries com pontuação quebram o "logic tree" do PostgREST.
-- Limite por chunk: 8000 chars
-- Top 8 chunks
+- `searchMedicalKnowledgeBase` com `TERM_ALIASES`, `generateSearchQueries`, `sanitizeSearchTerm`.
+- Cada termo sanitizado antes do `.or(content.ilike...)` — sem acentos/pontuação.
+- Top 8 chunks, 8000 chars cada.
 
-## Parâmetros de inferência (alinhados ao chat-ai)
-- `max_tokens: 8000`
-- Sem `temperature` explícita (usa default do provedor)
+## Parâmetros de inferência
+- `max_tokens: 8000`, sem `temperature` fixa.
 
-## Cache de extração + proteção de memória
-- `ensureExtraction` só reutiliza cache de qualidade:
-  - catálogo: precisa ter `metadata.products.length > 0` E `extracted_content > 200 chars`
-  - prontuário: precisa ter `main_complaint` ou `symptoms.length > 0` E `extracted_content > 200 chars`
-- `extracted_content` armazenado: até 80k chars
-- **Arquivos > 6MB pulam a extração com Gemini Flash.** O Gemini Pro multimodal lê o PDF original direto via signed URL, então a extração estruturada com Flash é redundante.
-- **Arquivos entre 2MB e 6MB:** se cache inválido, baixamos APENAS naquele momento (em escopo isolado via `downloadAsBase64Once`) para rodar a extração com Flash, e descartamos o base64 imediatamente após.
-- **Download SEQUENCIAL** (não paralelo) — record primeiro, catalog depois.
-- `uint8ToBase64`: chunks de 8KB, **um único `btoa()`** no final. Nunca chamar `btoa()` por chunk (corrompe alinhamento de 3 bytes → 4 chars).
-- `assertValidBase64`: validação só roda no caminho de base64 inline.
-
-## Logs de comparação
-A função emite resumo objetivo a cada chamada:
-- Caminho usado por cada arquivo (signed URL ou base64 inline) + tamanho em MB
-- RAG chunks count
-- Tamanho do system prompt e do user text
-- finish_reason + tokens input/output da resposta
-
-## Formato de saída
-- Camada de receituário (`PRESCRIPTION_TASK_LAYER`) é MOLDURA, não centro do raciocínio
-- Estrutura sugerida (não obrigatória): resumo, análise, produtos, monitoramento, considerações, aviso
-- Múltiplos produtos preferidos quando clinicamente plausíveis; produto único é aceitável
+## Cache de extração
+- Cache só reutilizado se "de qualidade" (catálogo: products.length > 0; prontuário: main_complaint ou symptoms).
+- Páginas pré-renderizadas → pula extração com Flash (Pro vê as imagens direto).
+- Arquivos > 6MB também pulam extração.
+- `uint8ToBase64`: chunks de 8KB, **um único `btoa()`** no final.
 
 ## Não tocar
-- `chat-ai` permanece intacto como referência
-- RLS dos buckets `prescription-files` e tabelas `prescription_*`
+- `chat-ai` permanece intacto.
+- RLS dos buckets `prescription-files`, `prescription-files-pages` e tabelas `prescription_*`.
