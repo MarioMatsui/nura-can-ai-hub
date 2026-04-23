@@ -53,6 +53,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const isCurrentCatalogSaved = !!catalog && savedCatalogs.some((s) => s.catalog_id === catalog.id);
   const savedLimitReached = savedCatalogs.length >= SAVED_CATALOGS_LIMIT;
 
+  const summary = useMemo(() => extractPrescriptionSummary(aiResponse), [aiResponse]);
+  const hasSummary = !!aiResponse && (!!summary.produto || !!summary.posologia);
+
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
       .from('prescription_results')
