@@ -222,9 +222,12 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
           {/* Observações */}
           <section className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              Observações complementares <span className="text-muted-foreground font-normal">(opcional)</span>
-            </label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-sm font-medium text-foreground">
+                Observações complementares <span className="text-muted-foreground font-normal">(opcional)</span>
+              </label>
+              <span className="text-xs text-muted-foreground tabular-nums">{observations.length}/1000</span>
+            </div>
             <Textarea
               value={observations}
               onChange={(e) => setObservations(e.target.value)}
@@ -232,7 +235,6 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
               className="min-h-[90px] resize-none"
               maxLength={1000}
             />
-            <div className="text-xs text-muted-foreground text-right">{observations.length}/1000</div>
           </section>
 
           {/* Action */}
@@ -346,7 +348,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
                       <div
                         className={cn(
                           'text-sm font-medium line-clamp-1 transition-colors',
-                          isSelected ? 'text-black' : 'text-foreground group-hover:text-black',
+                          isSelected ? 'text-black' : 'text-white group-hover:text-black',
                         )}
                       >
                         {item.patient_name || 'Paciente não identificado'}
