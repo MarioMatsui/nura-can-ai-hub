@@ -311,6 +311,18 @@ interface ChunkResult {
   relevance_score: number;
 }
 
+// CORREÇÃO 1: sanitiza termos de busca para o PostgREST .or(content.ilike...)
+// A vírgula é separador de condições; pontuação quebra o "logic tree" do parser.
+// Mantemos apenas letras/números, descartamos termos vazios ou muito curtos, e deduplicamos.
+function sanitizeSearchTerm(t: string): string {
+  return t
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')      // remove acentos
+    .replace(/[^a-zA-Z0-9]/g, '')          // remove pontuação, vírgulas, espaços, etc.
+    .toLowerCase()
+    .trim();
+}
+
 async function searchMedicalKnowledgeBase(
   supabase: any,
   message: string,
@@ -322,7 +334,9 @@ async function searchMedicalKnowledgeBase(
 
   for (const query of searchQueries) {
     try {
-      const queryTerms = query.split(' ').filter(t => t.length > 2);
+      const queryTerms = Array.from(new Set(
+        query.split(/\s+/).map(sanitizeSearchTerm).filter(t => t.length > 2)
+      ));
       if (queryTerms.length === 0) continue;
 
       const orConditions = queryTerms.map(t => `content.ilike.%${t}%`).join(',');
@@ -481,6 +495,10 @@ A estrutura abaixo é uma referência. Use as seções que fizerem sentido clín
 
 // =============================================================================
 // MONTAGEM DA MENSAGEM DE USUÁRIO (contexto da consulta)
+// CORREÇÃO 4: reduz duplicação. Quando o ARQUIVO ORIGINAL é anexado como multimodal
+// (PDF/imagem), o texto extraído entra apenas como auxílio resumido. Quando o
+// arquivo NÃO pode ser anexado (DOC binário sem multimodal etc.), enviamos o texto
+// extraído integral como fonte primária.
 // =============================================================================
 
 function buildUserMessage(opts: {
@@ -490,8 +508,13 @@ function buildUserMessage(opts: {
   recordMetadata: any;
   observations: string;
   ragChunks: ChunkResult[];
+  recordHasOriginal: boolean;
+  catalogHasOriginal: boolean;
 }): string {
-  const { catalogContent, catalogMetadata, recordContent, recordMetadata, observations, ragChunks } = opts;
+  const {
+    catalogContent, catalogMetadata, recordContent, recordMetadata,
+    observations, ragChunks, recordHasOriginal, catalogHasOriginal,
+  } = opts;
 
   const ragSection = ragChunks.length > 0
     ? ragChunks.map((c, i) =>
@@ -499,14 +522,31 @@ function buildUserMessage(opts: {
       ).join('\n\n')
     : '(Nenhum trecho da base científica recuperado para esta consulta.)';
 
+  // Se o arquivo original foi anexado, o texto extraído é apenas APOIO (resumido).
+  // Se NÃO foi anexado (formato não-multimodal), o texto extraído é a FONTE PRIMÁRIA.
+  const recordTextLimit = recordHasOriginal ? 8000 : 30000;
+  const catalogTextLimit = catalogHasOriginal ? 12000 : 40000;
+
+  const recordBlock = recordHasOriginal
+    ? `**Estrutura auxiliar do prontuário (resumo extraído — confirme no arquivo anexo):**
+${recordMetadata && Object.keys(recordMetadata).length > 0 ? '```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```' : '(sem extração estruturada)'}
+${recordContent ? '\n_Trecho do texto extraído (apoio):_\n' + recordContent.slice(0, recordTextLimit) : ''}`
+    : `**Conteúdo do prontuário (texto extraído — fonte primária pois o arquivo não pôde ser anexado em formato nativo):**
+${recordContent.slice(0, recordTextLimit) || '(conteúdo não extraído)'}
+${recordMetadata && Object.keys(recordMetadata).length > 0 ? '\n**Estrutura auxiliar:**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```' : ''}`;
+
+  const catalogBlock = catalogHasOriginal
+    ? `**Estrutura auxiliar do catálogo (lista extraída — confirme no arquivo anexo):**
+${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```' : '(sem extração estruturada)'}
+${catalogContent ? '\n_Trecho do texto extraído (apoio):_\n' + catalogContent.slice(0, catalogTextLimit) : ''}`
+    : `**Conteúdo do catálogo (texto extraído — fonte primária pois o arquivo não pôde ser anexado em formato nativo):**
+${catalogContent.slice(0, catalogTextLimit) || '(conteúdo não extraído)'}
+${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '\n**Estrutura auxiliar:**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```' : ''}`;
+
   return `# CONSULTA DE RECEITUÁRIO
 
-> **IMPORTANTE:** Os arquivos originais do PRONTUÁRIO e do CATÁLOGO foram anexados a esta mensagem como documentos multimodais. Sempre que possível, **leia os arquivos originais** — o texto extraído abaixo é apenas um auxílio. Se houver divergência, prevaleça o original.
-
-## PRONTUÁRIO DO PACIENTE (analisar primeiro, sem restrições)
-${recordMetadata && Object.keys(recordMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```\n' : ''}
-**Texto extraído do prontuário (auxiliar — confirme no arquivo original anexo):**
-${recordContent.slice(0, 30000) || '(conteúdo não extraído — use o arquivo anexo)'}
+## PRONTUÁRIO DO PACIENTE
+${recordBlock}
 
 ---
 
@@ -521,13 +561,11 @@ ${ragSection}
 ---
 
 ## CATÁLOGO DE PRODUTOS DISPONÍVEIS (universo permitido para a receita final)
-${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```\n' : ''}
-**Texto extraído do catálogo (auxiliar — confirme no arquivo original anexo):**
-${catalogContent.slice(0, 40000) || '(conteúdo não extraído — use o arquivo anexo)'}
+${catalogBlock}
 
 ---
 
-Execute o raciocínio nas etapas indicadas e produza a sugestão de receituário. Combinações múltiplas são bem-vindas quando clinicamente plausíveis; um único produto também é aceitável quando o quadro pedir.`;
+Execute o raciocínio clínico (prontuário → evidência → catálogo → receita) e produza a sugestão de receituário. Combinações múltiplas são bem-vindas quando clinicamente plausíveis; um único produto também é aceitável quando o quadro pedir.`;
 }
 
 // =============================================================================
@@ -608,7 +646,9 @@ serve(async (req) => {
       ensureExtraction(supabase, 'prescription_records', recordRow),
     ]);
 
-    // Constrói query RAG rica a partir do prontuário + observações (mesma qualidade do chat-ai medical)
+    // Constrói query RAG a partir do prontuário + observações.
+    // CORREÇÃO 1: passamos a query bruta (em texto livre) — a sanitização agora
+    // é feita por termo dentro de searchMedicalKnowledgeBase (sem vírgulas/pontuação).
     const recordMeta = recordFull.extracted_metadata || {};
     const ragQueryParts = [
       recordFull.main_complaint || recordMeta.main_complaint || '',
@@ -624,43 +664,103 @@ serve(async (req) => {
     const ragChunks = ragQuery ? await searchMedicalKnowledgeBase(supabase, ragQuery) : [];
     console.log(`RAG retornou ${ragChunks.length} chunks`);
 
-    const userMessageText = buildUserMessage({
-      catalogContent: catalogFull.extracted_content || '',
-      catalogMetadata: catalogFull.extracted_metadata || {},
-      recordContent: recordFull.extracted_content || '',
-      recordMetadata: recordFull.extracted_metadata || {},
-      observations: observations || '',
-      ragChunks,
-    });
-
-    // CORREÇÃO 1: enviar os ARQUIVOS ORIGINAIS (PDF/imagem) como multimodal direto pro gemini-2.5-pro,
-    // não apenas o texto extraído pelo flash. O cérebro principal precisa "ver" o documento original.
-    const userContent: any[] = [{ type: 'text', text: userMessageText }];
-
+    // CORREÇÃO 2: tratamento de anexos alinhado ao chat-ai.
+    //  - PDF/imagem  → multimodal nativo
+    //  - DOC/DOCX/RTF/ODT → multimodal binário (mesmo padrão do chat)
+    //  - TXT/MD/CSV/JSON/XML → leitura direta como texto, embutida no prompt
     const [recordFile, catalogFile] = await Promise.all([
       downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
       downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
     ]);
 
+    const isMultimodalMime = (mt: string) =>
+      mt === 'application/pdf' ||
+      mt.startsWith('image/') ||
+      mt === 'application/msword' ||
+      mt === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mt === 'application/rtf' ||
+      mt === 'application/vnd.oasis.opendocument.text';
+
+    const isPlainTextMime = (mt: string) =>
+      mt.startsWith('text/') ||
+      mt === 'application/json' ||
+      mt === 'application/xml' ||
+      mt === 'application/csv';
+
+    const recordHasOriginal = !!recordFile && isMultimodalMime(recordFile.mimeType);
+    const catalogHasOriginal = !!catalogFile && isMultimodalMime(catalogFile.mimeType);
+
+    const decodeTextFile = (file: { base64: string; mimeType: string } | null): string | null => {
+      if (!file) return null;
+      if (!isPlainTextMime(file.mimeType)) return null;
+      try { return atob(file.base64); } catch { return null; }
+    };
+    const recordPlainText = decodeTextFile(recordFile);
+    const catalogPlainText = decodeTextFile(catalogFile);
+
+    const userMessageText = buildUserMessage({
+      catalogContent: catalogPlainText
+        ? catalogPlainText.slice(0, 80000)
+        : (catalogFull.extracted_content || ''),
+      catalogMetadata: catalogFull.extracted_metadata || {},
+      recordContent: recordPlainText
+        ? recordPlainText.slice(0, 80000)
+        : (recordFull.extracted_content || ''),
+      recordMetadata: recordFull.extracted_metadata || {},
+      observations: observations || '',
+      ragChunks,
+      recordHasOriginal,
+      catalogHasOriginal,
+    });
+
+    const userContent: any[] = [{ type: 'text', text: userMessageText }];
+
     const attachIfMultimodal = (file: { base64: string; mimeType: string } | null, label: string) => {
-      if (!file) return;
+      if (!file) return false;
       const mt = file.mimeType;
-      // Gemini lê PDF e imagens nativamente via image_url base64
-      if (mt === 'application/pdf' || mt.startsWith('image/')) {
+      if (isMultimodalMime(mt)) {
         userContent.push({
           type: 'image_url',
           image_url: { url: `data:${mt};base64,${file.base64}` },
         });
         console.log(`Anexado ${label} multimodal (${mt})`);
-      } else {
-        console.log(`${label} não-multimodal (${mt}) — confiando no texto extraído`);
+        return true;
       }
+      if (isPlainTextMime(mt)) {
+        console.log(`${label} é texto puro (${mt}) — embutido no prompt como fonte primária`);
+      } else {
+        console.log(`${label} formato não suportado (${mt}) — confiando no texto extraído`);
+      }
+      return false;
     };
 
-    attachIfMultimodal(recordFile, 'PRONTUÁRIO');
-    attachIfMultimodal(catalogFile, 'CATÁLOGO');
+    const recordAttached = attachIfMultimodal(recordFile, 'PRONTUÁRIO');
+    const catalogAttached = attachIfMultimodal(catalogFile, 'CATÁLOGO');
 
-    // Chamada à Lovable AI — mesma estrutura do chat-ai (system + user), modelo de alta capacidade
+    // CORREÇÃO 5: instrução de prioridade dos anexos vai para a camada de SISTEMA
+    // (mesmo padrão do chat-ai). O prompt do usuário fica focado no caso clínico.
+    const ATTACHMENT_PRIORITY_NOTE = `
+## DOCUMENTOS DO USUÁRIO NESTA CONSULTA
+
+O médico anexou ${recordAttached ? 'o PRONTUÁRIO original' : 'o conteúdo do prontuário em texto'} e ${catalogAttached ? 'o CATÁLOGO original' : 'o conteúdo do catálogo em texto'} para esta análise.
+Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre que houver divergência, o ARQUIVO ORIGINAL prevalece. Leia-os integralmente antes de produzir a sugestão.
+`;
+
+    const systemContent = MEDICAL_SYSTEM_PROMPT + '\n\n' + PRESCRIPTION_TASK_LAYER + '\n' + ATTACHMENT_PRIORITY_NOTE;
+
+    // CORREÇÃO 6: logs de comparação objetiva chat vs receituário
+    console.log(`\n=== PRESCRIPTION REQUEST SUMMARY ===`);
+    console.log(`- RAG chunks: ${ragChunks.length}`);
+    console.log(`- Record attached as multimodal: ${recordAttached} (mime=${recordFile?.mimeType || 'none'})`);
+    console.log(`- Catalog attached as multimodal: ${catalogAttached} (mime=${catalogFile?.mimeType || 'none'})`);
+    console.log(`- Record plain text inlined: ${!!recordPlainText}`);
+    console.log(`- Catalog plain text inlined: ${!!catalogPlainText}`);
+    console.log(`- System prompt length: ${systemContent.length} chars`);
+    console.log(`- User text length: ${userMessageText.length} chars`);
+    console.log(`- Total user content parts: ${userContent.length}`);
+
+    // CORREÇÃO 3: parâmetros de inferência alinhados ao chat-ai
+    // (max_tokens: 8000, sem temperature fixa — usa default do provedor).
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -670,11 +770,10 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'google/gemini-2.5-pro',
         messages: [
-          { role: 'system', content: MEDICAL_SYSTEM_PROMPT + '\n\n' + PRESCRIPTION_TASK_LAYER },
+          { role: 'system', content: systemContent },
           { role: 'user', content: userContent },
         ],
-        // CORREÇÃO 4: temperature 0.4 → 0.7 (alinhado ao chat médico, mais exploração clínica)
-        temperature: 0.7,
+        max_tokens: 8000,
       }),
     });
 
@@ -698,6 +797,12 @@ serve(async (req) => {
 
     const aiJson = await aiResp.json();
     const aiText: string = aiJson.choices?.[0]?.message?.content || '';
+    const finishReason = aiJson.choices?.[0]?.finish_reason || 'unknown';
+    const usage = aiJson.usage || {};
+    console.log(`=== PRESCRIPTION RESPONSE ===`);
+    console.log(`- finish_reason: ${finishReason}`);
+    console.log(`- tokens_input: ${usage.prompt_tokens || 0}, tokens_output: ${usage.completion_tokens || 0}`);
+    console.log(`- response length: ${aiText.length} chars`);
 
     if (!aiText) {
       return new Response(JSON.stringify({ error: 'ia_vazia', message: 'A IA não retornou conteúdo.' }), {
