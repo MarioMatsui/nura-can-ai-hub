@@ -74,6 +74,15 @@ Continua via `loadFile` normal — base64 inline para < 2MB, signed URL para > 2
 ## Parâmetros de inferência
 - `max_tokens: 8000`, sem `temperature` fixa.
 
+## Catálogos salvos (atalhos/favoritos)
+- Tabela `saved_catalogs` (user_id, catalog_id → prescription_catalogs, display_name). UNIQUE(user_id, catalog_id). RLS por `auth.uid() = user_id`.
+- Limite **3 por usuário** (constante `SAVED_CATALOGS_LIMIT` em `SavedCatalogs.tsx`).
+- Botão "Salvar" no `UploadDropzone` (apenas `kind='catalog'`) cria o atalho — **não duplica arquivo** no storage nem em `prescription_catalogs`. Apenas insere row em `saved_catalogs` apontando pro catálogo já existente.
+- Componente `SavedCatalogs` (em `prescription/SavedCatalogs.tsx`) renderiza grid abaixo dos uploads. Cada item: clicar no card OU no botão "Usar" preenche `catalog` no `PrescriptionView` reaproveitando `extracted_metadata.pages` já processado (zero reprocessamento).
+- Renomear: edita só `display_name` no atalho, não afeta o `prescription_catalogs.file_name` global.
+- Excluir: remove só a row em `saved_catalogs` (com confirmação via AlertDialog). Catálogo original preservado.
+- `handleRemove` no `UploadDropzone`: se `kind='catalog' && isSaved`, apenas deseleciona (não apaga arquivo); caso contrário, apaga storage + row como antes.
+
 ## Não tocar
 - `chat-ai` permanece intacto.
 - RLS dos buckets `prescription-files`, `prescription-files-pages` e tabelas `prescription_*`.
