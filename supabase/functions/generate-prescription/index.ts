@@ -374,10 +374,9 @@ async function ensureExtraction(
   supabase: any,
   table: 'prescription_catalogs' | 'prescription_records',
   row: any,
-  preloadedFile: { base64: string; mimeType: string; sizeBytes: number } | null,
+  loadedFile: LoadedFile | null,
 ): Promise<any> {
   // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
-  // Catálogo precisa ter pelo menos 1 produto extraído. Prontuário precisa ter queixa OU sintomas.
   const meta = row.extracted_metadata || {};
   const isCatalog = table === 'prescription_catalogs';
   const cacheValid = isCatalog
@@ -388,16 +387,24 @@ async function ensureExtraction(
     return row;
   }
 
-  // CORREÇÃO MEMÓRIA: reutiliza arquivo já baixado em vez de baixar de novo.
-  const file = preloadedFile;
-  if (!file) return row;
+  if (!loadedFile) return row;
 
-  // CORREÇÃO MEMÓRIA: pula extração se arquivo é grande demais. O Gemini Pro
-  // multimodal lê o PDF original diretamente e produz uma sugestão completa
-  // sem precisar do JSON estruturado intermediário.
-  if (file.sizeBytes > MAX_EXTRACTION_FILE_BYTES) {
-    console.log(`Pulando extração de ${table} (${(file.sizeBytes / 1024 / 1024).toFixed(2)}MB > limite). Pro multimodal lerá direto.`);
+  // Pula extração para arquivos grandes (> 6MB). O Gemini Pro multimodal lerá
+  // o PDF original direto via signed URL, sem precisar de JSON estruturado intermediário.
+  if (loadedFile.sizeBytes > MAX_EXTRACTION_FILE_BYTES) {
+    console.log(`Pulando extração de ${table} (${(loadedFile.sizeBytes / 1024 / 1024).toFixed(2)}MB > limite). Pro multimodal lerá direto via URL.`);
     return row;
+  }
+
+  // Para extração com Flash, precisamos de base64. Se já temos (arquivo pequeno), usa.
+  // Se não (caso raro: arquivo entre 2MB e 6MB), baixa AGORA em escopo isolado.
+  let base64ForExtraction: string | null = loadedFile.base64;
+  let mimeForExtraction: string = loadedFile.mimeType;
+  if (!base64ForExtraction) {
+    const tmp = await downloadAsBase64Once(supabase, loadedFile.bucket, loadedFile.path);
+    if (!tmp) return row;
+    base64ForExtraction = tmp.base64;
+    mimeForExtraction = tmp.mimeType;
   }
 
   let raw = '';
@@ -405,23 +412,25 @@ async function ensureExtraction(
 
   const prompt = isCatalog ? CATALOG_EXTRACTION_PROMPT : RECORD_EXTRACTION_PROMPT;
 
-  if (isTextual(file.mimeType)) {
+  if (isTextual(mimeForExtraction)) {
     try {
-      const decoded = atob(file.base64);
+      const decoded = atob(base64ForExtraction);
       raw = decoded;
-      const structured = await extractWithGemini(file.base64, file.mimeType, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 12000));
+      const structured = await extractWithGemini(base64ForExtraction, mimeForExtraction, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 12000));
       metadata = structured.metadata;
     } catch (e) {
       console.error('Text decode error', e);
     }
   } else {
-    const result = await extractWithGemini(file.base64, file.mimeType, prompt);
+    const result = await extractWithGemini(base64ForExtraction, mimeForExtraction, prompt);
     raw = result.raw;
     metadata = result.metadata;
   }
 
+  // Libera o base64 temporário se foi baixado só pra extração
+  base64ForExtraction = null;
+
   const updates: any = {
-    // CORREÇÃO 2: extracted_content sobe de 50k para 80k
     extracted_content: raw.slice(0, 80000),
     extracted_metadata: metadata,
   };
