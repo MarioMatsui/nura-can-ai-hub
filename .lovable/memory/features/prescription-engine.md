@@ -1,6 +1,6 @@
 ---
 name: Prescription engine
-description: Receituário+ — catálogo PDF pré-renderizado em JPEG (process-catalog-pdf, 1 página por invocação com checkpoint imediato); botão Gerar só libera quando pages_count===total_pages; saved_catalogs (atalhos/favoritos por usuário, limite 3, reaproveita processamento)
+description: Receituário+ — pipeline condicional de catálogo PDF (≤5MB inline base64 direto pro Gemini, >5MB pré-renderiza em JPEG via process-catalog-pdf 1 página/invocação com checkpoint); botão Gerar libera quando pages_count===total_pages; saved_catalogs (atalhos por usuário, limite 3)
 type: feature
 ---
 
