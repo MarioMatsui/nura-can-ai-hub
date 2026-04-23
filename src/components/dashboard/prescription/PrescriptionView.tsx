@@ -437,3 +437,74 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
     </div>
   );
 };
+
+interface SummaryRowProps {
+  label: string;
+  value: string;
+  multiline: boolean;
+}
+
+const SummaryRow = ({ label, value, multiline }: SummaryRowProps) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar.');
+    }
+  };
+
+  const lineCount = multiline ? Math.min(Math.max(value.split('\n').length, 3), 10) : 1;
+
+  return (
+    <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-4">
+      <label className="md:w-24 md:pt-2 text-sm font-medium text-foreground shrink-0">
+        {label}
+      </label>
+      <div className="relative flex-1 min-w-0">
+        {multiline ? (
+          <Textarea
+            readOnly
+            value={value}
+            placeholder={`Sem ${label.toLowerCase()} identificado.`}
+            rows={lineCount}
+            className="pr-24 resize-none bg-muted/40 cursor-text"
+          />
+        ) : (
+          <Input
+            readOnly
+            value={value}
+            placeholder={`Sem ${label.toLowerCase()} identificado.`}
+            className="pr-24 bg-muted/40 cursor-text"
+          />
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleCopy}
+          disabled={!value}
+          className={cn(
+            'absolute right-1 gap-1.5 h-8 px-2',
+            multiline ? 'top-1' : 'top-1/2 -translate-y-1/2',
+          )}
+          title={`Copiar ${label.toLowerCase()}`}
+          aria-label={`Copiar ${label.toLowerCase()}`}
+        >
+          {copied ? (
+            <>
+              <Check className="w-4 h-4 text-primary" />
+              <span className="text-xs">Copiado!</span>
+            </>
+          ) : (
+            <Copy className="w-4 h-4" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+};
