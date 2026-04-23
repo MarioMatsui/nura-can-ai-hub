@@ -122,7 +122,30 @@ const findNextFieldIndex = (
   return nearest;
 };
 
-/** Extrai o nome do produto a partir de um bloco já isolado. */
+/** Extrai a primeira linha não-vazia de um campo nominal dentro do bloco. */
+const extractSingleLineField = (block: string, field: string): string => {
+  const start = findFieldStart(block, field);
+  if (start === -1) return '';
+  const end = findNextFieldIndex(block, start, [field]);
+  let raw = (end === -1 ? block.slice(start) : block.slice(start, end)).trim();
+  raw = raw.split(/\n/).map((l) => l.trim()).find((l) => l.length > 0) || '';
+  raw = stripInlineMarkdown(stripLeadingBullet(raw)).replace(/\s+/g, ' ').trim();
+  return raw;
+};
+
+/** Anexa um detalhe ao nome se ainda não estiver contido (case-insensitive). */
+const appendDetail = (base: string, detail: string): string => {
+  if (!detail) return base;
+  const baseLc = base.toLowerCase();
+  const detailLc = detail.toLowerCase();
+  if (!base) return detail;
+  if (baseLc.includes(detailLc)) return base;
+  // Evita duplicar se o nome já termina com a info principal do detalhe
+  return `${base} – ${detail}`;
+};
+
+/** Extrai o nome do produto a partir de um bloco já isolado, compondo
+ *  Marca + Nome – Concentração – Apresentação quando disponível. */
 const extractProdutoFromBlock = (block: string): string => {
   const start = findFieldStart(block, 'produto');
   if (start === -1) return '';
@@ -135,20 +158,28 @@ const extractProdutoFromBlock = (block: string): string => {
   raw = raw.replace(/\s+/g, ' ').trim();
 
   // Marca dentro do mesmo bloco
-  const marcaStart = findFieldStart(block, 'marca');
-  let marca = '';
-  if (marcaStart !== -1) {
-    const marcaEnd = findNextFieldIndex(block, marcaStart, ['produto']);
-    let m = (marcaEnd === -1 ? block.slice(marcaStart) : block.slice(marcaStart, marcaEnd)).trim();
-    m = m.split(/\n/).map((l) => l.trim()).find((l) => l.length > 0) || '';
-    m = stripInlineMarkdown(stripLeadingBullet(m)).replace(/\s+/g, ' ').trim();
-    marca = m;
+  const marca = extractSingleLineField(block, 'marca');
+  let nome = raw;
+  if (marca && nome && !nome.toLowerCase().includes(marca.toLowerCase())) {
+    nome = `${marca} ${nome}`.replace(/\s+/g, ' ').trim();
+  } else if (marca && !nome) {
+    nome = marca;
   }
 
-  if (marca && raw && !raw.toLowerCase().includes(marca.toLowerCase())) {
-    return `${marca} ${raw}`.replace(/\s+/g, ' ').trim();
-  }
-  return raw;
+  // Composição defensiva: anexar concentração e apresentação quando ausentes na linha
+  const concentracao =
+    extractSingleLineField(block, 'concentração') ||
+    extractSingleLineField(block, 'concentracao');
+  const apresentacao =
+    extractSingleLineField(block, 'apresentação') ||
+    extractSingleLineField(block, 'apresentacao') ||
+    extractSingleLineField(block, 'volume');
+
+  let composed = nome;
+  composed = appendDetail(composed, concentracao);
+  composed = appendDetail(composed, apresentacao);
+
+  return composed.replace(/\s+/g, ' ').trim();
 };
 
 /** Extrai a posologia a partir de um bloco já isolado. */

@@ -490,6 +490,7 @@ const SummaryRow = ({ label, value, multiline }: SummaryRowProps) => {
             value={value}
             placeholder={`Sem ${label.toLowerCase()} identificado.`}
             className="pr-24 bg-muted/40 cursor-text"
+            title={value || undefined}
           />
         )}
         <Button
