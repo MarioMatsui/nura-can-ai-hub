@@ -28,6 +28,20 @@ const PAGES_BUCKET = 'prescription-files-pages';
 const RENDER_SCALE = 1.5; // ~108 DPI — suficiente para o Gemini ler texto/produtos
 const MAX_PAGES = 120;    // hard cap defensivo
 
+// Em ambientes "browser-like" (Deno edge runtime), o @hyzyla/pdfium NÃO auto-carrega
+// o .wasm — exige que a gente passe `wasmBinary`. Baixamos do esm.sh (mesma versão
+// fixada da lib) uma única vez por cold-start e cacheamos em escopo de módulo.
+const PDFIUM_WASM_URL = 'https://esm.sh/@hyzyla/pdfium@2.1.7/pdfium.wasm';
+let cachedWasm: ArrayBuffer | null = null;
+
+async function getPdfiumWasm(): Promise<ArrayBuffer> {
+  if (cachedWasm) return cachedWasm;
+  const res = await fetch(PDFIUM_WASM_URL);
+  if (!res.ok) throw new Error(`Falha ao baixar PDFium WASM: HTTP ${res.status}`);
+  cachedWasm = await res.arrayBuffer();
+  return cachedWasm;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -119,7 +133,9 @@ serve(async (req) => {
     console.log(`PDF carregado: ${(pdfBytes.length / 1024 / 1024).toFixed(2)}MB`);
 
     console.log('Inicializando PDFium…');
-    const library = await PDFiumLibrary.init();
+    const wasmBinary = await getPdfiumWasm();
+    console.log(`PDFium WASM carregado: ${(wasmBinary.byteLength / 1024 / 1024).toFixed(2)}MB`);
+    const library = await PDFiumLibrary.init({ wasmBinary });
     const document = await library.loadDocument(pdfBytes);
 
     const pageObjs = Array.from(document.pages());
