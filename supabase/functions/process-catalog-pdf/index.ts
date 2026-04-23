@@ -6,12 +6,13 @@
 // Para PDF, exige base64 inline — que estoura RAM (256MB) e o limite de ~7MB
 // do `inline_data` em catálogos médios. Convertendo páginas em PNG, cada página
 // vira uma imagem pequena (< 7MB), enviada como signed URL na geração.
-//
-// Tamanhos típicos: render escala 1.5 → ~1240px largura → 200-500KB por página.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7?target=deno";
+// Entrypoint base64: embute o WASM no próprio módulo, não depende de
+// `createRequire` nem de fetch externo do .wasm. É o único caminho estável
+// no edge runtime do Supabase (import.meta.url é https://, não file://).
+import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7/browser/base64";
 import { encode as encodePng } from "https://deno.land/x/pngs@0.1.1/mod.ts";
 
 const corsHeaders = {
@@ -26,20 +27,6 @@ const SOURCE_BUCKET = 'prescription-files';
 const PAGES_BUCKET = 'prescription-files-pages';
 const RENDER_SCALE = 1.5; // ~108 DPI — suficiente para o Gemini ler texto/produtos
 const MAX_PAGES = 120;    // hard cap defensivo
-
-// Forçamos o build `?target=deno` do esm.sh — esse build NÃO injeta polyfills
-// browser, então `typeof XMLHttpRequest === 'undefined'` e o pdfium entra no
-// caminho Deno. Carregamos o WASM manualmente como fallback defensivo.
-const PDFIUM_WASM_URL = 'https://esm.sh/@hyzyla/pdfium@2.1.7/pdfium.wasm';
-let cachedWasm: ArrayBuffer | null = null;
-
-async function getPdfiumWasm(): Promise<ArrayBuffer> {
-  if (cachedWasm) return cachedWasm;
-  const res = await fetch(PDFIUM_WASM_URL);
-  if (!res.ok) throw new Error(`Falha ao baixar PDFium WASM: HTTP ${res.status}`);
-  cachedWasm = await res.arrayBuffer();
-  return cachedWasm;
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -131,10 +118,8 @@ serve(async (req) => {
     const pdfBytes = new Uint8Array(ab);
     console.log(`PDF carregado: ${(pdfBytes.length / 1024 / 1024).toFixed(2)}MB`);
 
-    console.log('Inicializando PDFium…');
-    const wasmBinary = await getPdfiumWasm();
-    console.log(`PDFium WASM carregado: ${(wasmBinary.byteLength / 1024 / 1024).toFixed(2)}MB`);
-    const library = await PDFiumLibrary.init({ wasmBinary });
+    console.log('Inicializando PDFium (base64)…');
+    const library = await PDFiumLibrary.init();
     const document = await library.loadDocument(pdfBytes);
 
     const pageObjs = Array.from(document.pages());
