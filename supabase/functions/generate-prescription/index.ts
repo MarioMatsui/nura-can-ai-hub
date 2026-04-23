@@ -695,6 +695,28 @@ A estrutura abaixo é uma referência. Use as seções que fizerem sentido clín
 - **Observações de uso e monitoramento** — sinais de alerta, marcadores de reavaliação, tempo até resposta esperada.
 - **Considerações finais** — limitações da análise, contraindicações, interações com medicações em uso.
 - **Aviso** — esta é uma sugestão de apoio à decisão; a prescrição final cabe ao médico responsável.
+
+### REGRA OBRIGATÓRIA — LINHA "Produto:"
+Para CADA produto sugerido, a linha imediatamente após "Produto:" DEVE conter o nome
+clinicamente completo neste padrão único:
+
+  {Marca} {Nome do Produto} – {Concentração completa} – {Apresentação/Volume}
+
+Regras:
+- Se a marca já estiver no nome, NÃO duplicar.
+- Concentração: incluir TODOS os fitocanabinoides relevantes do catálogo (CBD, THC,
+  CBG, CBN, CBC, THCA, THCV, etc.) no formato "X mg/ml CBD + Y mg/ml THC" ou
+  "Xmg CBD + Ymg THC". Se só houver proporção (ex: 1:1), use a proporção.
+- Apresentação: sempre incluir volume/quantidade (ex: 30ml, 10g, 30 cápsulas, 30 gummies).
+- Use apenas dados presentes no catálogo. Se faltar algum dado, omita-o (NUNCA inventar).
+- Sem markdown, sem aspas, sem bullets na linha "Produto:". Texto puro em uma linha só.
+- Você pode (e deve) detalhar Concentração, Apresentação e Posologia em subcampos
+  abaixo — mas a linha "Produto:" precisa ser auto-suficiente para uso em receita.
+
+Exemplos:
+  Produto: Sensia THC & CBD 1:1 Oil Tincture – 10mg/ml THC + 10mg/ml CBD – 30ml
+  Produto: UBSuper General Relief Tincture – 50mg/ml CBD + 16mg/ml CBG + 5mg/ml THC – 30ml
+  Produto: Elite Live Rosin Blue Dream – THC dominante (Live Rosin) – 1g
 `;
 
 // =============================================================================
