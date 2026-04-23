@@ -11,7 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
-import { PDFiumLibrary } from "npm:@hyzyla/pdfium@2.1.7";
+import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7?target=deno";
 import { encode as encodePng } from "https://deno.land/x/pngs@0.1.1/mod.ts";
 
 const corsHeaders = {
@@ -27,9 +27,19 @@ const PAGES_BUCKET = 'prescription-files-pages';
 const RENDER_SCALE = 1.5; // ~108 DPI — suficiente para o Gemini ler texto/produtos
 const MAX_PAGES = 120;    // hard cap defensivo
 
-// O specifier `npm:` no Deno Edge resolve o `.wasm` adjacente automaticamente,
-// dispensando carregamento manual e evitando o build "browser" do esm.sh que
-// detectava incorretamente o ambiente como browser.
+// Forçamos o build `?target=deno` do esm.sh — esse build NÃO injeta polyfills
+// browser, então `typeof XMLHttpRequest === 'undefined'` e o pdfium entra no
+// caminho Deno. Carregamos o WASM manualmente como fallback defensivo.
+const PDFIUM_WASM_URL = 'https://esm.sh/@hyzyla/pdfium@2.1.7/pdfium.wasm';
+let cachedWasm: ArrayBuffer | null = null;
+
+async function getPdfiumWasm(): Promise<ArrayBuffer> {
+  if (cachedWasm) return cachedWasm;
+  const res = await fetch(PDFIUM_WASM_URL);
+  if (!res.ok) throw new Error(`Falha ao baixar PDFium WASM: HTTP ${res.status}`);
+  cachedWasm = await res.arrayBuffer();
+  return cachedWasm;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -122,7 +132,9 @@ serve(async (req) => {
     console.log(`PDF carregado: ${(pdfBytes.length / 1024 / 1024).toFixed(2)}MB`);
 
     console.log('Inicializando PDFium…');
-    const library = await PDFiumLibrary.init();
+    const wasmBinary = await getPdfiumWasm();
+    console.log(`PDFium WASM carregado: ${(wasmBinary.byteLength / 1024 / 1024).toFixed(2)}MB`);
+    const library = await PDFiumLibrary.init({ wasmBinary });
     const document = await library.loadDocument(pdfBytes);
 
     const pageObjs = Array.from(document.pages());
