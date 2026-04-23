@@ -171,8 +171,10 @@ function assertValidBase64(b64: string, sizeBytes: number, label: string): void 
 // e o limite prático de ~7MB do inline_data do Gemini.
 const INLINE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 
-// Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos)
-// ou apontado por signed URL (arquivos grandes — Gemini busca direto do Storage).
+// Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos),
+// apontado por signed URL (arquivos grandes — Gemini busca direto do Storage),
+// ou — no caso especial do catálogo PDF — explodido em páginas PNG já pré-renderizadas
+// pelo `process-catalog-pdf` (cada página vira uma imagem separada).
 type LoadedFile = {
   base64: string | null;
   signedUrl: string | null;
@@ -180,7 +182,29 @@ type LoadedFile = {
   sizeBytes: number;
   bucket: string;
   path: string;
+  // Se presente, este arquivo é um catálogo PDF já renderizado em páginas.
+  // Cada item tem signed URL própria de uma imagem PNG.
+  pages?: Array<{ signedUrl: string; mimeType: string; path: string }>;
 };
+
+const PAGES_BUCKET = 'prescription-files-pages';
+
+// Carrega um catálogo já pré-processado em páginas PNG (gerado por process-catalog-pdf).
+// Retorna LoadedFile com `pages` populado — caminho preferido para PDFs grandes,
+// pois cada página vira uma image_url independente sob o limite do provider.
+async function loadCatalogPages(
+  supabase: any,
+  pagePaths: string[],
+): Promise<Array<{ signedUrl: string; mimeType: string; path: string }>> {
+  const out: Array<{ signedUrl: string; mimeType: string; path: string }> = [];
+  for (const path of pagePaths) {
+    const url = await getSignedUrl(supabase, PAGES_BUCKET, path, 600);
+    if (url) {
+      out.push({ signedUrl: url, mimeType: 'image/png', path });
+    }
+  }
+  return out;
+}
 
 async function getSignedUrl(
   supabase: any,
