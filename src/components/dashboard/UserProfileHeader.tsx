@@ -180,10 +180,10 @@ export const UserProfileHeader = ({
               <AvatarFallback>{profile?.full_name?.[0] || 'U'}</AvatarFallback>
             </Avatar>
             <div className="flex-1 text-left min-w-0">
-              <div className="font-medium text-sm truncate">
+              <div className="font-medium text-sm truncate group-hover:text-black dark:group-hover:text-black transition-colors">
                 {profile?.full_name || user?.email || 'Usuário'}
               </div>
-              <div className="text-xs text-muted-foreground truncate">
+              <div className="text-xs text-muted-foreground truncate group-hover:text-black/70 dark:group-hover:text-black/70 transition-colors">
                 {getPlanLabel()}
               </div>
             </div>

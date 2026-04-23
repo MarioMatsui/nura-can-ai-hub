@@ -103,12 +103,23 @@ Flags que precisam sobreviver a qualquer atualização:
 Antes da correção, `ensureExtraction` sobrescrevia `extracted_metadata` com `{ products, catalog_name, ... }`, apagando `skip_page_render`. Resultado: ao recarregar a página e clicar em "Usar" no catálogo salvo, `SavedCatalogs.handleUse` lia `meta.skip_page_render === undefined`, calculava `pages_count=0/total_pages=0`, e `PrescriptionView.catalogReady` falhava — botão eternamente desabilitado mostrando "Processando páginas do catálogo…". Migração pontual restaurou as flags em catálogos PDF ≤5MB sem `pages[]`.
 
 ## Frontend
-- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 1`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…".
+- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 1`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. No estado `isProcessing` mostra "Enviando…" + linha em **negrito** "Processando páginas do catálogo (X/Y)" — contador dentro do próprio dropzone, não fora.
 - **Retry automático por batch**: até 3 tentativas com `sleep(1500ms)` entre elas. Antes de cada retry, sincroniza `pages_count`/`total_pages` direto da tabela `prescription_catalogs` (o backend pode ter salvo checkpoint mesmo com a resposta HTTP falhando) e ajusta `startPage` para o real progresso. Como o backend é reentrante, retentar nunca duplica página.
 - **Retomada manual**: quando catálogo fica em `pages_count < total_pages` sem estar processando, o card mostra `X/Y páginas processadas` + botão **"Continuar processamento"** (`PlayCircle`). Clicar dispara `runCatalogProcessing` a partir de `pages_count` real do banco — sem reupload.
 - Toast de pausa: `"Processamento pausado em X/Y páginas. Clique em Continuar processamento para retomar."`
 - `PrescriptionView`: botão "Gerar Receituário" só habilita quando catálogo PDF está **100% processado** (`!isProcessing && pages_count === total_pages && total_pages > 0`). Não-PDF não exige processamento.
 - Tipo `UploadedFile` inclui `total_pages?: number`.
+
+## SFX (efeitos sonoros)
+- Utilitário `src/lib/sfx.ts` com cache de `HTMLAudioElement` por nome e debounce de 300ms.
+- `playSfx('upload')` → `src/assets/uploadFoi.wav`. Disparado em `UploadDropzone.handleUpload` **APÓS** insert bem-sucedido na tabela. **Não** toca quando o usuário clica em "Usar" em um catálogo salvo (esse fluxo só chama `onChange`/`onUse`, nunca passa por `handleUpload`).
+- `playSfx('receita')` → `src/assets/receitaFoi.mp3`. Disparado em `PrescriptionView.handleGenerate` logo após `setAiResponse(payload?.response)` quando há resposta válida.
+- Volume fixo 0.6, autoplay bloqueado é silenciado via `.catch(() => {})`.
+
+## Histórico de receituários (UI)
+- Card é `<div role="button">` com classe `group`. Hover/selected aplicam `text-black dark:text-black` no card e descendentes (nome do paciente, queixa, data) — segue o mesmo padrão das conversas na sidebar.
+- Botão `<X>` absoluto no canto superior direito, visível só em `group-hover` (`opacity-0 group-hover:opacity-100`). Clique abre `AlertDialog` de confirmação ("Tem certeza que deseja excluir?"). Confirm executa `supabase.from('prescription_results').delete().eq('id', id)` — RLS `Users can delete own results` já permite. Atualiza estado local (`setHistory(filter)`) sem refetch.
+
 
 ## Não tocar
 - `chat-ai` permanece intacto.

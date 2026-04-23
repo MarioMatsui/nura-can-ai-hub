@@ -177,8 +177,8 @@ export const ChatSidebar = ({
                 onClick={handlePrescriptionClick}
                 variant="ghost"
                 className={cn(
-                  'w-full justify-start',
-                  activeView === 'prescription' && hasPrescriptionAccess && 'bg-accent',
+                  'w-full justify-center relative',
+                  activeView === 'prescription' && hasPrescriptionAccess && 'bg-accent text-black dark:text-black hover:text-black dark:hover:text-black',
                   !hasPrescriptionAccess && 'opacity-50 cursor-not-allowed hover:bg-transparent',
                 )}
                 size="sm"
@@ -187,7 +187,7 @@ export const ChatSidebar = ({
               >
                 <FilePlus2 className="mr-2 h-4 w-4" />
                 Receituário +
-                {!hasPrescriptionAccess && <Lock className="ml-auto h-3.5 w-3.5" />}
+                {!hasPrescriptionAccess && <Lock className="absolute right-3 h-3.5 w-3.5" />}
               </Button>
             </>
           ) : (

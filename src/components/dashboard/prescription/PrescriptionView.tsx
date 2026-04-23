@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList } from 'lucide-react';
+import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
@@ -10,6 +10,17 @@ import { UploadDropzone, UploadedFile } from './UploadDropzone';
 import { SavedCatalogs, useSavedCatalogs, SAVED_CATALOGS_LIMIT } from './SavedCatalogs';
 import { MarkdownMessage } from '@/components/dashboard/MarkdownMessage';
 import { cn } from '@/lib/utils';
+import { playSfx } from '@/lib/sfx';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface PrescriptionViewProps {
   userId: string;
@@ -31,6 +42,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const [aiResponse, setAiResponse] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [historyToDelete, setHistoryToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { items: savedCatalogs, loading: savedLoading, refresh: refreshSaved } = useSavedCatalogs(userId);
 
@@ -54,7 +68,6 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
     || catalog.file_name.toLowerCase().endsWith('.pdf')
   );
   const catalogReady = !!catalog && !catalog.isProcessing && (
-    // PDFs precisam estar 100% processados (pages_count === total_pages); outros formatos não exigem processamento.
     !isCatalogPdf
     || (
       typeof catalog.pages_count === 'number'
@@ -87,7 +100,12 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
         toast.error(payload.message || 'Falha ao gerar receituário.');
         return;
       }
-      setAiResponse(payload?.response || '');
+      const response = payload?.response || '';
+      setAiResponse(response);
+      if (response) {
+        // SFX: receituário gerado com sucesso
+        playSfx('receita');
+      }
       toast.success('Receituário gerado.');
       loadHistory();
     } catch (e: any) {
@@ -111,7 +129,31 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
   const openHistoryItem = (item: HistoryItem) => {
     setAiResponse(item.ai_response);
+    setSelectedHistoryId(item.id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!historyToDelete) return;
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('prescription_results')
+        .delete()
+        .eq('id', historyToDelete);
+      if (error) throw error;
+      setHistory((prev) => prev.filter((h) => h.id !== historyToDelete));
+      if (selectedHistoryId === historyToDelete) {
+        setSelectedHistoryId(null);
+      }
+      toast.success('Receituário removido.');
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || 'Falha ao remover.');
+    } finally {
+      setIsDeleting(false);
+      setHistoryToDelete(null);
+    }
   };
 
   return (
@@ -203,13 +245,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
                 </>
               )}
             </Button>
-            {!canGenerate && !isGenerating && (
+            {!canGenerate && !isGenerating && (!catalog || !record) && (
               <p className="text-xs text-muted-foreground mt-2">
-                {catalog && !catalogReady && !catalog.skipPageRender
-                  ? (typeof catalog.total_pages === 'number' && catalog.total_pages > 0
-                      ? `Processando páginas do catálogo (${catalog.pages_count ?? 0}/${catalog.total_pages})…`
-                      : 'Processando páginas do catálogo…')
-                  : 'Envie o catálogo e o prontuário para liberar a geração.'}
+                Envie o catálogo e o prontuário para liberar a geração.
               </p>
             )}
           </section>
@@ -262,33 +300,99 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             <section className="space-y-3">
               <h2 className="text-sm font-medium text-muted-foreground">Histórico recente</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {history.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => openHistoryItem(item)}
-                    className={cn(
-                      'text-left p-3 rounded-lg border border-border bg-card hover:bg-accent transition-colors',
-                    )}
-                  >
-                    <div className="text-sm font-medium text-foreground line-clamp-1">
-                      {item.patient_name || 'Paciente não identificado'}
+                {history.map((item) => {
+                  const isSelected = selectedHistoryId === item.id;
+                  return (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openHistoryItem(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openHistoryItem(item);
+                        }
+                      }}
+                      className={cn(
+                        'group relative text-left p-3 pr-9 rounded-lg border border-border bg-card transition-colors cursor-pointer',
+                        'hover:bg-accent hover:text-black dark:hover:text-black',
+                        isSelected && 'bg-accent text-black dark:text-black',
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'text-sm font-medium line-clamp-1 transition-colors',
+                          isSelected ? 'text-black' : 'text-foreground group-hover:text-black',
+                        )}
+                      >
+                        {item.patient_name || 'Paciente não identificado'}
+                      </div>
+                      <div
+                        className={cn(
+                          'text-xs line-clamp-1 mt-0.5 transition-colors',
+                          isSelected ? 'text-black/70' : 'text-muted-foreground group-hover:text-black/70',
+                        )}
+                      >
+                        {item.main_complaint || 'Sem queixa principal extraída'}
+                      </div>
+                      <div
+                        className={cn(
+                          'text-[11px] mt-1 transition-colors',
+                          isSelected ? 'text-black/60' : 'text-muted-foreground/70 group-hover:text-black/60',
+                        )}
+                      >
+                        {new Date(item.created_at).toLocaleString('pt-BR', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHistoryToDelete(item.id);
+                        }}
+                        className={cn(
+                          'absolute top-2 right-2 p-1 rounded-md transition-opacity',
+                          'opacity-0 group-hover:opacity-100 focus:opacity-100',
+                          'hover:bg-background/80 text-muted-foreground hover:text-destructive',
+                          isSelected && 'text-black/60 hover:text-destructive',
+                        )}
+                        title="Excluir receituário"
+                        aria-label="Excluir receituário"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
-                    <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                      {item.main_complaint || 'Sem queixa principal extraída'}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground/70 mt-1">
-                      {new Date(item.created_at).toLocaleString('pt-BR', {
-                        day: '2-digit', month: '2-digit', year: 'numeric',
-                        hour: '2-digit', minute: '2-digit',
-                      })}
-                    </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
         </div>
       </ScrollArea>
+
+      <AlertDialog open={!!historyToDelete} onOpenChange={(open) => !open && setHistoryToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Excluindo…' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
