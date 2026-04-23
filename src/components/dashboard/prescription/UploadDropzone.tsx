@@ -115,11 +115,11 @@ export const UploadDropzone = ({
         let lastError: any = null;
 
         try {
-          // Loop de batches — cada chamada processa ~8 páginas (~5-7s CPU).
+          // Loop de batches — cada chamada processa ~3 páginas (JPEG, ~7-9s CPU).
           while (!done) {
             const { data: procData, error: procError } = await supabase.functions.invoke(
               'process-catalog-pdf',
-              { body: { catalogId: uploaded.id, startPage, batchSize: 8 } },
+              { body: { catalogId: uploaded.id, startPage, batchSize: 3 } },
             );
             if (procError) {
               lastError = procError;
@@ -133,7 +133,7 @@ export const UploadDropzone = ({
             processed = r?.processed ?? processed;
             total = r?.total ?? total;
             done = !!r?.done;
-            startPage = r?.next_page ?? (startPage + 8);
+            startPage = r?.next_page ?? (startPage + 3);
 
             onChange({
               ...uploaded,

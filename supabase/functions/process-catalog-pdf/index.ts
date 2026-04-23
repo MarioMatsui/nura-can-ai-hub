@@ -1,18 +1,19 @@
-// Pré-processa o PDF do catálogo: renderiza páginas como PNG e armazena
+// Pré-processa o PDF do catálogo: renderiza páginas como JPEG e armazena
 // no bucket `prescription-files-pages`. Roda EM LOTES (batch) para evitar
 // estourar o CPU time limit (~10s) das edge functions.
 //
 // O frontend chama esta função em loop, passando `startPage`/`batchSize`,
 // até receber `done: true`. Cada batch:
-//  - inicializa o PDFium (~1s),
-//  - renderiza N páginas (default 8),
+//  - inicializa o PDFium (~1s, base64 embutido),
+//  - renderiza N páginas (default 3),
+//  - encoda em JPEG quality 80 (muito mais rápido e leve que PNG),
 //  - faz upload no bucket,
 //  - persiste o progresso em `extracted_metadata`.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7/browser/base64";
-import { encode as encodePng } from "https://deno.land/x/pngs@0.1.1/mod.ts";
+import { Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,9 +25,10 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const SOURCE_BUCKET = 'prescription-files';
 const PAGES_BUCKET = 'prescription-files-pages';
-const RENDER_SCALE = 1.0; // ~72 DPI — PNGs ~300-700KB, suficiente para Gemini ler texto
-const MAX_PAGES = 200;    // hard cap defensivo
-const DEFAULT_BATCH = 8;
+const RENDER_SCALE = 0.75;   // ~54 DPI — JPEGs ~150-300KB, suficiente para Gemini ler texto
+const JPEG_QUALITY = 80;     // bom equilíbrio nitidez/tamanho
+const MAX_PAGES = 200;       // hard cap defensivo
+const DEFAULT_BATCH = 3;     // 3 páginas por invocação cabem com folga em ~10s de CPU
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -148,13 +150,17 @@ serve(async (req) => {
           scale: RENDER_SCALE,
           render: 'bitmap',
         });
-        const png = encodePng(rendered.data, rendered.width, rendered.height);
 
-        const path = `${userId}/${catalogId}/page-${String(pageNumber).padStart(3, '0')}.png`;
+        // PDFium retorna RGBA bitmap. imagescript aceita Uint8Array RGBA direto.
+        const img = new Image(rendered.width, rendered.height);
+        img.bitmap.set(rendered.data);
+        const jpeg = await img.encodeJPEG(JPEG_QUALITY);
+
+        const path = `${userId}/${catalogId}/page-${String(pageNumber).padStart(3, '0')}.jpg`;
         const { error: upErr } = await supabase.storage
           .from(PAGES_BUCKET)
-          .upload(path, png, {
-            contentType: 'image/png',
+          .upload(path, jpeg, {
+            contentType: 'image/jpeg',
             upsert: true,
           });
 
@@ -164,7 +170,7 @@ serve(async (req) => {
         }
 
         newlyUploaded.push(path);
-        console.log(`Página ${pageNumber}/${totalPages}: ${rendered.width}x${rendered.height}, PNG ${(png.length / 1024).toFixed(0)}KB`);
+        console.log(`Página ${pageNumber}/${totalPages}: ${rendered.width}x${rendered.height}, JPEG ${(jpeg.length / 1024).toFixed(0)}KB`);
       } catch (e) {
         console.error(`Erro renderizando página ${pageNumber}:`, e);
       }
@@ -185,6 +191,7 @@ serve(async (req) => {
       total_pages: totalPages,
       processing_complete: done,
       pages_render_scale: RENDER_SCALE,
+      pages_format: 'image/jpeg',
       ...(done ? { pages_processed_at: new Date().toISOString() } : {}),
     };
 
