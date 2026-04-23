@@ -262,9 +262,14 @@ async function loadFile(
   if (!probe) return null;
   const { sizeBytes, mimeType, signedUrl } = probe;
 
+  // PDFs precisam de base64 inline (Gemini rejeita HTTP URL para application/pdf).
+  // Permitimos inline até 5MB; acima disso o catálogo já vem pré-renderizado em páginas.
+  const isPdf = mimeType === 'application/pdf' || path.toLowerCase().endsWith('.pdf');
+  const inlineLimit = isPdf ? PDF_INLINE_THRESHOLD : INLINE_THRESHOLD;
+
   // Arquivos grandes: NÃO baixar. Gemini buscará direto via signed URL.
-  if (sizeBytes > INLINE_THRESHOLD) {
-    console.log(`Arquivo grande (${(sizeBytes / 1024 / 1024).toFixed(2)}MB) — usando signed URL, sem materializar base64`);
+  if (sizeBytes > inlineLimit) {
+    console.log(`Arquivo grande (${(sizeBytes / 1024 / 1024).toFixed(2)}MB, mime=${mimeType}) — usando signed URL, sem materializar base64`);
     return { base64: null, signedUrl, mimeType, sizeBytes, bucket, path };
   }
 
