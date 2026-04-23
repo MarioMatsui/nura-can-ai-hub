@@ -44,6 +44,12 @@ interface UploadDropzoneProps {
   onChange: (file: UploadedFile | null) => void;
   label: string;
   description: string;
+  /** Para catálogos: callback chamado quando o usuário salva o catálogo como favorito. */
+  onSaved?: () => void;
+  /** Para catálogos: indica se o catálogo atual já está na lista de salvos do usuário. */
+  isSaved?: boolean;
+  /** Para catálogos: indica se o limite de salvos foi atingido (3). */
+  savedLimitReached?: boolean;
 }
 
 export const UploadDropzone = ({
