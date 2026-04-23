@@ -24,8 +24,10 @@ export interface UploadedFile {
   file_name: string;
   file_path: string;
   file_type: string;
-  /** Para catálogos: quantas páginas PNG já foram pré-renderizadas (0/undefined = ainda processando ou não-PDF) */
+  /** Para catálogos: quantas páginas PNG já foram pré-renderizadas */
   pages_count?: number;
+  /** Total de páginas do PDF (conhecido após o primeiro batch) */
+  total_pages?: number;
   /** Para catálogos PDF: indica que o backend ainda está renderizando as páginas */
   isProcessing?: boolean;
 }
