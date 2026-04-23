@@ -2,57 +2,63 @@
 
 ## Diagnóstico
 
-Logs confirmam: 63 páginas foram processadas e salvas com sucesso (`✓ checkpoint salvo`). Na página 64, a invocação estourou CPU e voltou erro pro frontend. O frontend então **deu `break` no loop e parou**.
+Encontrei a causa exata. O problema está no `SavedCatalogs.tsx`, linhas 122–123:
 
+```ts
+pages_count: Number(meta.pages_count ?? pages.length) || 0,
+total_pages: Number(meta.total_pages ?? 0) || 0,
 ```
-[batch start=63 size=1] … (64ª página)
-PDF tem 85 páginas. Processando 64–64 de 85 (já processadas: 63).
-CPU Time exceeded   ← aqui o loop morreu
+
+O operador `|| 0` **transforma o valor `1` em `1` (ok), mas o problema é outro**: quando o catálogo foi salvo via pipeline rápido (≤5MB), o `extracted_metadata` tem:
+```json
+{ "skip_page_render": true, "pages_count": 1, "total_pages": 1, "size_bytes": 3145728 }
 ```
 
-Causa raiz do "parou em 63/85": frontend sem retry. O backend está correto (checkpoint funcionou: progresso preservado).
+A leitura está correta (`pages_count=1, total_pages=1`). Mas o `UploadedFile` retornado **não inclui** a flag `skip_page_render`, e isso quebra a UX no card.
 
-## Plano de correção
+**Mas o bug real que você relatou ("não estão carregando")** está em outro lugar:
 
-### 1) Retry automático com backoff no frontend
-**Arquivo:** `src/components/dashboard/prescription/UploadDropzone.tsx`
+Olhando `PrescriptionView.tsx` linha 56–65, a condição `catalogReady` exige `catalog.pages_count === catalog.total_pages` para PDFs. Para o ZELENO (85MB), os valores são `85===85` → libera. Para os pequenos, deveria ser `1===1` → libera. **A condição passa.**
 
-No `while (!done)`:
-- Em caso de `procError` ou `r?.error`, **não** dar `break` imediato.
-- Tentar até **3 retries** por batch, com `await sleep(1500ms)` entre tentativas.
-- Só sair do loop e mostrar erro se as 3 tentativas falharem em sequência.
-- Como o backend é reentrante (`effectiveStartPage = max(startPage, existingPages.length)`), retentar é seguro — nunca duplica página.
+Porém, o card no `UploadDropzone` mostra "1 páginas prontas" para os pequenos, o que parece "não carregado" visualmente. Pior: como o `total_pages=1` mas o PDF real tem dezenas de páginas, **se houver qualquer hidratação que tente recontar, o estado fica inconsistente**.
 
-### 2) Detectar progresso parado e retomar do banco
-**Arquivo:** `src/components/dashboard/prescription/UploadDropzone.tsx`
+O caso mais provável do "não carrega": o toast aparece (`"Catálogo X carregado"`), o estado interno é setado, **mas o card do catálogo no topo não reflete porque o `UploadedFile` retornado tem `pages_count=1, total_pages=1` que é interpretado como um catálogo qualquer, sem o sinal de "modo rápido"**. Visualmente o usuário vê "1 páginas prontas" e acha que carregou errado/não carregou.
 
-Antes de cada retry, ler `extracted_metadata.pages_count` direto da tabela `prescription_catalogs`. Se o backend salvou checkpoint mesmo a chamada tendo retornado erro (acontece quando o timeout ocorre depois do upload mas antes da resposta HTTP), o loop avança usando o valor real do banco em vez do `startPage` antigo.
+## Correção
 
-### 3) Botão "Continuar processamento" no card do catálogo
-**Arquivo:** `src/components/dashboard/prescription/UploadDropzone.tsx`
+### 1) `SavedCatalogs.tsx` — propagar a flag `skip_page_render`
+Em `handleUse`, ler `meta.skip_page_render` e:
+- Se `true`: garantir `pages_count: 1, total_pages: 1` (sinais técnicos do modo rápido) e adicionar `isProcessing: false`.
+- Se `false`/ausente: manter lógica atual com os valores reais do banco.
 
-Quando catálogo PDF está com `pages_count < total_pages` e **não** está processando, mostrar:
-```
-63/85 páginas processadas
-[Continuar processamento]
-```
-O botão dispara o mesmo loop a partir de `pages_count`, sem precisar reenviar o PDF. Útil para recuperar catálogos que ficaram parados (como o atual de 63/85).
+### 2) `UploadDropzone.tsx` — exibir rótulo correto para modo rápido
+Adicionar campo opcional `skipPageRender?: boolean` em `UploadedFile`.
+Quando setado:
+- Substituir "1 páginas prontas" por **"✓ Pronto para uso (modo rápido)"**.
+- Não mostrar barra de progresso.
 
-### 4) Pequeno ajuste de mensagem
-- Toast de erro intermediário muda para algo acionável:  
-  `"Processamento pausado em X/Y páginas. Clique em Continuar processamento para retomar."`
+### 3) `SavedCatalogs.tsx` — passar `skipPageRender: true` no objeto retornado
+Quando `meta.skip_page_render === true`, retornar `{ ...file, skipPageRender: true }`.
+
+### 4) `UploadDropzone.tsx` (handleUpload) — setar a flag também no upload novo
+Linha 287: adicionar `skipPageRender: true` ao `onChange` do branch ≤5MB, para consistência.
+
+### 5) `PrescriptionView.tsx` — texto auxiliar
+Não mostrar "Processando páginas do catálogo (0/1)…" quando `catalog.skipPageRender === true`.
 
 ## O que NÃO muda
-- Backend `process-catalog-pdf` permanece como está (já é resiliente: checkpoint por página + retomada defensiva).
-- Sem mudanças em schema, RLS, buckets, `generate-prescription` ou `chat-ai`.
-- Batch continua em 1 página por chamada.
+- Backend (`process-catalog-pdf`, `generate-prescription`).
+- Schema do banco / RLS.
+- Lógica de `catalogReady` (já funciona com `1===1`).
+- Pipeline pesado para PDFs > 5MB.
 
 ## Resultado esperado
-1. No catálogo atual (Zeleno Meds, 63/85): aparece botão **Continuar processamento** → ao clicar, retoma da página 64 e termina as 22 restantes.
-2. Em uploads novos: se uma chamada falhar, o frontend tenta novamente automaticamente até 3 vezes antes de pausar. Praticamente todos os catálogos terminam sem intervenção do usuário.
-3. Botão "Gerar Receituário" continua só liberando em `pages_count === total_pages`.
+- Clicar em "Usar" no Canfy rápido (3MB) → card mostra **"✓ Pronto para uso (modo rápido)"**, botão "Gerar Receituário" habilita imediatamente.
+- ZELENO de 10MB continua mostrando **"85 páginas prontas"** como hoje.
+- Sem mais confusão visual.
 
 ## Arquivos a alterar
+- `src/components/dashboard/prescription/SavedCatalogs.tsx`
 - `src/components/dashboard/prescription/UploadDropzone.tsx`
-- `mem://features/prescription-engine` (documentar retry + retomada manual)
+- `src/components/dashboard/prescription/PrescriptionView.tsx`
 
