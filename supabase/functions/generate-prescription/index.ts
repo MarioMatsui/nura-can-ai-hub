@@ -311,6 +311,18 @@ interface ChunkResult {
   relevance_score: number;
 }
 
+// CORREÇÃO 1: sanitiza termos de busca para o PostgREST .or(content.ilike...)
+// A vírgula é separador de condições; pontuação quebra o "logic tree" do parser.
+// Mantemos apenas letras/números, descartamos termos vazios ou muito curtos, e deduplicamos.
+function sanitizeSearchTerm(t: string): string {
+  return t
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')      // remove acentos
+    .replace(/[^a-zA-Z0-9]/g, '')          // remove pontuação, vírgulas, espaços, etc.
+    .toLowerCase()
+    .trim();
+}
+
 async function searchMedicalKnowledgeBase(
   supabase: any,
   message: string,
@@ -322,7 +334,9 @@ async function searchMedicalKnowledgeBase(
 
   for (const query of searchQueries) {
     try {
-      const queryTerms = query.split(' ').filter(t => t.length > 2);
+      const queryTerms = Array.from(new Set(
+        query.split(/\s+/).map(sanitizeSearchTerm).filter(t => t.length > 2)
+      ));
       if (queryTerms.length === 0) continue;
 
       const orConditions = queryTerms.map(t => `content.ilike.%${t}%`).join(',');
