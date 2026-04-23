@@ -138,6 +138,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
               onChange={setCatalog}
               label="Envie ou arraste aqui o catálogo de produtos"
               description="Lista de produtos disponíveis para prescrição"
+              isSaved={isCurrentCatalogSaved}
+              savedLimitReached={savedLimitReached}
+              onSaved={refreshSaved}
             />
 
             <div className="flex md:flex-col items-center justify-center">
