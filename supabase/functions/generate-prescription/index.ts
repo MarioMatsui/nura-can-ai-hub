@@ -624,7 +624,7 @@ serve(async (req) => {
     const ragChunks = ragQuery ? await searchMedicalKnowledgeBase(supabase, ragQuery) : [];
     console.log(`RAG retornou ${ragChunks.length} chunks`);
 
-    const userMessage = buildUserMessage({
+    const userMessageText = buildUserMessage({
       catalogContent: catalogFull.extracted_content || '',
       catalogMetadata: catalogFull.extracted_metadata || {},
       recordContent: recordFull.extracted_content || '',
@@ -632,6 +632,33 @@ serve(async (req) => {
       observations: observations || '',
       ragChunks,
     });
+
+    // CORREÇÃO 1: enviar os ARQUIVOS ORIGINAIS (PDF/imagem) como multimodal direto pro gemini-2.5-pro,
+    // não apenas o texto extraído pelo flash. O cérebro principal precisa "ver" o documento original.
+    const userContent: any[] = [{ type: 'text', text: userMessageText }];
+
+    const [recordFile, catalogFile] = await Promise.all([
+      downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
+      downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
+    ]);
+
+    const attachIfMultimodal = (file: { base64: string; mimeType: string } | null, label: string) => {
+      if (!file) return;
+      const mt = file.mimeType;
+      // Gemini lê PDF e imagens nativamente via image_url base64
+      if (mt === 'application/pdf' || mt.startsWith('image/')) {
+        userContent.push({
+          type: 'image_url',
+          image_url: { url: `data:${mt};base64,${file.base64}` },
+        });
+        console.log(`Anexado ${label} multimodal (${mt})`);
+      } else {
+        console.log(`${label} não-multimodal (${mt}) — confiando no texto extraído`);
+      }
+    };
+
+    attachIfMultimodal(recordFile, 'PRONTUÁRIO');
+    attachIfMultimodal(catalogFile, 'CATÁLOGO');
 
     // Chamada à Lovable AI — mesma estrutura do chat-ai (system + user), modelo de alta capacidade
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -644,9 +671,10 @@ serve(async (req) => {
         model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: MEDICAL_SYSTEM_PROMPT + '\n\n' + PRESCRIPTION_TASK_LAYER },
-          { role: 'user', content: userMessage },
+          { role: 'user', content: userContent },
         ],
-        temperature: 0.4,
+        // CORREÇÃO 4: temperature 0.4 → 0.7 (alinhado ao chat médico, mais exploração clínica)
+        temperature: 0.7,
       }),
     });
 
