@@ -94,8 +94,39 @@ export const UploadDropzone = ({
 
       if (insertError) throw insertError;
 
-      onChange(data as UploadedFile);
-      toast.success(kind === 'catalog' ? 'Catálogo enviado.' : 'Prontuário enviado.');
+      const uploaded = data as UploadedFile;
+
+      // Para catálogos PDF, dispara pré-renderização em páginas PNG.
+      // Sem isso, a IA não consegue ler o PDF (limite de 7MB do inline_data).
+      const isPdf = (uploaded.file_type || '').toLowerCase().includes('pdf')
+        || uploaded.file_name.toLowerCase().endsWith('.pdf');
+
+      if (kind === 'catalog' && isPdf) {
+        // Marca como em processamento e devolve já — o usuário pode esperar.
+        onChange({ ...uploaded, isProcessing: true });
+        toast.success('Catálogo enviado. Processando páginas…');
+        setIsProcessing(true);
+        try {
+          const { data: procData, error: procError } = await supabase.functions.invoke(
+            'process-catalog-pdf',
+            { body: { catalogId: uploaded.id } },
+          );
+          if (procError) throw procError;
+          const pagesCount = (procData as any)?.pages_count || 0;
+          onChange({ ...uploaded, pages_count: pagesCount, isProcessing: false });
+          toast.success(`Catálogo pronto (${pagesCount} páginas).`);
+        } catch (procErr: any) {
+          console.error('process-catalog-pdf error', procErr);
+          toast.error('Falha ao processar páginas do catálogo. Tente reenviar.');
+          // Mantém o registro mas marca como não-processado para bloquear a geração.
+          onChange({ ...uploaded, pages_count: 0, isProcessing: false });
+        } finally {
+          setIsProcessing(false);
+        }
+      } else {
+        onChange(uploaded);
+        toast.success(kind === 'catalog' ? 'Catálogo enviado.' : 'Prontuário enviado.');
+      }
     } catch (e: any) {
       console.error('Upload error', e);
       toast.error(e?.message || 'Falha no upload.');
