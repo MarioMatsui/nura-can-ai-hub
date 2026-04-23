@@ -495,6 +495,10 @@ A estrutura abaixo é uma referência. Use as seções que fizerem sentido clín
 
 // =============================================================================
 // MONTAGEM DA MENSAGEM DE USUÁRIO (contexto da consulta)
+// CORREÇÃO 4: reduz duplicação. Quando o ARQUIVO ORIGINAL é anexado como multimodal
+// (PDF/imagem), o texto extraído entra apenas como auxílio resumido. Quando o
+// arquivo NÃO pode ser anexado (DOC binário sem multimodal etc.), enviamos o texto
+// extraído integral como fonte primária.
 // =============================================================================
 
 function buildUserMessage(opts: {
@@ -504,8 +508,13 @@ function buildUserMessage(opts: {
   recordMetadata: any;
   observations: string;
   ragChunks: ChunkResult[];
+  recordHasOriginal: boolean;
+  catalogHasOriginal: boolean;
 }): string {
-  const { catalogContent, catalogMetadata, recordContent, recordMetadata, observations, ragChunks } = opts;
+  const {
+    catalogContent, catalogMetadata, recordContent, recordMetadata,
+    observations, ragChunks, recordHasOriginal, catalogHasOriginal,
+  } = opts;
 
   const ragSection = ragChunks.length > 0
     ? ragChunks.map((c, i) =>
@@ -513,14 +522,31 @@ function buildUserMessage(opts: {
       ).join('\n\n')
     : '(Nenhum trecho da base científica recuperado para esta consulta.)';
 
+  // Se o arquivo original foi anexado, o texto extraído é apenas APOIO (resumido).
+  // Se NÃO foi anexado (formato não-multimodal), o texto extraído é a FONTE PRIMÁRIA.
+  const recordTextLimit = recordHasOriginal ? 8000 : 30000;
+  const catalogTextLimit = catalogHasOriginal ? 12000 : 40000;
+
+  const recordBlock = recordHasOriginal
+    ? `**Estrutura auxiliar do prontuário (resumo extraído — confirme no arquivo anexo):**
+${recordMetadata && Object.keys(recordMetadata).length > 0 ? '```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```' : '(sem extração estruturada)'}
+${recordContent ? '\n_Trecho do texto extraído (apoio):_\n' + recordContent.slice(0, recordTextLimit) : ''}`
+    : `**Conteúdo do prontuário (texto extraído — fonte primária pois o arquivo não pôde ser anexado em formato nativo):**
+${recordContent.slice(0, recordTextLimit) || '(conteúdo não extraído)'}
+${recordMetadata && Object.keys(recordMetadata).length > 0 ? '\n**Estrutura auxiliar:**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```' : ''}`;
+
+  const catalogBlock = catalogHasOriginal
+    ? `**Estrutura auxiliar do catálogo (lista extraída — confirme no arquivo anexo):**
+${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```' : '(sem extração estruturada)'}
+${catalogContent ? '\n_Trecho do texto extraído (apoio):_\n' + catalogContent.slice(0, catalogTextLimit) : ''}`
+    : `**Conteúdo do catálogo (texto extraído — fonte primária pois o arquivo não pôde ser anexado em formato nativo):**
+${catalogContent.slice(0, catalogTextLimit) || '(conteúdo não extraído)'}
+${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '\n**Estrutura auxiliar:**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```' : ''}`;
+
   return `# CONSULTA DE RECEITUÁRIO
 
-> **IMPORTANTE:** Os arquivos originais do PRONTUÁRIO e do CATÁLOGO foram anexados a esta mensagem como documentos multimodais. Sempre que possível, **leia os arquivos originais** — o texto extraído abaixo é apenas um auxílio. Se houver divergência, prevaleça o original.
-
-## PRONTUÁRIO DO PACIENTE (analisar primeiro, sem restrições)
-${recordMetadata && Object.keys(recordMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(recordMetadata, null, 2) + '\n```\n' : ''}
-**Texto extraído do prontuário (auxiliar — confirme no arquivo original anexo):**
-${recordContent.slice(0, 30000) || '(conteúdo não extraído — use o arquivo anexo)'}
+## PRONTUÁRIO DO PACIENTE
+${recordBlock}
 
 ---
 
@@ -535,13 +561,11 @@ ${ragSection}
 ---
 
 ## CATÁLOGO DE PRODUTOS DISPONÍVEIS (universo permitido para a receita final)
-${catalogMetadata && Object.keys(catalogMetadata).length > 0 ? '**Estrutura extraída (auxiliar):**\n```json\n' + JSON.stringify(catalogMetadata, null, 2) + '\n```\n' : ''}
-**Texto extraído do catálogo (auxiliar — confirme no arquivo original anexo):**
-${catalogContent.slice(0, 40000) || '(conteúdo não extraído — use o arquivo anexo)'}
+${catalogBlock}
 
 ---
 
-Execute o raciocínio nas etapas indicadas e produza a sugestão de receituário. Combinações múltiplas são bem-vindas quando clinicamente plausíveis; um único produto também é aceitável quando o quadro pedir.`;
+Execute o raciocínio clínico (prontuário → evidência → catálogo → receita) e produza a sugestão de receituário. Combinações múltiplas são bem-vindas quando clinicamente plausíveis; um único produto também é aceitável quando o quadro pedir.`;
 }
 
 // =============================================================================
