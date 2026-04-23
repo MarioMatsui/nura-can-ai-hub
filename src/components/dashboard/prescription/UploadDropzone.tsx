@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { playSfx } from '@/lib/sfx';
 
 const ACCEPTED_TYPES = [
   'application/pdf',
@@ -264,6 +265,8 @@ export const UploadDropzone = ({
       if (insertError) throw insertError;
 
       const uploaded = data as UploadedFile;
+      // SFX: toca apenas em upload novo bem-sucedido (não em "Usar" de salvos).
+      playSfx('upload');
 
       const isPdf = (uploaded.file_type || '').toLowerCase().includes('pdf')
         || uploaded.file_name.toLowerCase().endsWith('.pdf');
@@ -410,12 +413,13 @@ export const UploadDropzone = ({
           <span className="text-sm">Enviando…</span>
         </div>
       ) : isProcessing ? (
-        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+        <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="text-sm">
+          <span className="text-sm">Enviando…</span>
+          <span className="text-sm font-bold text-foreground">
             {value && typeof value.total_pages === 'number' && value.total_pages > 0
-              ? `Processando páginas (${value.pages_count ?? 0}/${value.total_pages})…`
-              : 'Processando páginas do catálogo…'}
+              ? `Processando páginas do catálogo (${value.pages_count ?? 0}/${value.total_pages})`
+              : 'Processando páginas do catálogo'}
           </span>
           <span className="text-[11px] opacity-70">Isso pode levar alguns segundos.</span>
         </div>
