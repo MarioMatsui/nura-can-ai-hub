@@ -348,7 +348,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
                       <div
                         className={cn(
                           'text-sm font-medium line-clamp-1 transition-colors',
-                          isSelected ? 'text-black' : 'text-foreground group-hover:text-black',
+                          isSelected ? 'text-black' : 'text-white group-hover:text-black',
                         )}
                       >
                         {item.patient_name || 'Paciente não identificado'}
