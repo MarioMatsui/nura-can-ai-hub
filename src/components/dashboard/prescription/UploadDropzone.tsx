@@ -19,6 +19,11 @@ const ACCEPTED_TYPES = [
 const ACCEPTED_EXT = '.pdf,.jpg,.jpeg,.png,.webp,.txt,.doc,.docx';
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
+// Pipeline condicional: PDFs ≤ 5MB pulam a renderização página-por-página
+// (process-catalog-pdf) e vão direto pro Gemini Pro como inline base64.
+// Acima disso, mantém o pipeline atual de rasterização incremental.
+const PDF_SMALL_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
 const MAX_RETRIES_PER_BATCH = 3;
 const RETRY_DELAY_MS = 1500;
 
