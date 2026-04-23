@@ -1,6 +1,6 @@
 ---
 name: Prescription engine
-description: Receituário+ — pipeline condicional de catálogo PDF (≤5MB inline base64 direto pro Gemini, >5MB pré-renderiza em JPEG via process-catalog-pdf 1 página/invocação com checkpoint); botão Gerar libera quando pages_count===total_pages; saved_catalogs (atalhos por usuário, limite 3)
+description: Receituário+ — pipeline condicional de catálogo PDF (≤5MB inline base64 direto pro Gemini, >5MB pré-renderiza em JPEG via process-catalog-pdf 1 página/invocação com checkpoint); botão Gerar libera quando pages_count===total_pages; saved_catalogs (atalhos por usuário, limite 3); extracted_metadata é APPEND-ONLY para flags estruturais
 type: feature
 ---
 
@@ -64,14 +64,6 @@ Se `processing_complete && pages.length > 0` na entrada, retorna `done: true` im
 - `attachIfMultimodal`: quando há `pages`, faz push de **uma `image_url` por página** no `userContent`.
 - Fallback: se não-PDF ou ainda não processado, cai no caminho legado de `loadFile`.
 
-### Frontend
-- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 1`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…".
-- **Retry automático por batch**: até 3 tentativas com `sleep(1500ms)` entre elas. Antes de cada retry, sincroniza `pages_count`/`total_pages` direto da tabela `prescription_catalogs` (o backend pode ter salvo checkpoint mesmo com a resposta HTTP falhando) e ajusta `startPage` para o real progresso. Como o backend é reentrante, retentar nunca duplica página.
-- **Retomada manual**: quando catálogo fica em `pages_count < total_pages` sem estar processando, o card mostra `X/Y páginas processadas` + botão **"Continuar processamento"** (`PlayCircle`). Clicar dispara `runCatalogProcessing` a partir de `pages_count` real do banco — sem reupload.
-- Toast de pausa: `"Processamento pausado em X/Y páginas. Clique em Continuar processamento para retomar."`
-- `PrescriptionView`: botão "Gerar Receituário" só habilita quando catálogo PDF está **100% processado** (`!isProcessing && pages_count === total_pages && total_pages > 0`). Não-PDF não exige processamento.
-- Tipo `UploadedFile` inclui `total_pages?: number`.
-
 ## Prontuário (sem mudança)
 Continua via `loadFile` normal — base64 inline para < 2MB, signed URL para > 2MB.
 
@@ -91,6 +83,32 @@ Continua via `loadFile` normal — base64 inline para < 2MB, signed URL para > 2
 - Renomear: edita só `display_name` no atalho, não afeta o `prescription_catalogs.file_name` global.
 - Excluir: remove só a row em `saved_catalogs` (com confirmação via AlertDialog). Catálogo original preservado.
 - `handleRemove` no `UploadDropzone`: se `kind='catalog' && isSaved`, apenas deseleciona (não apaga arquivo); caso contrário, apaga storage + row como antes.
+
+## Regras críticas de `extracted_metadata` (NÃO QUEBRAR)
+
+`prescription_catalogs.extracted_metadata` é **append-only** para flags estruturais. NUNCA sobrescrever com `update({ extracted_metadata: novoObj })` — sempre fazer **merge**: `{ ...metaAntigo, ...novaMeta }`.
+
+Flags que precisam sobreviver a qualquer atualização:
+- `skip_page_render` (boolean) — modo rápido ≤5MB
+- `size_bytes` (number)
+- `pages` (string[]) — paths das páginas rasterizadas
+- `pages_count`, `total_pages` (number)
+- `processing_complete`, `pages_render_scale`, `pages_format`
+
+### `ensureExtraction` (generate-prescription)
+- **Early-return** quando `isCatalog && meta.skip_page_render === true`. Catálogos em modo rápido NÃO passam pela extração estruturada com Flash — o Pro multimodal lê o PDF inteiro inline. Rodar a extração apagaria a flag.
+- Quando a extração roda (catálogos sem `skip_page_render`, ou prontuários), o update é `extracted_metadata: { ...meta, ...metadata }` (merge defensivo).
+
+### Bug histórico (corrigido)
+Antes da correção, `ensureExtraction` sobrescrevia `extracted_metadata` com `{ products, catalog_name, ... }`, apagando `skip_page_render`. Resultado: ao recarregar a página e clicar em "Usar" no catálogo salvo, `SavedCatalogs.handleUse` lia `meta.skip_page_render === undefined`, calculava `pages_count=0/total_pages=0`, e `PrescriptionView.catalogReady` falhava — botão eternamente desabilitado mostrando "Processando páginas do catálogo…". Migração pontual restaurou as flags em catálogos PDF ≤5MB sem `pages[]`.
+
+## Frontend
+- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 1`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…".
+- **Retry automático por batch**: até 3 tentativas com `sleep(1500ms)` entre elas. Antes de cada retry, sincroniza `pages_count`/`total_pages` direto da tabela `prescription_catalogs` (o backend pode ter salvo checkpoint mesmo com a resposta HTTP falhando) e ajusta `startPage` para o real progresso. Como o backend é reentrante, retentar nunca duplica página.
+- **Retomada manual**: quando catálogo fica em `pages_count < total_pages` sem estar processando, o card mostra `X/Y páginas processadas` + botão **"Continuar processamento"** (`PlayCircle`). Clicar dispara `runCatalogProcessing` a partir de `pages_count` real do banco — sem reupload.
+- Toast de pausa: `"Processamento pausado em X/Y páginas. Clique em Continuar processamento para retomar."`
+- `PrescriptionView`: botão "Gerar Receituário" só habilita quando catálogo PDF está **100% processado** (`!isProcessing && pages_count === total_pages && total_pages > 0`). Não-PDF não exige processamento.
+- Tipo `UploadedFile` inclui `total_pages?: number`.
 
 ## Não tocar
 - `chat-ai` permanece intacto.
