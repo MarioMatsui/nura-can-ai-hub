@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
-import { Upload, FileText, X, Loader2, PlayCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Upload, FileText, X, Loader2, PlayCircle, Bookmark, BookmarkCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
