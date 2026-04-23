@@ -1,85 +1,147 @@
 
+## Diagnóstico do log
 
-## Diagnóstico
+O erro voltou pelo mesmo motivo-base: a função **ainda estoura o limite de CPU por invocação**, mesmo depois de trocar para JPEG.
 
-Mesmo com `RENDER_SCALE = 1.0` e batch de 8, a função morre após processar **apenas 1 página**:
+O log prova isso:
 
+```text
+[batch start=0 size=3] ...
+PDF carregado: 9.97MB
+Inicializando PDFium…
+PDF tem 85 páginas. Processando 1–3 de 85.
+Página 1/85: 1080x607, JPEG 88KB
+Página 2/85: 1080x607, JPEG 100KB
+CPU Time exceeded
 ```
-04:12:56 [batch start=0 size=8] Baixando PDF…
-04:13:00 PDF carregado: 9.97MB
-04:13:00 Inicializando PDFium…
-04:13:02 Página 1/85: 1440x810, PNG 1465KB    ← 2s para 1 página
-04:13:03 ERROR CPU Time exceeded               ← morre antes da página 2
+
+### O que isso significa
+- O problema **não é mais** bundle, import, WASM ou autenticação.
+- O pipeline já está funcionando até:
+  - baixar PDF,
+  - inicializar PDFium,
+  - renderizar páginas,
+  - encodar JPEG,
+  - subir arquivos.
+- A função morre **antes de terminar o batch de 3 páginas**.
+
+### Leitura prática do tempo
+Pelos timestamps do log, a execução inteira morre em algo perto de **6–6,5s**, não com a folga de ~10s que estava sendo assumida.  
+Ou seja: **3 páginas continuam altas demais para esse runtime**.
+
+## Problema secundário encontrado no código
+
+Há um segundo bug importante no backend atual:
+
+- as páginas novas só são gravadas em `extracted_metadata` **depois que o batch inteiro termina**;
+- como a função cai antes disso, as páginas 1 e 2 podem até já ter sido enviadas ao storage, mas o progresso **não fica salvo no banco**;
+- na próxima tentativa, o processamento pode voltar do zero.
+
+Além disso, no frontend existe outro risco:
+- hoje o botão **Gerar Receituário** libera quando `pages_count > 0`;
+- então, se houver falha com processamento parcial, o usuário pode gerar usando **catálogo incompleto**.
+
+## Plano de correção
+
+### 1) Reduzir o batch para 1 página por invocação
+**Arquivo:** `supabase/functions/process-catalog-pdf/index.ts`  
+**Arquivo:** `src/components/dashboard/prescription/UploadDropzone.tsx`
+
+Alterar:
+- `DEFAULT_BATCH = 3` → `DEFAULT_BATCH = 1`
+- no frontend, `batchSize: 3` → `batchSize: 1`
+
+Isso alinha a função com o que o log mostrou: hoje ela aguenta no máximo algo próximo de **1 página por chamada** com segurança.
+
+### 2) Persistir progresso página a página
+**Arquivo:** `supabase/functions/process-catalog-pdf/index.ts`
+
+Em vez de esperar o batch inteiro acabar para atualizar `extracted_metadata`, salvar progresso **logo após cada upload bem-sucedido**:
+- `pages`
+- `pages_count`
+- `total_pages`
+- `processing_complete`
+- `pages_format`
+- `pages_render_scale`
+
+Assim, se a função cair no meio:
+- o progresso já fica salvo;
+- a próxima chamada continua de onde parou;
+- não há perda do trabalho já feito.
+
+### 3) Tornar a retomada defensiva
+**Arquivo:** `supabase/functions/process-catalog-pdf/index.ts`
+
+Calcular um `effectiveStartPage` com base no progresso salvo, para evitar recomeçar do zero se o frontend mandar `startPage` desatualizado.
+
+Regra:
+- usar o maior valor entre `startPage` recebido e o progresso já salvo (`existingPages.length` / `pages_count`).
+
+Isso torna o processamento realmente reentrante.
+
+### 4) Corrigir a condição que libera “Gerar Receituário”
+**Arquivo:** `src/components/dashboard/prescription/PrescriptionView.tsx`
+
+Hoje basta ter `pages_count > 0`.  
+Isso precisa mudar para, no caso de catálogo PDF:
+
+- só considerar pronto quando:
+  - `!catalog.isProcessing`
+  - `total_pages` existir
+  - `pages_count === total_pages`
+
+Assim o botão não libera com catálogo parcial.
+
+## Ajustes de UX
+
+### 5) Manter o progresso visível mesmo se um batch falhar
+**Arquivo:** `src/components/dashboard/prescription/UploadDropzone.tsx`
+
+Quando houver erro intermediário:
+- manter `pages_count` e `total_pages` visíveis;
+- mostrar mensagem de erro específica;
+- não “apagar” a noção de progresso já concluído.
+
+Exemplo de estado:
+```text
+Processamento interrompido em 12/85 páginas.
 ```
 
-Tempo gasto:
-- ~4s para baixar e inicializar PDFium (custo fixo de bootstrap)
-- ~2s para renderizar+encodar+uploadar 1 página de 1.4MB
-- Total disponível: ~6-7s de CPU → não dá nem para 2 páginas
+## O que não precisa mudar
+- não precisa mexer em schema;
+- não precisa mexer em RLS;
+- não precisa mexer no fluxo de geração multimodal;
+- JPEG + `RENDER_SCALE = 0.75` continuam corretos por enquanto.
 
-**Problemas:**
-1. PNG ainda está em **1.4MB** — `pngs` (deno.land/x/pngs) faz encode sem compressão eficiente. Cada página toma ~1.5s só de encode.
-2. Bootstrap do PDFium em base64 leva ~3-4s (decodifica WASM de 3.7MB toda invocação).
-3. Batch de 8 é otimista demais: na realidade está conseguindo 1 página por invocação.
+## Resultado esperado após a correção
 
-## Solução
+### Backend
+Cada invocação fará:
+```text
+Baixar PDF
+Inicializar PDFium
+Processar 1 página
+Salvar progresso
+Responder
+```
 
-### 1) Trocar PNG por **JPEG** com compressão controlada
-PNG sem compressão eficiente custa caro de encodar. JPEG quality 75 dá arquivos ~150-300KB (vs 1.4MB do PNG) e encode muito mais rápido. Gemini Pro lê JPEG perfeitamente para texto/produtos.
+### Frontend
+O card deve avançar assim:
+```text
+1/85 → 2/85 → 3/85 → ... → 85/85
+```
 
-Usar `https://deno.land/x/jpegts@1.1/mod.ts` ou similar — biblioteca WASM pura sem `createRequire`.
+E o botão **Gerar Receituário** só habilita no final.
 
-Alternativa mais robusta: **renderizar direto em JPEG via PDFium**, que já suporta render como bitmap e podemos passar para encoder JPEG nativo do Deno (`Deno.core` não disponível, então usar lib WASM).
-
-Recomendo `npm:@jsquash/jpeg` ou `https://deno.land/x/imagescript@1.2.17/mod.ts` (puro TS/WASM, encoda JPEG nativo).
-
-### 2) Reduzir `batchSize` default para **3**
-Cada página leva ~1.5-2s real. Com 3 páginas: ~5-6s + 4s bootstrap = ~10s, dentro do limite. Frontend já loop’a, então só significa mais invocações (85/3 ≈ 29 batches), mas cada uma fica safe.
-
-### 3) Reduzir resolução para `RENDER_SCALE = 0.75`
-1440×810 vira ~1080×608, ainda legível para Gemini. Reduz tempo de render WASM e tamanho do bitmap em memória.
-
-### 4) Adicionar `disableBase64Warning: true` no init (cosmético — limpa logs)
-
-### 5) Frontend: aceitar `batchSize` menor sem mudar nada
-O loop já está pronto — só processa mais batches.
-
-## Arquivos alterados
-
+## Arquivos a alterar
 - `supabase/functions/process-catalog-pdf/index.ts`
-  - Trocar `pngs` por encoder JPEG (`imagescript`)
-  - `RENDER_SCALE = 0.75`
-  - `DEFAULT_BATCH = 3`
-  - Upload com `contentType: 'image/jpeg'` e extensão `.jpg`
-  - `disableBase64Warning: true`
-  - Renomear paths para `page-NNN.jpg`
-
 - `src/components/dashboard/prescription/UploadDropzone.tsx`
-  - Mudar `batchSize: 8` → `batchSize: 3` no invoke
-
-- `supabase/functions/generate-prescription/index.ts` (verificar)
-  - Confirmar que ao montar `image_url` para o Gemini, o mimeType lido de `extracted_metadata` está correto (já é dinâmico via signed URL — não deve precisar mudar). Se hardcoded `'image/png'`, trocar para `'image/jpeg'`.
-
+- `src/components/dashboard/prescription/PrescriptionView.tsx`
 - `mem://features/prescription-engine`
-  - Atualizar: JPEG quality 80, scale 0.75, batch 3.
 
-## Por que vai funcionar
+## Observação técnica
+Se mesmo com **batch = 1** ainda houver timeout em catálogos grandes, o próximo passo deixa de ser “reduzir mais batch” e passa a ser **trocar a estratégia de bootstrap do PDFium**. Mas, pelo log atual, a correção mais direta e segura agora é:
 
-- **JPEG quality 80** → ~200KB por página (7× menor que PNG atual). Encode ~5× mais rápido.
-- **Batch 3** → tempo total estimado: 4s bootstrap + 3×1s = **7s**, com folga sob o limite de ~10s.
-- **Scale 0.75** → economia adicional de ~30% no render e encode.
-- Logs vão mostrar 3 páginas por invocação consistentemente, sem mais `CPU Time exceeded`.
-
-## Validação
-
-1. Reenviar catálogo de 85 páginas.
-2. Esperar ~29 batches sequenciais, cada um logando 3 páginas em ~6-8s.
-3. Card mostra progresso real "3/85 → 6/85 → … → 85 páginas prontas".
-4. JPEGs no bucket com tamanho ~150-300KB.
-5. Botão "Gerar Receituário" habilita ao final, e a geração funciona com signed URLs `image/jpeg`.
-
-## Fora de escopo
-
-- Sem mudanças em schema, RLS, buckets ou auth.
-- Sem mudanças no frontend além do `batchSize`.
-
+1. **1 página por chamada**
+2. **checkpoint por página**
+3. **bloqueio da geração até 100% completo**
