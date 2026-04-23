@@ -809,90 +809,131 @@ serve(async (req) => {
     let attachmentContext = "";
     const messageContent: any[] = [{ type: "text", text: message }];
 
+    // Helper: download file and convert to base64 data URL (compatible with Lovable AI Gateway / Gemini)
+    const downloadAsBase64 = async (filePath: string): Promise<{ base64: string; mimeType: string } | null> => {
+      try {
+        const { data, error } = await supabase.storage.from('chat-attachments').download(filePath);
+        if (error || !data) {
+          console.error('Storage download error:', error);
+          return null;
+        }
+        const buf = new Uint8Array(await data.arrayBuffer());
+        let binary = '';
+        const chunkSize = 8192;
+        for (let i = 0; i < buf.length; i += chunkSize) {
+          const chunk = buf.subarray(i, Math.min(i + chunkSize, buf.length));
+          binary += String.fromCharCode.apply(null, Array.from(chunk));
+        }
+        return { base64: btoa(binary), mimeType: data.type || 'application/octet-stream' };
+      } catch (e) {
+        console.error('downloadAsBase64 exception:', e);
+        return null;
+      }
+    };
+
+    const isTextualMime = (mt: string) =>
+      mt.startsWith('text/') ||
+      mt === 'application/json' ||
+      mt === 'application/xml' ||
+      mt === 'application/csv';
+
     if (attachments && attachments.length > 0) {
       console.log(`Processing ${attachments.length} user attachments`);
-      
+
       for (const attachment of attachments) {
-        if (attachment.file_type.startsWith('image/')) {
-          console.log(`Adding image to vision: ${attachment.file_name}`);
-          
-          const { data: signedUrlData } = await supabase.storage
-            .from('chat-attachments')
-            .createSignedUrl(attachment.file_path, 3600);
-          
-          if (signedUrlData?.signedUrl) {
-            messageContent.push({
-              type: "image_url",
-              image_url: {
-                url: signedUrlData.signedUrl,
-                detail: "high"
-              }
-            });
-          }
-        } else if (attachment.file_type === 'application/pdf' || attachment.file_type === 'text/plain') {
-          try {
-            if (attachment.file_type === 'application/pdf') {
-              console.log(`Adding PDF for Gemini processing: ${attachment.file_name}`);
-              
-              const { data: signedUrlData } = await supabase.storage
-                .from('chat-attachments')
-                .createSignedUrl(attachment.file_path, 3600);
-              
-              if (signedUrlData?.signedUrl) {
-                const pdfResponse = await fetch(signedUrlData.signedUrl);
-                const pdfBuffer = await pdfResponse.arrayBuffer();
-                
-                const uint8Array = new Uint8Array(pdfBuffer);
-                let binaryString = '';
-                const chunkSize = 8192;
-                
-                for (let i = 0; i < uint8Array.length; i += chunkSize) {
-                  const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-                  binaryString += String.fromCharCode.apply(null, Array.from(chunk));
-                }
-                
-                const base64Pdf = btoa(binaryString);
-                
-                messageContent.push({
-                  type: "inline_data",
-                  inline_data: {
-                    mime_type: "application/pdf",
-                    data: base64Pdf
-                  }
-                });
-                
-                attachmentContext += `\n\n📄 O USUÁRIO ENVIOU o documento "${attachment.file_name}" para análise AGORA.\n`;
-              } else {
-                console.error('Error getting signed URL for PDF');
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro no acesso)\n`;
-              }
+        const fileType = attachment.file_type || '';
+        const fileName = attachment.file_name || 'arquivo';
+
+        try {
+          // 1) IMAGENS — vision via base64 data URL
+          if (fileType.startsWith('image/')) {
+            console.log(`Adding image to vision (base64): ${fileName}`);
+            const file = await downloadAsBase64(attachment.file_path);
+            if (file) {
+              messageContent.push({
+                type: 'image_url',
+                image_url: {
+                  url: `data:${file.mimeType};base64,${file.base64}`,
+                },
+              });
+              attachmentContext += `\n\n🖼️ O USUÁRIO ENVIOU a imagem "${fileName}" para análise AGORA. Interprete o conteúdo visual (exames, fotos, documentos escaneados, gráficos, etc.) e incorpore na resposta.\n`;
             } else {
-              console.log(`Reading text file: ${attachment.file_name}`);
-              
-              const { data: fileData, error: downloadError } = await supabase.storage
-                .from('chat-attachments')
-                .download(attachment.file_path);
-              
-              if (!downloadError && fileData) {
-                const text = await fileData.text();
-                attachmentContext += `\n\n📄 O USUÁRIO ENVIOU o documento "${attachment.file_name}" com o seguinte conteúdo:\n${text}\n`;
-              } else {
-                console.error('Error reading text file:', downloadError);
-                attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro na leitura)\n`;
-              }
+              attachmentContext += `\n\n🖼️ Imagem "${fileName}" anexada (erro no acesso)\n`;
             }
-          } catch (err) {
-            console.error(`Error processing document ${attachment.file_name}:`, err);
-            attachmentContext += `\n\n📄 Documento "${attachment.file_name}" anexado (erro no processamento)\n`;
+            continue;
           }
+
+          // 2) PDFs — multimodal via base64 data URL (Gemini lê PDF nativamente)
+          if (fileType === 'application/pdf') {
+            console.log(`Adding PDF to multimodal (base64): ${fileName}`);
+            const file = await downloadAsBase64(attachment.file_path);
+            if (file) {
+              messageContent.push({
+                type: 'image_url',
+                image_url: {
+                  url: `data:application/pdf;base64,${file.base64}`,
+                },
+              });
+              attachmentContext += `\n\n📄 O USUÁRIO ENVIOU o documento PDF "${fileName}" para análise AGORA. Leia integralmente o conteúdo do PDF e incorpore na resposta.\n`;
+            } else {
+              attachmentContext += `\n\n📄 PDF "${fileName}" anexado (erro no acesso)\n`;
+            }
+            continue;
+          }
+
+          // 3) Arquivos textuais — leitura direta como texto
+          if (isTextualMime(fileType) || /\.(txt|md|csv|json|xml|log)$/i.test(fileName)) {
+            console.log(`Reading text file: ${fileName}`);
+            const { data: fileData, error: downloadError } = await supabase.storage
+              .from('chat-attachments')
+              .download(attachment.file_path);
+            if (!downloadError && fileData) {
+              const text = (await fileData.text()).slice(0, 30000);
+              attachmentContext += `\n\n📄 O USUÁRIO ENVIOU o documento "${fileName}" com o seguinte conteúdo (texto integral abaixo):\n\n---\n${text}\n---\n`;
+            } else {
+              console.error('Error reading text file:', downloadError);
+              attachmentContext += `\n\n📄 Documento "${fileName}" anexado (erro na leitura)\n`;
+            }
+            continue;
+          }
+
+          // 4) DOC/DOCX e demais binários — tenta enviar como inline para o Gemini
+          if (
+            fileType === 'application/msword' ||
+            fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            /\.(doc|docx|rtf|odt)$/i.test(fileName)
+          ) {
+            console.log(`Adding DOC/DOCX as inline binary: ${fileName}`);
+            const file = await downloadAsBase64(attachment.file_path);
+            if (file) {
+              messageContent.push({
+                type: 'image_url',
+                image_url: {
+                  url: `data:${file.mimeType};base64,${file.base64}`,
+                },
+              });
+              attachmentContext += `\n\n📄 O USUÁRIO ENVIOU o documento "${fileName}" (formato Word) para análise AGORA. Interprete o conteúdo e incorpore na resposta.\n`;
+            } else {
+              attachmentContext += `\n\n📄 Documento "${fileName}" anexado (erro no acesso)\n`;
+            }
+            continue;
+          }
+
+          // 5) Fallback — informa que o arquivo foi enviado mas o tipo não é suportado para leitura
+          console.log(`Unsupported attachment type: ${fileType} (${fileName})`);
+          attachmentContext += `\n\n📎 O USUÁRIO ANEXOU "${fileName}" (tipo ${fileType || 'desconhecido'}). Este formato não pode ser lido diretamente; peça ao usuário para reenviar como PDF, imagem ou texto se o conteúdo for relevante.\n`;
+        } catch (err) {
+          console.error(`Error processing attachment ${fileName}:`, err);
+          attachmentContext += `\n\n📄 Documento "${fileName}" anexado (erro no processamento)\n`;
         }
       }
 
       if (attachmentContext) {
-        attachmentContext = "\n\n<!-- DOCUMENTOS ENVIADOS PELO USUÁRIO NESTA CONVERSA -->\n" + 
-                          "<!-- PRIORIDADE: Estes documentos foram enviados AGORA pelo usuário e devem ter prioridade sobre a base de conhecimento -->\n" +
-                          attachmentContext + 
-                          "\n<!-- FIM DOS DOCUMENTOS DO USUÁRIO -->\n\n";
+        attachmentContext =
+          '\n\n<!-- DOCUMENTOS ENVIADOS PELO USUÁRIO NESTA CONVERSA -->\n' +
+          '<!-- PRIORIDADE: Estes documentos foram enviados AGORA pelo usuário e devem ter PRIORIDADE sobre a base de conhecimento. Você DEVE ler, interpretar e incorporar o conteúdo deles na sua resposta. -->\n' +
+          attachmentContext +
+          '\n<!-- FIM DOS DOCUMENTOS DO USUÁRIO -->\n\n';
       }
     }
 
