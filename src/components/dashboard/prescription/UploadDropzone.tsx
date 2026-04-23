@@ -239,7 +239,11 @@ export const UploadDropzone = ({
       ) : isProcessing ? (
         <div className="flex flex-col items-center gap-2 text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="text-sm">Processando páginas do catálogo…</span>
+          <span className="text-sm">
+            {value && typeof value.total_pages === 'number' && value.total_pages > 0
+              ? `Processando páginas (${value.pages_count ?? 0}/${value.total_pages})…`
+              : 'Processando páginas do catálogo…'}
+          </span>
           <span className="text-[11px] opacity-70">Isso pode levar alguns segundos.</span>
         </div>
       ) : value ? (
@@ -251,7 +255,9 @@ export const UploadDropzone = ({
           {kind === 'catalog' && value.isProcessing && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="w-3 h-3 animate-spin" />
-              Processando páginas…
+              {typeof value.total_pages === 'number' && value.total_pages > 0
+                ? `Processando páginas (${value.pages_count ?? 0}/${value.total_pages})…`
+                : 'Processando páginas…'}
             </div>
           )}
           {kind === 'catalog' && !value.isProcessing && typeof value.pages_count === 'number' && value.pages_count > 0 && (
