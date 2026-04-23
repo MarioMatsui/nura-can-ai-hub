@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X } from 'lucide-react';
+import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
