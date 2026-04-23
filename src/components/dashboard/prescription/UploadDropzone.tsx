@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { Upload, FileText, X, Loader2, PlayCircle } from 'lucide-react';
+import { Upload, FileText, X, Loader2, PlayCircle, Bookmark, BookmarkCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -44,6 +44,12 @@ interface UploadDropzoneProps {
   onChange: (file: UploadedFile | null) => void;
   label: string;
   description: string;
+  /** Para catálogos: callback chamado quando o usuário salva o catálogo como favorito. */
+  onSaved?: () => void;
+  /** Para catálogos: indica se o catálogo atual já está na lista de salvos do usuário. */
+  isSaved?: boolean;
+  /** Para catálogos: indica se o limite de salvos foi atingido (3). */
+  savedLimitReached?: boolean;
 }
 
 export const UploadDropzone = ({
@@ -53,10 +59,14 @@ export const UploadDropzone = ({
   onChange,
   label,
   description,
+  onSaved,
+  isSaved = false,
+  savedLimitReached = false,
 }: UploadDropzoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const validate = (file: File): string | null => {
@@ -269,14 +279,55 @@ export const UploadDropzone = ({
   const handleRemove = useCallback(async () => {
     if (!value) return;
     try {
-      await supabase.storage.from('prescription-files').remove([value.file_path]);
-      const table = kind === 'catalog' ? 'prescription_catalogs' : 'prescription_records';
-      await supabase.from(table).delete().eq('id', value.id);
+      // Catálogo salvo nos favoritos: não apaga arquivo nem registro — só deseleciona.
+      // Caso contrário (prontuário, ou catálogo não salvo): remove storage + registro.
+      if (kind === 'catalog' && isSaved) {
+        // Apenas deseleciona; preservamos o catálogo para o atalho continuar válido.
+      } else {
+        await supabase.storage.from('prescription-files').remove([value.file_path]);
+        const table = kind === 'catalog' ? 'prescription_catalogs' : 'prescription_records';
+        await supabase.from(table).delete().eq('id', value.id);
+      }
     } catch (e) {
       console.error('Remove error', e);
     }
     onChange(null);
-  }, [value, kind, onChange]);
+  }, [value, kind, isSaved, onChange]);
+
+  const handleSave = useCallback(async () => {
+    if (!value || kind !== 'catalog') return;
+    if (isSaved) {
+      toast.info('Catálogo já salvo.');
+      return;
+    }
+    if (savedLimitReached) {
+      toast.error('Limite de 3 catálogos salvos atingido. Remova um para salvar este.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('saved_catalogs').insert({
+        user_id: userId,
+        catalog_id: value.id,
+        display_name: value.file_name,
+      });
+      if (error) {
+        if ((error as any).code === '23505') {
+          toast.info('Catálogo já salvo.');
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success('Catálogo salvo nos favoritos.');
+      }
+      onSaved?.();
+    } catch (e: any) {
+      console.error('Save catalog error', e);
+      toast.error(e?.message || 'Falha ao salvar catálogo.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [value, kind, userId, isSaved, savedLimitReached, onSaved]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -371,10 +422,37 @@ export const UploadDropzone = ({
             && value.pages_count > 0 && (
               <div className="text-xs text-muted-foreground">{value.pages_count} páginas prontas</div>
             )}
-          <Button variant="ghost" size="sm" onClick={handleRemove} className="gap-1">
-            <X className="w-4 h-4" />
-            Remover
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {kind === 'catalog' && (
+              <Button
+                variant={isSaved ? 'secondary' : 'outline'}
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving || isSaved || (savedLimitReached && !isSaved)}
+                className="gap-1"
+                title={
+                  isSaved
+                    ? 'Catálogo já salvo'
+                    : savedLimitReached
+                      ? 'Limite de 3 catálogos salvos atingido'
+                      : 'Salvar catálogo nos favoritos'
+                }
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isSaved ? (
+                  <BookmarkCheck className="w-4 h-4" />
+                ) : (
+                  <Bookmark className="w-4 h-4" />
+                )}
+                {isSaved ? 'Salvo' : 'Salvar'}
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleRemove} className="gap-1">
+              <X className="w-4 h-4" />
+              Remover
+            </Button>
+          </div>
         </div>
       ) : (
         <button

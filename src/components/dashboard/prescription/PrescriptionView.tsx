@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { UploadDropzone, UploadedFile } from './UploadDropzone';
+import { SavedCatalogs, useSavedCatalogs, SAVED_CATALOGS_LIMIT } from './SavedCatalogs';
 import { MarkdownMessage } from '@/components/dashboard/MarkdownMessage';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +31,11 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const [aiResponse, setAiResponse] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  const { items: savedCatalogs, loading: savedLoading, refresh: refreshSaved } = useSavedCatalogs(userId);
+
+  const isCurrentCatalogSaved = !!catalog && savedCatalogs.some((s) => s.catalog_id === catalog.id);
+  const savedLimitReached = savedCatalogs.length >= SAVED_CATALOGS_LIMIT;
 
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
@@ -132,6 +138,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
               onChange={setCatalog}
               label="Envie ou arraste aqui o catálogo de produtos"
               description="Lista de produtos disponíveis para prescrição"
+              isSaved={isCurrentCatalogSaved}
+              savedLimitReached={savedLimitReached}
+              onSaved={refreshSaved}
             />
 
             <div className="flex md:flex-col items-center justify-center">
@@ -149,6 +158,15 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
               description="Documento clínico com queixa e histórico"
             />
           </section>
+
+          {/* Catálogos salvos */}
+          <SavedCatalogs
+            userId={userId}
+            items={savedCatalogs}
+            loading={savedLoading}
+            onRefresh={refreshSaved}
+            onUse={(file) => setCatalog(file)}
+          />
 
           {/* Observações */}
           <section className="space-y-2">
