@@ -43,7 +43,12 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  const canGenerate = !!catalog && !!record && !isGenerating;
+  const catalogReady = !!catalog && !catalog.isProcessing && (
+    // PDFs precisam ter pages_count > 0; outros formatos não exigem processamento.
+    !((catalog.file_type || '').toLowerCase().includes('pdf') || catalog.file_name.toLowerCase().endsWith('.pdf'))
+    || (typeof catalog.pages_count === 'number' && catalog.pages_count > 0)
+  );
+  const canGenerate = catalogReady && !!record && !isGenerating;
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
@@ -173,7 +178,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             </Button>
             {!canGenerate && !isGenerating && (
               <p className="text-xs text-muted-foreground mt-2">
-                Envie o catálogo e o prontuário para liberar a geração.
+                {catalog && !catalogReady
+                  ? 'Aguardando o processamento das páginas do catálogo…'
+                  : 'Envie o catálogo e o prontuário para liberar a geração.'}
               </p>
             )}
           </section>

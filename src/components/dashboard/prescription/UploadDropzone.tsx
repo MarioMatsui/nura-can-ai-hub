@@ -24,6 +24,10 @@ export interface UploadedFile {
   file_name: string;
   file_path: string;
   file_type: string;
+  /** Para catálogos: quantas páginas PNG já foram pré-renderizadas (0/undefined = ainda processando ou não-PDF) */
+  pages_count?: number;
+  /** Para catálogos PDF: indica que o backend ainda está renderizando as páginas */
+  isProcessing?: boolean;
 }
 
 interface UploadDropzoneProps {
@@ -45,6 +49,7 @@ export const UploadDropzone = ({
 }: UploadDropzoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const validate = (file: File): string | null => {
@@ -90,8 +95,39 @@ export const UploadDropzone = ({
 
       if (insertError) throw insertError;
 
-      onChange(data as UploadedFile);
-      toast.success(kind === 'catalog' ? 'Catálogo enviado.' : 'Prontuário enviado.');
+      const uploaded = data as UploadedFile;
+
+      // Para catálogos PDF, dispara pré-renderização em páginas PNG.
+      // Sem isso, a IA não consegue ler o PDF (limite de 7MB do inline_data).
+      const isPdf = (uploaded.file_type || '').toLowerCase().includes('pdf')
+        || uploaded.file_name.toLowerCase().endsWith('.pdf');
+
+      if (kind === 'catalog' && isPdf) {
+        // Marca como em processamento e devolve já — o usuário pode esperar.
+        onChange({ ...uploaded, isProcessing: true });
+        toast.success('Catálogo enviado. Processando páginas…');
+        setIsProcessing(true);
+        try {
+          const { data: procData, error: procError } = await supabase.functions.invoke(
+            'process-catalog-pdf',
+            { body: { catalogId: uploaded.id } },
+          );
+          if (procError) throw procError;
+          const pagesCount = (procData as any)?.pages_count || 0;
+          onChange({ ...uploaded, pages_count: pagesCount, isProcessing: false });
+          toast.success(`Catálogo pronto (${pagesCount} páginas).`);
+        } catch (procErr: any) {
+          console.error('process-catalog-pdf error', procErr);
+          toast.error('Falha ao processar páginas do catálogo. Tente reenviar.');
+          // Mantém o registro mas marca como não-processado para bloquear a geração.
+          onChange({ ...uploaded, pages_count: 0, isProcessing: false });
+        } finally {
+          setIsProcessing(false);
+        }
+      } else {
+        onChange(uploaded);
+        toast.success(kind === 'catalog' ? 'Catálogo enviado.' : 'Prontuário enviado.');
+      }
     } catch (e: any) {
       console.error('Upload error', e);
       toast.error(e?.message || 'Falha no upload.');
@@ -148,12 +184,27 @@ export const UploadDropzone = ({
           <Loader2 className="w-6 h-6 animate-spin" />
           <span className="text-sm">Enviando…</span>
         </div>
+      ) : isProcessing ? (
+        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <span className="text-sm">Processando páginas do catálogo…</span>
+          <span className="text-[11px] opacity-70">Isso pode levar alguns segundos.</span>
+        </div>
       ) : value ? (
         <div className="flex flex-col items-center gap-3 text-center w-full">
           <FileText className="w-8 h-8 text-primary" />
           <div className="text-sm font-medium text-foreground break-all px-2 line-clamp-2">
             {value.file_name}
           </div>
+          {kind === 'catalog' && value.isProcessing && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Processando páginas…
+            </div>
+          )}
+          {kind === 'catalog' && !value.isProcessing && typeof value.pages_count === 'number' && value.pages_count > 0 && (
+            <div className="text-xs text-muted-foreground">{value.pages_count} páginas prontas</div>
+          )}
           <Button variant="ghost" size="sm" onClick={handleRemove} className="gap-1">
             <X className="w-4 h-4" />
             Remover

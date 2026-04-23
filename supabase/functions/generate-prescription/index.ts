@@ -171,8 +171,10 @@ function assertValidBase64(b64: string, sizeBytes: number, label: string): void 
 // e o limite prático de ~7MB do inline_data do Gemini.
 const INLINE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 
-// Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos)
-// ou apontado por signed URL (arquivos grandes — Gemini busca direto do Storage).
+// Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos),
+// apontado por signed URL (arquivos grandes — Gemini busca direto do Storage),
+// ou — no caso especial do catálogo PDF — explodido em páginas PNG já pré-renderizadas
+// pelo `process-catalog-pdf` (cada página vira uma imagem separada).
 type LoadedFile = {
   base64: string | null;
   signedUrl: string | null;
@@ -180,7 +182,29 @@ type LoadedFile = {
   sizeBytes: number;
   bucket: string;
   path: string;
+  // Se presente, este arquivo é um catálogo PDF já renderizado em páginas.
+  // Cada item tem signed URL própria de uma imagem PNG.
+  pages?: Array<{ signedUrl: string; mimeType: string; path: string }>;
 };
+
+const PAGES_BUCKET = 'prescription-files-pages';
+
+// Carrega um catálogo já pré-processado em páginas PNG (gerado por process-catalog-pdf).
+// Retorna LoadedFile com `pages` populado — caminho preferido para PDFs grandes,
+// pois cada página vira uma image_url independente sob o limite do provider.
+async function loadCatalogPages(
+  supabase: any,
+  pagePaths: string[],
+): Promise<Array<{ signedUrl: string; mimeType: string; path: string }>> {
+  const out: Array<{ signedUrl: string; mimeType: string; path: string }> = [];
+  for (const path of pagePaths) {
+    const url = await getSignedUrl(supabase, PAGES_BUCKET, path, 600);
+    if (url) {
+      out.push({ signedUrl: url, mimeType: 'image/png', path });
+    }
+  }
+  return out;
+}
 
 async function getSignedUrl(
   supabase: any,
@@ -388,6 +412,13 @@ async function ensureExtraction(
   }
 
   if (!loadedFile) return row;
+
+  // Catálogo já pré-renderizado em páginas: pula a extração via Flash —
+  // o Pro multimodal verá cada página diretamente.
+  if (loadedFile.pages && loadedFile.pages.length > 0) {
+    console.log(`Pulando extração de ${table} — usando ${loadedFile.pages.length} páginas pré-renderizadas.`);
+    return row;
+  }
 
   // Pula extração para arquivos grandes (> 6MB). O Gemini Pro multimodal lerá
   // o PDF original direto via signed URL, sem precisar de JSON estruturado intermediário.
@@ -803,10 +834,34 @@ serve(async (req) => {
     const recordFull = await ensureExtraction(supabase, 'prescription_records', recordRow, recordFile);
 
     console.log('Carregando CATALOG...');
-    const catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
-    if (catalogFile) {
-      const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
-      console.log(`CATALOG pronto: ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType}) via ${via}`);
+    // Caminho preferido: catálogo PDF já pré-processado em páginas PNG.
+    // O process-catalog-pdf renderiza cada página no upload e salva em
+    // prescription_catalogs.extracted_metadata.pages = ['userId/catalogId/page-001.png', ...]
+    let catalogFile: LoadedFile | null = null;
+    const cMeta = catalogRow.extracted_metadata || {};
+    if (Array.isArray(cMeta.pages) && cMeta.pages.length > 0) {
+      console.log(`CATALOG tem ${cMeta.pages.length} páginas pré-renderizadas — usando caminho de páginas.`);
+      const pages = await loadCatalogPages(supabase, cMeta.pages);
+      if (pages.length > 0) {
+        catalogFile = {
+          base64: null,
+          signedUrl: null,
+          mimeType: 'application/pdf', // mime original do catálogo (informativo)
+          sizeBytes: catalogRow.file_size || 0,
+          bucket: 'prescription-files',
+          path: catalogRow.file_path,
+          pages,
+        };
+        console.log(`CATALOG pronto: ${pages.length} páginas PNG via signed URL`);
+      }
+    }
+    // Fallback: catálogo sem páginas pré-renderizadas (imagem direta, ou processamento ainda não rodou)
+    if (!catalogFile) {
+      catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
+      if (catalogFile) {
+        const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
+        console.log(`CATALOG pronto (sem páginas): ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType}) via ${via}`);
+      }
     }
     console.log('Extraindo CATALOG (se cache inválido)...');
     const catalogFull = await ensureExtraction(supabase, 'prescription_catalogs', catalogRow, catalogFile);
@@ -850,7 +905,11 @@ serve(async (req) => {
       mt === 'application/csv';
 
     const recordHasOriginal = !!recordFile && isMultimodalMime(recordFile.mimeType);
-    const catalogHasOriginal = !!catalogFile && isMultimodalMime(catalogFile.mimeType);
+    // Catálogo conta como "tem original" se for mime multimodal OU se tiver páginas pré-renderizadas.
+    const catalogHasOriginal = !!catalogFile && (
+      isMultimodalMime(catalogFile.mimeType) ||
+      (Array.isArray(catalogFile.pages) && catalogFile.pages.length > 0)
+    );
 
     // Texto puro só pode ser decodificado se temos o base64 carregado.
     // Para arquivos > 2MB de texto puro (raro), o Gemini buscará via URL.
@@ -882,23 +941,36 @@ serve(async (req) => {
 
     const attachIfMultimodal = (file: LoadedFile | null, label: string) => {
       if (!file) return false;
+
+      // Caminho preferencial para catálogo: páginas PNG pré-renderizadas.
+      // Cada página é uma imagem independente sob o limite de 7MB do provider —
+      // sem PDF inline, sem data URL gigante, sem estouro de RAM.
+      if (Array.isArray(file.pages) && file.pages.length > 0) {
+        for (const p of file.pages) {
+          userContent.push({ type: 'image_url', image_url: { url: p.signedUrl } });
+        }
+        console.log(`Anexado ${label} — ${file.pages.length} páginas via signed URL (image/png)`);
+        return true;
+      }
+
       const mt = file.mimeType;
       if (isMultimodalMime(mt)) {
-        // Preferimos signed URL sempre que existir (evita carregar base64 grande no payload).
-        // Para arquivos pequenos com base64 já em mãos, ainda usamos inline (mais rápido).
+        // Imagens (não PDF) podem ir como signed URL HTTP.
+        // PDFs precisam de data URL — o Gemini rejeita HTTP URL para application/pdf.
+        const isImage = mt.startsWith('image/');
         let url: string;
         let via: string;
-        if (file.signedUrl && (!file.base64 || file.sizeBytes > INLINE_THRESHOLD)) {
+        if (isImage && file.signedUrl && (!file.base64 || file.sizeBytes > INLINE_THRESHOLD)) {
           url = file.signedUrl;
           via = 'signed URL';
         } else if (file.base64) {
           url = `data:${mt};base64,${file.base64}`;
           via = 'base64 inline';
-        } else if (file.signedUrl) {
+        } else if (isImage && file.signedUrl) {
           url = file.signedUrl;
           via = 'signed URL (sem base64)';
         } else {
-          console.log(`${label} sem URL nem base64 — não pode ser anexado`);
+          console.log(`${label} ${mt} grande sem base64 — provider não aceita HTTP URL para esse mime, pulando anexo`);
           return false;
         }
         userContent.push({ type: 'image_url', image_url: { url } });
