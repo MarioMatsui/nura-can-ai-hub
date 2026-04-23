@@ -1,58 +1,54 @@
 
 
-## Ajustes finais no Receituário +
+## Dois ajustes no Receituário +
 
-### 1. Remover "Pronto para uso (modo rápido)"
+### 1. Contador de caracteres na mesma linha do label
 
-**`src/components/dashboard/prescription/UploadDropzone.tsx`** (linha 460)
+**`src/components/dashboard/prescription/PrescriptionView.tsx`** (seção "Observações complementares", linhas ~190-201)
 
-Remover por completo o bloco condicional que renderiza:
+Reestruturar o bloco do label para usar `flex justify-between items-center`, movendo o contador `{observations.length}/1000` para o canto direito da mesma linha do label. Remover a `<div>` separada com o contador que aparece abaixo do textarea.
+
 ```tsx
-<div className="text-xs text-primary font-medium">✓ Pronto para uso (modo rápido)</div>
-```
-Esse texto não aparecerá em nenhum estado (catálogo recém-enviado nem catálogo salvo reutilizado).
-
-### 2. Botão "Novo Receituário" ao lado de "Gerar Receituário"
-
-**`src/components/dashboard/prescription/PrescriptionView.tsx`** (seção Action, linhas 228–253)
-
-- Envolver os dois botões em um wrapper `flex flex-col md:flex-row gap-3 md:items-center` para alinhamento horizontal no desktop e empilhado no mobile.
-- O botão "Gerar Receituário" mantém o estilo atual (primary, destaque forte).
-- Adicionar à direita um novo `<Button variant="outline" size="lg">` com ícone `<RotateCcw />` (lucide) + texto **"Novo Receituário"** — menor peso visual, coerente com o design system existente.
-- O botão "Novo Receituário" fica **desabilitado durante `isGenerating`** para evitar reset no meio da requisição.
-- O botão fica **sempre visível** (não depende de ter resposta gerada) — assim o usuário pode descartar inputs rapidamente também antes de gerar.
-
-### 3. Comportamento do reset
-
-Adicionar handler `handleNewPrescription` em `PrescriptionView.tsx` que limpa exclusivamente o estado local da tela:
-
-```ts
-const handleNewPrescription = () => {
-  setCatalog(null);
-  setRecord(null);
-  setObservations('');
-  setAiResponse('');
-  setSelectedHistoryId(null);
-  setCopied(false);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-};
+<section className="space-y-2">
+  <div className="flex items-center justify-between">
+    <label className="text-sm font-medium text-foreground">
+      Observações complementares <span className="text-muted-foreground font-normal">(opcional)</span>
+    </label>
+    <span className="text-xs text-muted-foreground">{observations.length}/1000</span>
+  </div>
+  <Textarea ... />
+</section>
 ```
 
-Garantias:
-- **Não recarrega a página** (sem `window.location.reload`).
-- **Não toca em dados persistidos**: catálogos salvos (`prescription_catalogs`), histórico (`prescription_results`) e arquivos no storage permanecem intactos. O reset só zera os `useState` locais.
-- **Não dispara DELETE** no banco — apenas desvincula do estado os IDs atualmente selecionados.
-- Limpa também `selectedHistoryId` para que, se o usuário estava visualizando um item antigo, o card do histórico volte ao estado neutro — reforçando a leitura de "novo fluxo, novos parâmetros, novo resultado, novo histórico" (o próximo `handleGenerate` criará um registro novo em `prescription_results`, como já acontece hoje).
-- Scroll para o topo para reforçar visualmente que um novo fluxo começou.
+Resultado: label à esquerda, contador à direita na mesma linha; textarea limpo abaixo, sem texto interno ou inferior.
+
+### 2. Nome do paciente sempre branco no estado padrão
+
+**`src/components/dashboard/prescription/PrescriptionView.tsx`** (cards do "Histórico recente", linhas ~267-275)
+
+Hoje a classe condicional aplica `text-foreground` no estado padrão. No tema dark `--foreground` já é branco, mas em alguns navegadores/estados (após interação ou foco) a herança pode ficar inconsistente porque o card herda cor do parent quando selecionado/hover muda o pai.
+
+Correção: forçar explicitamente `text-white` no estado padrão do nome do paciente, deixando o hover/selected como `text-black` (já implementado). Mesma regra para garantir que apenas hover e selected mudem para preto, nunca outro estado.
+
+```tsx
+<div
+  className={cn(
+    'text-sm font-medium line-clamp-1 transition-colors',
+    isSelected ? 'text-black' : 'text-white group-hover:text-black',
+  )}
+>
+  {item.patient_name || 'Paciente não identificado'}
+</div>
+```
+
+Os outros textos do card (queixa, data) continuam com `text-muted-foreground` no padrão e `text-black/70` / `text-black/60` no hover/selected — apenas o **nome** vai forçar branco puro.
 
 ### Resultado esperado
 
-- Texto "Pronto para uso (modo rápido)" eliminado de todos os estados do dropzone.
-- Dois botões lado a lado: "Gerar Receituário" (primary) à esquerda, "Novo Receituário" (outline com ícone de reset) à direita.
-- Clique em "Novo Receituário" devolve a tela ao estado inicial em milissegundos, sem afetar histórico nem catálogos salvos, e o usuário pode iniciar imediatamente um novo fluxo que gerará uma nova entrada no histórico.
+- Label "Observações complementares (opcional)" à esquerda + "5/1000" à direita, mesma linha. Textarea limpo abaixo.
+- Nome do paciente no histórico: **sempre branco** no padrão (independente de estado), **preto** apenas no hover ou quando selecionado.
 
 ### Arquivos alterados
 
-- `src/components/dashboard/prescription/UploadDropzone.tsx` (remover bloco "Pronto para uso")
-- `src/components/dashboard/prescription/PrescriptionView.tsx` (wrapper flex + botão "Novo Receituário" + handler de reset)
+- `src/components/dashboard/prescription/PrescriptionView.tsx` (única mudança)
 
