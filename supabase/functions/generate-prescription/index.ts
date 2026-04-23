@@ -181,6 +181,7 @@ async function downloadFileAsBase64(
   const mimeType = data.type || 'application/octet-stream';
   const sizeBytes = buf.length;
   const base64 = uint8ToBase64(buf);
+  assertValidBase64(base64, sizeBytes, `download ${bucket}/${path}`);
   // buf sai de escopo após retornar; ab também. base64 fica como única cópia viva.
   return { base64, mimeType, sizeBytes };
 }
