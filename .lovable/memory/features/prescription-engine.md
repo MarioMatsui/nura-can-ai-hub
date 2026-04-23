@@ -56,7 +56,10 @@ Se `processing_complete && pages.length > 0` na entrada, retorna `done: true` im
 - Fallback: se não-PDF ou ainda não processado, cai no caminho legado de `loadFile`.
 
 ### Frontend
-- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 1`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…". Em caso de erro intermediário, mantém progresso visível com mensagem "Processamento interrompido em X/Y páginas".
+- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`) com `batchSize: 1`, atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…".
+- **Retry automático por batch**: até 3 tentativas com `sleep(1500ms)` entre elas. Antes de cada retry, sincroniza `pages_count`/`total_pages` direto da tabela `prescription_catalogs` (o backend pode ter salvo checkpoint mesmo com a resposta HTTP falhando) e ajusta `startPage` para o real progresso. Como o backend é reentrante, retentar nunca duplica página.
+- **Retomada manual**: quando catálogo fica em `pages_count < total_pages` sem estar processando, o card mostra `X/Y páginas processadas` + botão **"Continuar processamento"** (`PlayCircle`). Clicar dispara `runCatalogProcessing` a partir de `pages_count` real do banco — sem reupload.
+- Toast de pausa: `"Processamento pausado em X/Y páginas. Clique em Continuar processamento para retomar."`
 - `PrescriptionView`: botão "Gerar Receituário" só habilita quando catálogo PDF está **100% processado** (`!isProcessing && pages_count === total_pages && total_pages > 0`). Não-PDF não exige processamento.
 - Tipo `UploadedFile` inclui `total_pages?: number`.
 
