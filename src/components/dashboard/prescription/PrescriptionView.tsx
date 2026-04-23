@@ -53,8 +53,8 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const isCurrentCatalogSaved = !!catalog && savedCatalogs.some((s) => s.catalog_id === catalog.id);
   const savedLimitReached = savedCatalogs.length >= SAVED_CATALOGS_LIMIT;
 
-  const summary = useMemo(() => extractPrescriptionSummary(aiResponse), [aiResponse]);
-  const hasSummary = !!aiResponse && (!!summary.produto || !!summary.posologia);
+  const summaryItems = useMemo(() => extractPrescriptionSummary(aiResponse), [aiResponse]);
+  const hasSummary = !!aiResponse && summaryItems.length > 0;
 
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
@@ -285,11 +285,21 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
           {/* Resumo copiável */}
           {hasSummary && (
             <section className="space-y-3">
-              <h2 className="text-sm font-medium text-muted-foreground">Resumo</h2>
-              <Card className="p-4 md:p-5 space-y-3">
-                <SummaryRow label="Produto" value={summary.produto} multiline={false} />
-                <SummaryRow label="Posologia" value={summary.posologia} multiline={true} />
-              </Card>
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Resumo{summaryItems.length > 1 ? ` (${summaryItems.length} produtos)` : ''}
+              </h2>
+              <div className="space-y-3">
+                {summaryItems.map((item, idx) => (
+                  <Card key={idx} className="p-4 md:p-5 space-y-3">
+                    <SummaryRow
+                      label={summaryItems.length > 1 ? `Produto ${idx + 1}` : 'Produto'}
+                      value={item.produto}
+                      multiline={false}
+                    />
+                    <SummaryRow label="Posologia" value={item.posologia} multiline={true} />
+                  </Card>
+                ))}
+              </div>
             </section>
           )}
 
