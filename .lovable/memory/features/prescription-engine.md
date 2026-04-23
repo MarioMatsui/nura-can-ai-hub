@@ -11,9 +11,18 @@ type: feature
 - System: `MEDICAL_SYSTEM_PROMPT` + `PRESCRIPTION_TASK_LAYER` + `ATTACHMENT_PRIORITY_NOTE`
 - One-shot (sem histórico)
 
-## Catálogo PDF: pré-renderização página a página com checkpoint (CRÍTICO)
+## Pipeline condicional de catálogo PDF (CRÍTICO)
 
-O Lovable AI Gateway repassa para o Gemini, que **só aceita `image_url` HTTP quando o conteúdo é imagem** (PNG/JPEG/WebP/GIF). Para PDF, exige base64 inline — que estoura RAM (256MB) e o limite de ~7MB do `inline_data`. Solução: renderizar cada página como **JPEG** e enviar como signed URL.
+**Regra de tamanho** (`PDF_SMALL_THRESHOLD = 5MB` no frontend; `PDF_INLINE_THRESHOLD = 5MB` no backend):
+
+- **PDF ≤ 5MB**: pula `process-catalog-pdf` inteiramente. Frontend marca `extracted_metadata = { skip_page_render: true, pages_count: 1, total_pages: 1, size_bytes }` e libera o botão Gerar imediatamente. Backend (`generate-prescription`) detecta `skip_page_render === true`, pula o caminho de páginas e usa `loadFile` que carrega o PDF original como **base64 inline** (PDFs SEMPRE precisam de inline — Gemini rejeita HTTP URL para `application/pdf`).
+- **PDF > 5MB**: mantém pipeline original — `process-catalog-pdf` em loop com batch=1, checkpoint por página, retomada manual etc.
+
+**Por que não usar inline para todos**: Gemini tem limite prático de ~7MB no `inline_data`, e edge function tem ~256MB de RAM. Acima de 5MB é mais seguro pré-renderizar em páginas JPEG independentes.
+
+## Catálogo PDF > 5MB: pré-renderização página a página com checkpoint
+
+O Lovable AI Gateway repassa para o Gemini, que **só aceita `image_url` HTTP quando o conteúdo é imagem** (PNG/JPEG/WebP/GIF). Para PDF grande, exige base64 inline — que estoura RAM (256MB) e o limite de ~7MB do `inline_data`. Solução: renderizar cada página como **JPEG** e enviar como signed URL.
 
 ### Por que 1 PÁGINA por invocação?
 Edge functions Supabase têm CPU time limit observado de **~6s** por invocação (não 10s como esperado). Bootstrap PDFium em base64 leva ~3-4s. Cada página leva ~1-2s (render + encode JPEG + upload). Batch=3 estava morrendo após 2 páginas com `CPU Time exceeded`. Batch=1 → ~5-6s, com folga.
