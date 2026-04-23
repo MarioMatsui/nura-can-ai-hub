@@ -200,7 +200,10 @@ async function loadCatalogPages(
   for (const path of pagePaths) {
     const url = await getSignedUrl(supabase, PAGES_BUCKET, path, 600);
     if (url) {
-      out.push({ signedUrl: url, mimeType: 'image/png', path });
+      // Detecta mimeType pela extensão (novos: .jpg; legados: .png)
+      const lower = path.toLowerCase();
+      const mimeType = lower.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      out.push({ signedUrl: url, mimeType, path });
     }
   }
   return out;
