@@ -122,9 +122,7 @@ serve(async (req) => {
     console.log(`PDF carregado: ${(pdfBytes.length / 1024 / 1024).toFixed(2)}MB`);
 
     console.log('Inicializando PDFium…');
-    const wasmBinary = await getPdfiumWasm();
-    console.log(`PDFium WASM carregado: ${(wasmBinary.byteLength / 1024 / 1024).toFixed(2)}MB`);
-    const library = await PDFiumLibrary.init({ wasmBinary });
+    const library = await PDFiumLibrary.init();
     const document = await library.loadDocument(pdfBytes);
 
     const pageObjs = Array.from(document.pages());
