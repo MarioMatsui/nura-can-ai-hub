@@ -166,7 +166,94 @@ function assertValidBase64(b64: string, sizeBytes: number, label: string): void 
   }
 }
 
-async function downloadFileAsBase64(
+// Threshold para decidir entre base64 inline vs signed URL.
+// Arquivos > 2MB vão via signed URL — evita estourar memória do edge function
+// e o limite prático de ~7MB do inline_data do Gemini.
+const INLINE_THRESHOLD = 2 * 1024 * 1024; // 2MB
+
+// Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos)
+// ou apontado por signed URL (arquivos grandes — Gemini busca direto do Storage).
+type LoadedFile = {
+  base64: string | null;
+  signedUrl: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  bucket: string;
+  path: string;
+};
+
+async function getSignedUrl(
+  supabase: any,
+  bucket: string,
+  path: string,
+  expiresInSeconds = 600,
+): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresInSeconds);
+  if (error || !data?.signedUrl) {
+    console.error('Failed to create signed URL:', bucket, path, error);
+    return null;
+  }
+  return data.signedUrl;
+}
+
+// Lê apenas o cabeçalho HEAD para descobrir tamanho/mime sem baixar o arquivo.
+// Usa a signed URL como fonte autoritativa de bytes.
+async function probeFileMetadata(
+  supabase: any,
+  bucket: string,
+  path: string,
+): Promise<{ sizeBytes: number; mimeType: string; signedUrl: string } | null> {
+  const signedUrl = await getSignedUrl(supabase, bucket, path);
+  if (!signedUrl) return null;
+  try {
+    const head = await fetch(signedUrl, { method: 'HEAD' });
+    if (!head.ok) {
+      console.error('HEAD failed:', head.status);
+      return null;
+    }
+    const sizeBytes = Number(head.headers.get('content-length') || '0');
+    const mimeType = head.headers.get('content-type') || 'application/octet-stream';
+    return { sizeBytes, mimeType, signedUrl };
+  } catch (e) {
+    console.error('HEAD error', e);
+    return null;
+  }
+}
+
+async function loadFile(
+  supabase: any,
+  bucket: string,
+  path: string,
+): Promise<LoadedFile | null> {
+  const probe = await probeFileMetadata(supabase, bucket, path);
+  if (!probe) return null;
+  const { sizeBytes, mimeType, signedUrl } = probe;
+
+  // Arquivos grandes: NÃO baixar. Gemini buscará direto via signed URL.
+  if (sizeBytes > INLINE_THRESHOLD) {
+    console.log(`Arquivo grande (${(sizeBytes / 1024 / 1024).toFixed(2)}MB) — usando signed URL, sem materializar base64`);
+    return { base64: null, signedUrl, mimeType, sizeBytes, bucket, path };
+  }
+
+  // Arquivos pequenos: caminho rápido com base64 inline.
+  const { data, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !data) {
+    console.error('Failed to download small file:', path, error);
+    // Fallback: ainda podemos usar a signed URL
+    return { base64: null, signedUrl, mimeType, sizeBytes, bucket, path };
+  }
+  const ab = await data.arrayBuffer();
+  const buf = new Uint8Array(ab);
+  const realMime = data.type || mimeType;
+  const realSize = buf.length;
+  const base64 = uint8ToBase64(buf);
+  assertValidBase64(base64, realSize, `download ${bucket}/${path}`);
+  return { base64, signedUrl, mimeType: realMime, sizeBytes: realSize, bucket, path };
+}
+
+// Baixa o arquivo APENAS quando precisamos do base64 para extração estruturada
+// (Gemini Flash). Usado de forma ESCOPADA — o resultado é descartado logo após.
+async function downloadAsBase64Once(
   supabase: any,
   bucket: string,
   path: string,
@@ -182,7 +269,6 @@ async function downloadFileAsBase64(
   const sizeBytes = buf.length;
   const base64 = uint8ToBase64(buf);
   assertValidBase64(base64, sizeBytes, `download ${bucket}/${path}`);
-  // buf sai de escopo após retornar; ab também. base64 fica como única cópia viva.
   return { base64, mimeType, sizeBytes };
 }
 
@@ -288,10 +374,9 @@ async function ensureExtraction(
   supabase: any,
   table: 'prescription_catalogs' | 'prescription_records',
   row: any,
-  preloadedFile: { base64: string; mimeType: string; sizeBytes: number } | null,
+  loadedFile: LoadedFile | null,
 ): Promise<any> {
   // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
-  // Catálogo precisa ter pelo menos 1 produto extraído. Prontuário precisa ter queixa OU sintomas.
   const meta = row.extracted_metadata || {};
   const isCatalog = table === 'prescription_catalogs';
   const cacheValid = isCatalog
@@ -302,16 +387,24 @@ async function ensureExtraction(
     return row;
   }
 
-  // CORREÇÃO MEMÓRIA: reutiliza arquivo já baixado em vez de baixar de novo.
-  const file = preloadedFile;
-  if (!file) return row;
+  if (!loadedFile) return row;
 
-  // CORREÇÃO MEMÓRIA: pula extração se arquivo é grande demais. O Gemini Pro
-  // multimodal lê o PDF original diretamente e produz uma sugestão completa
-  // sem precisar do JSON estruturado intermediário.
-  if (file.sizeBytes > MAX_EXTRACTION_FILE_BYTES) {
-    console.log(`Pulando extração de ${table} (${(file.sizeBytes / 1024 / 1024).toFixed(2)}MB > limite). Pro multimodal lerá direto.`);
+  // Pula extração para arquivos grandes (> 6MB). O Gemini Pro multimodal lerá
+  // o PDF original direto via signed URL, sem precisar de JSON estruturado intermediário.
+  if (loadedFile.sizeBytes > MAX_EXTRACTION_FILE_BYTES) {
+    console.log(`Pulando extração de ${table} (${(loadedFile.sizeBytes / 1024 / 1024).toFixed(2)}MB > limite). Pro multimodal lerá direto via URL.`);
     return row;
+  }
+
+  // Para extração com Flash, precisamos de base64. Se já temos (arquivo pequeno), usa.
+  // Se não (caso raro: arquivo entre 2MB e 6MB), baixa AGORA em escopo isolado.
+  let base64ForExtraction: string | null = loadedFile.base64;
+  let mimeForExtraction: string = loadedFile.mimeType;
+  if (!base64ForExtraction) {
+    const tmp = await downloadAsBase64Once(supabase, loadedFile.bucket, loadedFile.path);
+    if (!tmp) return row;
+    base64ForExtraction = tmp.base64;
+    mimeForExtraction = tmp.mimeType;
   }
 
   let raw = '';
@@ -319,23 +412,25 @@ async function ensureExtraction(
 
   const prompt = isCatalog ? CATALOG_EXTRACTION_PROMPT : RECORD_EXTRACTION_PROMPT;
 
-  if (isTextual(file.mimeType)) {
+  if (isTextual(mimeForExtraction)) {
     try {
-      const decoded = atob(file.base64);
+      const decoded = atob(base64ForExtraction);
       raw = decoded;
-      const structured = await extractWithGemini(file.base64, file.mimeType, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 12000));
+      const structured = await extractWithGemini(base64ForExtraction, mimeForExtraction, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 12000));
       metadata = structured.metadata;
     } catch (e) {
       console.error('Text decode error', e);
     }
   } else {
-    const result = await extractWithGemini(file.base64, file.mimeType, prompt);
+    const result = await extractWithGemini(base64ForExtraction, mimeForExtraction, prompt);
     raw = result.raw;
     metadata = result.metadata;
   }
 
+  // Libera o base64 temporário se foi baixado só pra extração
+  base64ForExtraction = null;
+
   const updates: any = {
-    // CORREÇÃO 2: extracted_content sobe de 50k para 80k
     extracted_content: raw.slice(0, 80000),
     extracted_metadata: metadata,
   };
@@ -698,17 +793,24 @@ serve(async (req) => {
     // - Antes: 2 downloads + 2 base64 + 2 extrações em paralelo + 2 anexos multimodais
     //   = pico de memória > 256MB com PDFs médios. Agora: pico = 1 PDF por vez na fase
     //   de extração, e ambos coexistem só na montagem final do payload do Gemini Pro.
-    console.log('Baixando RECORD...');
-    const recordFile = await downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path);
-    if (recordFile) console.log(`RECORD baixado: ${(recordFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${recordFile.mimeType})`);
+    console.log('Carregando RECORD...');
+    const recordFile = await loadFile(supabase, 'prescription-files', recordRow.file_path);
+    if (recordFile) {
+      const via = recordFile.base64 ? 'base64 inline' : 'signed URL';
+      console.log(`RECORD pronto: ${(recordFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${recordFile.mimeType}) via ${via}`);
+    }
     console.log('Extraindo RECORD (se cache inválido)...');
     const recordFull = await ensureExtraction(supabase, 'prescription_records', recordRow, recordFile);
 
-    console.log('Baixando CATALOG...');
-    const catalogFile = await downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path);
-    if (catalogFile) console.log(`CATALOG baixado: ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType})`);
+    console.log('Carregando CATALOG...');
+    const catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
+    if (catalogFile) {
+      const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
+      console.log(`CATALOG pronto: ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType}) via ${via}`);
+    }
     console.log('Extraindo CATALOG (se cache inválido)...');
     const catalogFull = await ensureExtraction(supabase, 'prescription_catalogs', catalogRow, catalogFile);
+
 
 
     // Constrói query RAG a partir do prontuário + observações.
@@ -750,9 +852,12 @@ serve(async (req) => {
     const recordHasOriginal = !!recordFile && isMultimodalMime(recordFile.mimeType);
     const catalogHasOriginal = !!catalogFile && isMultimodalMime(catalogFile.mimeType);
 
-    const decodeTextFile = (file: { base64: string; mimeType: string } | null): string | null => {
+    // Texto puro só pode ser decodificado se temos o base64 carregado.
+    // Para arquivos > 2MB de texto puro (raro), o Gemini buscará via URL.
+    const decodeTextFile = (file: LoadedFile | null): string | null => {
       if (!file) return null;
       if (!isPlainTextMime(file.mimeType)) return null;
+      if (!file.base64) return null;
       try { return atob(file.base64); } catch { return null; }
     };
     const recordPlainText = decodeTextFile(recordFile);
@@ -775,15 +880,29 @@ serve(async (req) => {
 
     const userContent: any[] = [{ type: 'text', text: userMessageText }];
 
-    const attachIfMultimodal = (file: { base64: string; mimeType: string } | null, label: string) => {
+    const attachIfMultimodal = (file: LoadedFile | null, label: string) => {
       if (!file) return false;
       const mt = file.mimeType;
       if (isMultimodalMime(mt)) {
-        userContent.push({
-          type: 'image_url',
-          image_url: { url: `data:${mt};base64,${file.base64}` },
-        });
-        console.log(`Anexado ${label} multimodal (${mt})`);
+        // Preferimos signed URL sempre que existir (evita carregar base64 grande no payload).
+        // Para arquivos pequenos com base64 já em mãos, ainda usamos inline (mais rápido).
+        let url: string;
+        let via: string;
+        if (file.signedUrl && (!file.base64 || file.sizeBytes > INLINE_THRESHOLD)) {
+          url = file.signedUrl;
+          via = 'signed URL';
+        } else if (file.base64) {
+          url = `data:${mt};base64,${file.base64}`;
+          via = 'base64 inline';
+        } else if (file.signedUrl) {
+          url = file.signedUrl;
+          via = 'signed URL (sem base64)';
+        } else {
+          console.log(`${label} sem URL nem base64 — não pode ser anexado`);
+          return false;
+        }
+        userContent.push({ type: 'image_url', image_url: { url } });
+        console.log(`Anexado ${label} multimodal (${mt}) via ${via} — ${(file.sizeBytes / 1024 / 1024).toFixed(2)}MB`);
         return true;
       }
       if (isPlainTextMime(mt)) {
@@ -796,6 +915,7 @@ serve(async (req) => {
 
     const recordAttached = attachIfMultimodal(recordFile, 'PRONTUÁRIO');
     const catalogAttached = attachIfMultimodal(catalogFile, 'CATÁLOGO');
+
 
     // CORREÇÃO 5: instrução de prioridade dos anexos vai para a camada de SISTEMA
     // (mesmo padrão do chat-ai). O prompt do usuário fica focado no caso clínico.
