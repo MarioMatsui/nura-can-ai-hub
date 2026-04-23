@@ -133,6 +133,19 @@ function sanitizeRAGContent(content: string): string {
 // EXTRAÇÃO DE CONTEÚDO DOS ARQUIVOS (Gemini multimodal)
 // =============================================================================
 
+// Conversão Uint8Array -> base64 em CHUNKS pequenos.
+// Loop char-by-char (`binary += String.fromCharCode(buf[i])`) explode a memória
+// para PDFs grandes (cada concat realoca string). Chunked é O(n) com pico baixo.
+function uint8ToBase64(buf: Uint8Array): string {
+  const CHUNK = 0x8000; // 32KB por chunk
+  let binary = '';
+  for (let i = 0; i < buf.length; i += CHUNK) {
+    const slice = buf.subarray(i, Math.min(i + CHUNK, buf.length));
+    binary += String.fromCharCode.apply(null, slice as unknown as number[]);
+  }
+  return btoa(binary);
+}
+
 async function downloadFileAsBase64(
   supabase: any,
   bucket: string,
@@ -143,11 +156,10 @@ async function downloadFileAsBase64(
     console.error('Failed to download file:', path, error);
     return null;
   }
-  const buf = new Uint8Array(await data.arrayBuffer());
-  let binary = '';
-  for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
-  const base64 = btoa(binary);
+  const ab = await data.arrayBuffer();
+  const buf = new Uint8Array(ab);
   const mimeType = data.type || 'application/octet-stream';
+  const base64 = uint8ToBase64(buf);
   return { base64, mimeType };
 }
 
