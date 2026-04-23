@@ -171,6 +171,12 @@ function assertValidBase64(b64: string, sizeBytes: number, label: string): void 
 // e o limite prático de ~7MB do inline_data do Gemini.
 const INLINE_THRESHOLD = 2 * 1024 * 1024; // 2MB
 
+// Threshold específico para PDF: o Gemini NÃO aceita signed HTTP URL para
+// application/pdf (só inline). Por isso PDFs até 5MB vão obrigatoriamente
+// como base64 inline. Acima disso, o pipeline já pré-renderiza em páginas
+// (process-catalog-pdf), evitando a necessidade de inline.
+const PDF_INLINE_THRESHOLD = 5 * 1024 * 1024; // 5MB
+
 // Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos),
 // apontado por signed URL (arquivos grandes — Gemini busca direto do Storage),
 // ou — no caso especial do catálogo PDF — explodido em páginas PNG já pré-renderizadas
