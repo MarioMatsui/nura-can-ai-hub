@@ -1,82 +1,106 @@
 
+## Diagnóstico
 
-## Diagnóstico real
+O erro atual já não é de bundle nem de autenticação. O backend chega a este ponto:
 
-Os logs mostram o erro continuando **mesmo com a correção anterior aplicada**:
-
-```
+```text
 PDF carregado: 9.97MB
 Inicializando PDFium…
-ERROR @hyzyla/pdfium: wasmUrl, wasmBinary is required for browser environment.
+PDFium WASM carregado: 3.72MB
+process-catalog-pdf fatal Error: createRequire only supports 'file://' URLs
+Received 'https://esm.sh/@hyzyla/pdfium@2.1.7/deno/pdfium.mjs'
 ```
 
-Note que o log `PDFium WASM carregado: …MB` **não aparece** entre `Inicializando PDFium…` e o erro. Isso é decisivo: significa que `await getPdfiumWasm()` nem chega a retornar antes do `PDFiumLibrary.init()` estourar — porque o erro não vem do nosso `init({ wasmBinary })`, vem do **import do módulo** (`PDFiumLibrary.initBase` em `pdfium.mjs:6:329`), que executa código de bootstrap antes mesmo da nossa primeira chamada.
+**Problema exato:** a função está importando o PDFium por URL remota do `esm.sh`:
 
-### Causa raiz
+```ts
+import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7?target=deno";
+```
 
-O build `denonext/pdfium.mjs` que o `esm.sh` serve detecta o ambiente como "browser" por causa de duas coisas combinadas:
-
-1. **`import "https://deno.land/x/xhr@0.1.0/mod.ts";`** na linha 12 — esse polyfill antigo injeta globals tipo `XMLHttpRequest` no escopo. O `pdfium.mjs` faz `typeof XMLHttpRequest !== 'undefined'` para decidir se está em browser.
-2. Mesmo passando `{ wasmBinary }` em `init()`, o caminho "browser" do `initBase` reage à presença desses globals **antes** de checar nossas opções, abortando.
-
-A correção anterior (`wasmBinary`) era necessária mas **não suficiente** — ela só vale se o módulo aceitar entrar no caminho "Deno". Enquanto o polyfill `xhr` estiver carregado, o pdfium acha que é browser e cobra `wasmUrl`.
-
-### Por que o `xhr` polyfill está aí
-
-É herança de templates antigos do Supabase Edge Functions (Deno 1.x). No runtime atual (Deno 2.x usado pelo edge), `fetch` e tudo mais já existe nativamente. O polyfill é **inútil** e está ativamente prejudicando.
+Esse build remoto entra num caminho interno que usa `createRequire(import.meta.url)`. Em edge runtime, `import.meta.url` vira uma URL `https://...`, não `file://...`, então o módulo quebra antes de carregar o documento. Ou seja: o WASM até baixa, mas a lib falha no bootstrap.
 
 ## Solução
 
-Duas mudanças mínimas em `supabase/functions/process-catalog-pdf/index.ts`:
+### 1) Trocar o entrypoint do PDFium para a variante base64
+Em vez do build remoto `?target=deno`, usar o entrypoint próprio que já embute o WASM e não depende de `createRequire` nem de fetch manual do binário.
 
-### 1. Remover o polyfill `xhr`
-Apagar a linha:
-```ts
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-```
-Sem ele, `typeof XMLHttpRequest === 'undefined'`, o pdfium entra no caminho Deno e aceita `wasmBinary` normalmente.
+**Arquivo:** `supabase/functions/process-catalog-pdf/index.ts`
 
-### 2. Trocar o specifier do pdfium para `npm:` (mais estável)
-Trocar:
+Trocar a importação do PDFium para o entrypoint equivalente a:
+
 ```ts
-import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7";
-```
-Por:
-```ts
-import { PDFiumLibrary } from "npm:@hyzyla/pdfium@2.1.7";
+import { PDFiumLibrary } from "@hyzyla/pdfium/browser/base64";
 ```
 
-Por quê: o specifier `npm:` no Deno Edge usa o resolver oficial do Deno, que escolhe automaticamente o build server-side correto da lib (não o `denonext/` do esm.sh, que é ambíguo) e empacota o `.wasm` adjacente. Isso elimina inclusive a necessidade do `getPdfiumWasm()` manual — o `init()` sem argumentos passa a funcionar.
+No contexto da função, isso deve ser feito via um specifier compatível com o runtime de edge, evitando o módulo remoto atual.
 
-### 3. Simplificar `init()` 
-Como o `npm:` resolve o WASM nativamente, podemos voltar ao mais simples:
+### 2) Remover toda a lógica manual de `wasmBinary`
+Como o entrypoint base64 já traz o binário embutido, remover:
+- `PDFIUM_WASM_URL`
+- `cachedWasm`
+- `getPdfiumWasm()`
+- `const wasmBinary = await getPdfiumWasm()`
+- `PDFiumLibrary.init({ wasmBinary })`
+
+E simplificar para:
+
 ```ts
 const library = await PDFiumLibrary.init();
 ```
 
-E **remover** as constantes `PDFIUM_WASM_URL`, `cachedWasm` e a função `getPdfiumWasm()` — ficam mortas.
+### 3) Manter o restante do pipeline igual
+Não mudar:
+- auth da função
+- leitura do PDF do bucket
+- render por página
+- upload das páginas em `prescription-files-pages`
+- persistência em `extracted_metadata.pages`
 
-### Fallback se `npm:` falhar
-Se por algum motivo o specifier `npm:` não funcionar no edge runtime do Lovable, voltamos a `https://esm.sh/...` mas mantemos o `xhr` removido e o `getPdfiumWasm()` no lugar — só a remoção do polyfill já deve destravar o erro.
+A arquitetura está correta; o problema está só no bootstrap da biblioteca de renderização.
 
-## Validação pós-deploy
+### 4) Melhorar o erro exibido no frontend
+Hoje o usuário só vê:
 
-Reenviar o catálogo de 9.97MB. Logs esperados:
+```text
+Falha ao processar páginas do catálogo. Tente reenviar.
 ```
-Baixando PDF do catálogo …
-PDF carregado: 9.97MB
-Inicializando PDFium…
-PDF tem N páginas — processando N.
-Página 1/N: 1240x1754, PNG XXX KB
-…
-✓ Catálogo {id} processado: N páginas
-```
 
-Frontend: o card do catálogo passa de "Processando páginas…" para "N páginas prontas" e o botão "Gerar Receituário" habilita.
+**Arquivo:** `src/components/dashboard/prescription/UploadDropzone.tsx`
 
-## Arquivo alterado
+Ajustar o catch do `process-catalog-pdf` para tentar mostrar a mensagem real retornada pela função (`message`/`error`) quando existir. Isso não corrige o bug principal, mas evita outro ciclo cego se surgir um próximo erro.
 
-- `supabase/functions/process-catalog-pdf/index.ts` — remover polyfill `xhr`, trocar specifier para `npm:`, simplificar `init()`.
+## Por que essa abordagem é a correta
 
-Sem mudanças em frontend, schema, RLS ou em outras edge functions.
+- Elimina a causa real do erro atual: uso de `createRequire` em módulo remoto `https://...`
+- Remove a dependência do fetch manual do `.wasm`
+- Evita voltar ao problema anterior de “wasmBinary required”
+- Mantém a solução de páginas renderizadas, que continua sendo a estratégia certa para catálogos PDF grandes
 
+## Arquivos a alterar
+
+- `supabase/functions/process-catalog-pdf/index.ts`
+- `src/components/dashboard/prescription/UploadDropzone.tsx`
+
+## Validação após implementar
+
+1. Reenviar o mesmo catálogo.
+2. Logs esperados:
+   ```text
+   Baixando PDF do catálogo …
+   PDF carregado: 9.97MB
+   Inicializando PDFium…
+   PDF tem N páginas — processando N.
+   Página 1/N: ...
+   …
+   ✓ Catálogo ... processado: N páginas
+   ```
+3. No frontend:
+   - some o toast de falha
+   - o card do catálogo passa a mostrar `N páginas prontas`
+   - o botão `Gerar Receituário` fica habilitado
+
+## Fora de escopo
+- Sem mudanças em schema
+- Sem mudanças em RLS
+- Sem mudanças em `generate-prescription`
+- Sem mudanças no fluxo de upload além da melhora de mensagem de erro
