@@ -166,7 +166,94 @@ function assertValidBase64(b64: string, sizeBytes: number, label: string): void 
   }
 }
 
-async function downloadFileAsBase64(
+// Threshold para decidir entre base64 inline vs signed URL.
+// Arquivos > 2MB vão via signed URL — evita estourar memória do edge function
+// e o limite prático de ~7MB do inline_data do Gemini.
+const INLINE_THRESHOLD = 2 * 1024 * 1024; // 2MB
+
+// Tipo unificado de arquivo. Pode estar carregado em base64 (arquivos pequenos)
+// ou apontado por signed URL (arquivos grandes — Gemini busca direto do Storage).
+type LoadedFile = {
+  base64: string | null;
+  signedUrl: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  bucket: string;
+  path: string;
+};
+
+async function getSignedUrl(
+  supabase: any,
+  bucket: string,
+  path: string,
+  expiresInSeconds = 600,
+): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresInSeconds);
+  if (error || !data?.signedUrl) {
+    console.error('Failed to create signed URL:', bucket, path, error);
+    return null;
+  }
+  return data.signedUrl;
+}
+
+// Lê apenas o cabeçalho HEAD para descobrir tamanho/mime sem baixar o arquivo.
+// Usa a signed URL como fonte autoritativa de bytes.
+async function probeFileMetadata(
+  supabase: any,
+  bucket: string,
+  path: string,
+): Promise<{ sizeBytes: number; mimeType: string; signedUrl: string } | null> {
+  const signedUrl = await getSignedUrl(supabase, bucket, path);
+  if (!signedUrl) return null;
+  try {
+    const head = await fetch(signedUrl, { method: 'HEAD' });
+    if (!head.ok) {
+      console.error('HEAD failed:', head.status);
+      return null;
+    }
+    const sizeBytes = Number(head.headers.get('content-length') || '0');
+    const mimeType = head.headers.get('content-type') || 'application/octet-stream';
+    return { sizeBytes, mimeType, signedUrl };
+  } catch (e) {
+    console.error('HEAD error', e);
+    return null;
+  }
+}
+
+async function loadFile(
+  supabase: any,
+  bucket: string,
+  path: string,
+): Promise<LoadedFile | null> {
+  const probe = await probeFileMetadata(supabase, bucket, path);
+  if (!probe) return null;
+  const { sizeBytes, mimeType, signedUrl } = probe;
+
+  // Arquivos grandes: NÃO baixar. Gemini buscará direto via signed URL.
+  if (sizeBytes > INLINE_THRESHOLD) {
+    console.log(`Arquivo grande (${(sizeBytes / 1024 / 1024).toFixed(2)}MB) — usando signed URL, sem materializar base64`);
+    return { base64: null, signedUrl, mimeType, sizeBytes, bucket, path };
+  }
+
+  // Arquivos pequenos: caminho rápido com base64 inline.
+  const { data, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !data) {
+    console.error('Failed to download small file:', path, error);
+    // Fallback: ainda podemos usar a signed URL
+    return { base64: null, signedUrl, mimeType, sizeBytes, bucket, path };
+  }
+  const ab = await data.arrayBuffer();
+  const buf = new Uint8Array(ab);
+  const realMime = data.type || mimeType;
+  const realSize = buf.length;
+  const base64 = uint8ToBase64(buf);
+  assertValidBase64(base64, realSize, `download ${bucket}/${path}`);
+  return { base64, signedUrl, mimeType: realMime, sizeBytes: realSize, bucket, path };
+}
+
+// Baixa o arquivo APENAS quando precisamos do base64 para extração estruturada
+// (Gemini Flash). Usado de forma ESCOPADA — o resultado é descartado logo após.
+async function downloadAsBase64Once(
   supabase: any,
   bucket: string,
   path: string,
@@ -182,7 +269,6 @@ async function downloadFileAsBase64(
   const sizeBytes = buf.length;
   const base64 = uint8ToBase64(buf);
   assertValidBase64(base64, sizeBytes, `download ${bucket}/${path}`);
-  // buf sai de escopo após retornar; ab também. base64 fica como única cópia viva.
   return { base64, mimeType, sizeBytes };
 }
 
