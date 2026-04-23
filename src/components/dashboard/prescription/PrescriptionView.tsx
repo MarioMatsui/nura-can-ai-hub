@@ -189,7 +189,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
               onClick={handleGenerate}
               disabled={!canGenerate}
               size="lg"
-              className="w-full md:w-auto bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
+              className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
             >
               {isGenerating ? (
                 <>

@@ -157,7 +157,7 @@ export const ChatSidebar = ({
               </div>
               <Button
                 onClick={onNewConversation}
-                className="w-full bg-[#9EFF00] hover:bg-[#8EEF00] text-black font-medium"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
                 size="sm"
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -204,7 +204,7 @@ export const ChatSidebar = ({
               <Button
                 onClick={onNewConversation}
                 size="icon"
-                className="w-full h-10 bg-[#9EFF00] hover:bg-[#8EEF00] text-black"
+                className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground"
                 title="Nova Consulta"
               >
                 <Plus className="h-5 w-5" />
