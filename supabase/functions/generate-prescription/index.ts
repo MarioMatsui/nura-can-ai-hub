@@ -646,7 +646,9 @@ serve(async (req) => {
       ensureExtraction(supabase, 'prescription_records', recordRow),
     ]);
 
-    // Constrói query RAG rica a partir do prontuário + observações (mesma qualidade do chat-ai medical)
+    // Constrói query RAG a partir do prontuário + observações.
+    // CORREÇÃO 1: passamos a query bruta (em texto livre) — a sanitização agora
+    // é feita por termo dentro de searchMedicalKnowledgeBase (sem vírgulas/pontuação).
     const recordMeta = recordFull.extracted_metadata || {};
     const ragQueryParts = [
       recordFull.main_complaint || recordMeta.main_complaint || '',
@@ -662,43 +664,103 @@ serve(async (req) => {
     const ragChunks = ragQuery ? await searchMedicalKnowledgeBase(supabase, ragQuery) : [];
     console.log(`RAG retornou ${ragChunks.length} chunks`);
 
-    const userMessageText = buildUserMessage({
-      catalogContent: catalogFull.extracted_content || '',
-      catalogMetadata: catalogFull.extracted_metadata || {},
-      recordContent: recordFull.extracted_content || '',
-      recordMetadata: recordFull.extracted_metadata || {},
-      observations: observations || '',
-      ragChunks,
-    });
-
-    // CORREÇÃO 1: enviar os ARQUIVOS ORIGINAIS (PDF/imagem) como multimodal direto pro gemini-2.5-pro,
-    // não apenas o texto extraído pelo flash. O cérebro principal precisa "ver" o documento original.
-    const userContent: any[] = [{ type: 'text', text: userMessageText }];
-
+    // CORREÇÃO 2: tratamento de anexos alinhado ao chat-ai.
+    //  - PDF/imagem  → multimodal nativo
+    //  - DOC/DOCX/RTF/ODT → multimodal binário (mesmo padrão do chat)
+    //  - TXT/MD/CSV/JSON/XML → leitura direta como texto, embutida no prompt
     const [recordFile, catalogFile] = await Promise.all([
       downloadFileAsBase64(supabase, 'prescription-files', recordRow.file_path),
       downloadFileAsBase64(supabase, 'prescription-files', catalogRow.file_path),
     ]);
 
+    const isMultimodalMime = (mt: string) =>
+      mt === 'application/pdf' ||
+      mt.startsWith('image/') ||
+      mt === 'application/msword' ||
+      mt === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      mt === 'application/rtf' ||
+      mt === 'application/vnd.oasis.opendocument.text';
+
+    const isPlainTextMime = (mt: string) =>
+      mt.startsWith('text/') ||
+      mt === 'application/json' ||
+      mt === 'application/xml' ||
+      mt === 'application/csv';
+
+    const recordHasOriginal = !!recordFile && isMultimodalMime(recordFile.mimeType);
+    const catalogHasOriginal = !!catalogFile && isMultimodalMime(catalogFile.mimeType);
+
+    const decodeTextFile = (file: { base64: string; mimeType: string } | null): string | null => {
+      if (!file) return null;
+      if (!isPlainTextMime(file.mimeType)) return null;
+      try { return atob(file.base64); } catch { return null; }
+    };
+    const recordPlainText = decodeTextFile(recordFile);
+    const catalogPlainText = decodeTextFile(catalogFile);
+
+    const userMessageText = buildUserMessage({
+      catalogContent: catalogPlainText
+        ? catalogPlainText.slice(0, 80000)
+        : (catalogFull.extracted_content || ''),
+      catalogMetadata: catalogFull.extracted_metadata || {},
+      recordContent: recordPlainText
+        ? recordPlainText.slice(0, 80000)
+        : (recordFull.extracted_content || ''),
+      recordMetadata: recordFull.extracted_metadata || {},
+      observations: observations || '',
+      ragChunks,
+      recordHasOriginal,
+      catalogHasOriginal,
+    });
+
+    const userContent: any[] = [{ type: 'text', text: userMessageText }];
+
     const attachIfMultimodal = (file: { base64: string; mimeType: string } | null, label: string) => {
-      if (!file) return;
+      if (!file) return false;
       const mt = file.mimeType;
-      // Gemini lê PDF e imagens nativamente via image_url base64
-      if (mt === 'application/pdf' || mt.startsWith('image/')) {
+      if (isMultimodalMime(mt)) {
         userContent.push({
           type: 'image_url',
           image_url: { url: `data:${mt};base64,${file.base64}` },
         });
         console.log(`Anexado ${label} multimodal (${mt})`);
-      } else {
-        console.log(`${label} não-multimodal (${mt}) — confiando no texto extraído`);
+        return true;
       }
+      if (isPlainTextMime(mt)) {
+        console.log(`${label} é texto puro (${mt}) — embutido no prompt como fonte primária`);
+      } else {
+        console.log(`${label} formato não suportado (${mt}) — confiando no texto extraído`);
+      }
+      return false;
     };
 
-    attachIfMultimodal(recordFile, 'PRONTUÁRIO');
-    attachIfMultimodal(catalogFile, 'CATÁLOGO');
+    const recordAttached = attachIfMultimodal(recordFile, 'PRONTUÁRIO');
+    const catalogAttached = attachIfMultimodal(catalogFile, 'CATÁLOGO');
 
-    // Chamada à Lovable AI — mesma estrutura do chat-ai (system + user), modelo de alta capacidade
+    // CORREÇÃO 5: instrução de prioridade dos anexos vai para a camada de SISTEMA
+    // (mesmo padrão do chat-ai). O prompt do usuário fica focado no caso clínico.
+    const ATTACHMENT_PRIORITY_NOTE = `
+## DOCUMENTOS DO USUÁRIO NESTA CONSULTA
+
+O médico anexou ${recordAttached ? 'o PRONTUÁRIO original' : 'o conteúdo do prontuário em texto'} e ${catalogAttached ? 'o CATÁLOGO original' : 'o conteúdo do catálogo em texto'} para esta análise.
+Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre que houver divergência, o ARQUIVO ORIGINAL prevalece. Leia-os integralmente antes de produzir a sugestão.
+`;
+
+    const systemContent = MEDICAL_SYSTEM_PROMPT + '\n\n' + PRESCRIPTION_TASK_LAYER + '\n' + ATTACHMENT_PRIORITY_NOTE;
+
+    // CORREÇÃO 6: logs de comparação objetiva chat vs receituário
+    console.log(`\n=== PRESCRIPTION REQUEST SUMMARY ===`);
+    console.log(`- RAG chunks: ${ragChunks.length}`);
+    console.log(`- Record attached as multimodal: ${recordAttached} (mime=${recordFile?.mimeType || 'none'})`);
+    console.log(`- Catalog attached as multimodal: ${catalogAttached} (mime=${catalogFile?.mimeType || 'none'})`);
+    console.log(`- Record plain text inlined: ${!!recordPlainText}`);
+    console.log(`- Catalog plain text inlined: ${!!catalogPlainText}`);
+    console.log(`- System prompt length: ${systemContent.length} chars`);
+    console.log(`- User text length: ${userMessageText.length} chars`);
+    console.log(`- Total user content parts: ${userContent.length}`);
+
+    // CORREÇÃO 3: parâmetros de inferência alinhados ao chat-ai
+    // (max_tokens: 8000, sem temperature fixa — usa default do provedor).
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -708,11 +770,10 @@ serve(async (req) => {
       body: JSON.stringify({
         model: 'google/gemini-2.5-pro',
         messages: [
-          { role: 'system', content: MEDICAL_SYSTEM_PROMPT + '\n\n' + PRESCRIPTION_TASK_LAYER },
+          { role: 'system', content: systemContent },
           { role: 'user', content: userContent },
         ],
-        // CORREÇÃO 4: temperature 0.4 → 0.7 (alinhado ao chat médico, mais exploração clínica)
-        temperature: 0.7,
+        max_tokens: 8000,
       }),
     });
 
