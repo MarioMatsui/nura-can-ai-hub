@@ -941,23 +941,36 @@ serve(async (req) => {
 
     const attachIfMultimodal = (file: LoadedFile | null, label: string) => {
       if (!file) return false;
+
+      // Caminho preferencial para catálogo: páginas PNG pré-renderizadas.
+      // Cada página é uma imagem independente sob o limite de 7MB do provider —
+      // sem PDF inline, sem data URL gigante, sem estouro de RAM.
+      if (Array.isArray(file.pages) && file.pages.length > 0) {
+        for (const p of file.pages) {
+          userContent.push({ type: 'image_url', image_url: { url: p.signedUrl } });
+        }
+        console.log(`Anexado ${label} — ${file.pages.length} páginas via signed URL (image/png)`);
+        return true;
+      }
+
       const mt = file.mimeType;
       if (isMultimodalMime(mt)) {
-        // Preferimos signed URL sempre que existir (evita carregar base64 grande no payload).
-        // Para arquivos pequenos com base64 já em mãos, ainda usamos inline (mais rápido).
+        // Imagens (não PDF) podem ir como signed URL HTTP.
+        // PDFs precisam de data URL — o Gemini rejeita HTTP URL para application/pdf.
+        const isImage = mt.startsWith('image/');
         let url: string;
         let via: string;
-        if (file.signedUrl && (!file.base64 || file.sizeBytes > INLINE_THRESHOLD)) {
+        if (isImage && file.signedUrl && (!file.base64 || file.sizeBytes > INLINE_THRESHOLD)) {
           url = file.signedUrl;
           via = 'signed URL';
         } else if (file.base64) {
           url = `data:${mt};base64,${file.base64}`;
           via = 'base64 inline';
-        } else if (file.signedUrl) {
+        } else if (isImage && file.signedUrl) {
           url = file.signedUrl;
           via = 'signed URL (sem base64)';
         } else {
-          console.log(`${label} sem URL nem base64 — não pode ser anexado`);
+          console.log(`${label} ${mt} grande sem base64 — provider não aceita HTTP URL para esse mime, pulando anexo`);
           return false;
         }
         userContent.push({ type: 'image_url', image_url: { url } });
