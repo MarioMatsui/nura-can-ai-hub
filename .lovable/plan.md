@@ -1,118 +1,153 @@
 
+Diagnóstico atual do porquê o receituário ainda responde diferente do chat
 
-# Feature: Receituário+
+1. O núcleo ainda não está 100% idêntico
+Hoje o chat e o receituário compartilham partes do prompt médico, mas a arquitetura de execução continua diferente:
 
-Nova área dentro do `/app` para gerar sugestões de receituário com IA, cruzando catálogo + prontuário + RAG médico. Visual nativo do app, light/dark, responsivo.
+- `chat-ai` monta:
+  - system prompt
+  - histórico da conversa
+  - RAG
+  - contexto de anexos com prioridade explícita
+  - mensagem do usuário
+- `generate-prescription` monta:
+  - system prompt médico + camada de receituário
+  - um único “mega prompt” com prontuário extraído + catálogo extraído + RAG + observações
+  - anexos multimodais só em alguns formatos
 
----
+Isso já muda bastante o comportamento do modelo, mesmo usando o mesmo modelo-base.
 
-## 1. Sidebar — novo botão
-
-Em `ChatSidebar.tsx`, logo abaixo de "Buscar em chats":
-
-- **Texto:** "Receituário +" (ícone `FilePlus2` do lucide-react)
-- **Estado expandido:** botão `ghost` full-width, mesmo padrão visual do "Buscar em chats"
-- **Estado colapsado:** apenas ícone, com tooltip
-- **Acesso:** apenas plano **Médico** (ou Especialista por hierarquia). Para usuários sem esse plano (ex: Generalista/Free), o botão aparece **opaco** (`opacity-50 cursor-not-allowed`) com cadeado e tooltip "Disponível no plano Médico". Clique exibe toast de upsell e não abre a tela.
-- **Estado ativo:** quando a tela de receituário está aberta, o botão fica destacado (`bg-accent`).
-
-## 2. Roteamento interno (sem cobrir sidebar)
-
-Em `Dashboard.tsx`, adicionar state `activeView: 'chat' | 'prescription'`. Renderização condicional dentro do mesmo container — sidebar permanece intacta.
-
-```text
-┌───────────┬─────────────────────────────────┐
-│  Sidebar  │   ChatArea  ou  PrescriptionView│
-└───────────┴─────────────────────────────────┘
-```
-
-Selecionar uma conversa ou clicar "Nova Consulta" volta para `chat`.
-
-## 3. Tela `PrescriptionView`
-
-Componente novo em `src/components/dashboard/prescription/PrescriptionView.tsx`. Estrutura:
-
-**Header** — título "Receituário +" + subtítulo curto.
-
-**Bloco de uploads (lado a lado em desktop, empilhado em mobile):**
-- `UploadDropzone` Catálogo (esquerda)
-- Símbolo `+` central (com `Plus` icon dentro de círculo `border border-border bg-muted`)
-- `UploadDropzone` Prontuário (direita)
-
-`UploadDropzone` reutilizável:
-- Borda pontilhada (`border-dashed border-2`), estados: idle / drag-over (border-primary, bg-primary/5) / loading / success (mostra nome do arquivo + botão X para remover)
-- Aceita: PDF, JPG, JPEG, PNG, WEBP, TXT, DOC, DOCX
-- Max 10MB
-- Click + drag-and-drop (`onDragOver`, `onDrop`)
-- Upload imediato para bucket `prescription-files`
-
-**Textarea** observações complementares (opcional, max 1000 chars, validado com zod).
-
-**Botão "Gerar Receituário"** — desabilitado até ambos os arquivos terem sido enviados; mostra spinner durante processamento; bloqueia múltiplos cliques.
-
-**Área de resposta** — card com `min-h-[400px]`, renderiza com `MarkdownMessage` (mesma formatação do chat). Botão "Copiar" no canto superior direito com feedback de "Copiado!".
-
-**Histórico (lateral direita ou abaixo, conforme tela):**
-Lista simples dos últimos 10 receituários gerados. Cada item: data + nome do paciente (se extraído) + queixa principal. Clique reabre o resultado na área de resposta (sem regenerar).
-
-## 4. Backend — Tabelas novas (migration)
+2. O RAG do receituário está sofrendo erro parcial de consulta
+Há um problema concreto nos logs do receituário:
 
 ```text
-prescription_catalogs
-  id, user_id, file_name, file_type, file_path, file_size,
-  extracted_content (text), extracted_metadata (jsonb), created_at
-
-prescription_records  
-  id, user_id, file_name, file_type, file_path, file_size,
-  patient_name, main_complaint, extracted_content (text),
-  extracted_metadata (jsonb), created_at
-
-prescription_results
-  id, user_id, catalog_id (FK), record_id (FK),
-  user_observations (text), ai_response (text),
-  suggested_products (jsonb), patient_name, main_complaint,
-  model_used, created_at
+failed to parse logic tree ... content.ilike.%multipla,% ...
 ```
 
-RLS: usuários só leem/criam/deletam seus próprios registros. Admins podem ler tudo.
+Isso indica que a query de busca está sendo montada com termos contendo vírgula/pontuação, quebrando parte das consultas do RAG.
 
-## 5. Storage
+Impacto:
+- o RAG não falha 100% do tempo
+- mas perde parte das buscas mais importantes
+- o embasamento científico fica inconsistente entre execuções
 
-Novo bucket privado `prescription-files`. RLS restringe leitura/escrita ao owner via prefixo `{user_id}/`.
+Esse é um motivo forte para o receituário ficar pior que o chat.
 
-## 6. Edge function `generate-prescription`
+3. A origem da query do RAG é diferente
+No chat:
+- a busca RAG nasce da mensagem do usuário
 
-Nova função em `supabase/functions/generate-prescription/index.ts`:
+No receituário:
+- a busca nasce de `main_complaint + symptoms + diagnoses + comorbidities + history + observations`
+- esses campos dependem da extração prévia do prontuário
 
-1. Valida JWT + verifica que o usuário tem plano Médico/Especialista ativo (espelhando a checagem de `chat-ai`)
-2. Recebe: `catalogId`, `recordId`, `observations`
-3. Carrega registros do banco; se `extracted_content` vazio, baixa o arquivo do Storage e:
-   - PDF → envia inline_data (base64) ao Gemini para extração inicial estruturada (catálogo: produtos/concentrações/marcas; prontuário: paciente/queixa/sintomas), grava em `extracted_metadata`
-   - Imagens → vision do Gemini
-   - TXT/DOC → leitura direta
-4. **RAG**: reutiliza exatamente a função `searchKnowledgeBase` e o pipeline do `chat-ai` com `knowledgeType = 'medical'`. A query de busca é construída a partir da queixa principal + sintomas extraídos do prontuário + observações do usuário.
-5. Monta prompt estruturado (especialista em cannabis medicinal) instruindo a IA a:
-   - Recomendar **somente** produtos presentes no catálogo
-   - Cruzar contexto clínico do prontuário com evidência do RAG médico
-   - Retornar 1 ou múltiplos produtos conforme necessidade
-   - Estrutura: Resumo do caso → Objetivos terapêuticos → Produtos sugeridos (com justificativa por produto) → Observações de uso/monitoramento → Aviso clínico
-   - Não alucinar; explicitar limitações
-6. Salva resultado em `prescription_results` e retorna ao cliente.
+Se a extração resumir mal o caso, o RAG já entra “empobrecido”, mesmo que o arquivo original esteja correto.
 
-`config.toml` recebe entrada com `verify_jwt = true`.
+4. O tratamento de anexos ainda não está equivalente
+No chat:
+- imagem: vai multimodal direto
+- PDF: vai multimodal direto
+- TXT: entra como texto lido diretamente
+- DOC/DOCX: também é enviado para interpretação
 
-## 7. Validações e UX
+No receituário:
+- PDF/imagem: vão como multimodal
+- TXT/DOC/DOCX: dependem principalmente de `extracted_content`
 
-- Zod no client para tamanho/extensão dos arquivos e tamanho de observações
-- Toasts para erros (upload falhou, plano inválido, IA falhou, arquivo corrompido)
-- Loading com mensagem "Analisando documentos e cruzando com base científica..."
-- Estado vazio amigável na área de resposta
-- Botão Copiar com `navigator.clipboard.writeText` + ícone `Check` por 2s
-- Compatível com dark/light mode usando tokens existentes (`bg-card`, `text-foreground`, `border-border`, etc.)
+Ou seja: em alguns formatos, o chat dá mais contexto real ao modelo do que o receituário.
 
-## 8. Não toca
+Se seus testes estiverem usando DOC/DOCX/TXT, isso sozinho já pode explicar boa parte da diferença.
 
-- Agente Médico do chat-ai (intacto)
-- Lógica do RAG (apenas reutiliza)
-- Layout/estilo dos componentes existentes
+5. Os parâmetros de geração não estão alinhados
+Diferença confirmada:
 
+- `chat-ai` envia `max_tokens: 8000` e não fixa `temperature`
+- `generate-prescription` fixa `temperature: 0.7`, mas não define `max_tokens`
+
+Impacto:
+- o chat pode estar recebendo mais espaço de saída
+- o receituário pode estar sofrendo com limite implícito do provedor
+- isso altera profundidade, completude e consistência
+
+6. O chat usa histórico; o receituário é one-shot
+O chat inclui o histórico completo da conversa.
+O receituário é uma execução isolada baseada no pacote atual de arquivos + observações.
+
+Isso favorece o chat quando o usuário refinou contexto em mensagens anteriores.
+
+7. O receituário está sobrecarregando o modelo com contexto duplicado
+Hoje o receituário envia ao mesmo tempo:
+- JSON extraído do prontuário
+- texto extraído do prontuário
+- JSON extraído do catálogo
+- texto extraído do catálogo
+- chunks do RAG
+- arquivos originais multimodais
+- observações do médico
+
+Esse volume pode diluir atenção e competir com os próprios arquivos originais.
+
+Plano de correção recomendado
+
+1. Corrigir a construção das queries do RAG no receituário
+- sanitizar termos antes do `.or(content.ilike...)`
+- remover vírgulas, pontos e caracteres inválidos
+- descartar termos ruins
+- manter o ranking atual intacto
+
+2. Igualar a estratégia de anexos do receituário ao chat
+- TXT deve entrar como texto lido diretamente
+- DOC/DOCX devem ter o mesmo tratamento multimodal do chat
+- manter PDF/imagem como já está
+
+3. Alinhar os parâmetros de inferência
+- definir explicitamente `max_tokens` no receituário
+- decidir se o receituário deve usar a mesma política de temperatura do chat ou uma política condicionada ao tipo de caso
+- evitar defaults implícitos diferentes entre os dois fluxos
+
+4. Reduzir duplicação de contexto no receituário
+- manter os arquivos originais como fonte principal
+- usar extração estruturada apenas como apoio
+- encurtar blocos auxiliares quando o original já foi anexado
+- preservar RAG e lógica clínica
+
+5. Aproximar a arquitetura do receituário da do chat
+- mover instruções de prioridade de anexos para a camada de sistema
+- deixar o prompt do receituário mais “enxuto”
+- manter a camada de receituário apenas como moldura de saída, não como centro do raciocínio
+
+6. Instrumentar comparação objetiva entre chat e receituário
+Adicionar logs internos para comparar, no mesmo caso:
+- quantidade de chunks RAG recuperados
+- tipos de anexos realmente enviados ao modelo
+- tamanho do contexto final
+- finish reason / eventual truncamento
+- parâmetros de geração usados
+
+Resultado esperado após esses ajustes
+
+- receituário e chat passam a usar o mesmo raciocínio clínico com menos divergência
+- o receituário mantém o formato de sugestão de receita
+- o RAG deixa de falhar parcialmente por causa de pontuação
+- arquivos Word/TXT deixam de perder qualidade no receituário
+- a diferença restante fica mais ligada ao formato da tarefa, e não a falhas de implementação
+
+Detalhe técnico mais importante encontrado
+Hoje o indício mais forte de bug real é este:
+
+```text
+Search error for query "... esclerose multipla, ... autista, ..."
+failed to parse logic tree
+```
+
+Isso mostra que o receituário não está apenas “pensando diferente”; ele também está recuperando conhecimento de forma parcialmente quebrada em alguns casos.
+
+Implementação sugerida na próxima etapa
+- ajustar `supabase/functions/generate-prescription/index.ts`
+- manter `chat-ai` intacto como referência
+- validar com o mesmo caso clínico rodando nos dois fluxos
+- entregar um relatório final confirmando:
+  - RAG corrigido
+  - anexos alinhados
+  - parâmetros alinhados
+  - diferenças remanescentes esperadas vs. anormais
