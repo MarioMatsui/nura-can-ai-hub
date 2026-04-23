@@ -1,17 +1,16 @@
-// Pré-processa o PDF do catálogo: renderiza cada página como PNG e armazena
-// no bucket `prescription-files-pages`. Roda UMA vez logo após o upload.
+// Pré-processa o PDF do catálogo: renderiza páginas como PNG e armazena
+// no bucket `prescription-files-pages`. Roda EM LOTES (batch) para evitar
+// estourar o CPU time limit (~10s) das edge functions.
 //
-// Por que isso existe: o Gemini (via Lovable AI Gateway) só aceita `image_url`
-// apontando para uma URL HTTP quando o conteúdo é IMAGEM (PNG/JPEG/WebP/GIF).
-// Para PDF, exige base64 inline — que estoura RAM (256MB) e o limite de ~7MB
-// do `inline_data` em catálogos médios. Convertendo páginas em PNG, cada página
-// vira uma imagem pequena (< 7MB), enviada como signed URL na geração.
+// O frontend chama esta função em loop, passando `startPage`/`batchSize`,
+// até receber `done: true`. Cada batch:
+//  - inicializa o PDFium (~1s),
+//  - renderiza N páginas (default 8),
+//  - faz upload no bucket,
+//  - persiste o progresso em `extracted_metadata`.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-// Entrypoint base64: embute o WASM no próprio módulo, não depende de
-// `createRequire` nem de fetch externo do .wasm. É o único caminho estável
-// no edge runtime do Supabase (import.meta.url é https://, não file://).
 import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7/browser/base64";
 import { encode as encodePng } from "https://deno.land/x/pngs@0.1.1/mod.ts";
 
@@ -25,8 +24,9 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const SOURCE_BUCKET = 'prescription-files';
 const PAGES_BUCKET = 'prescription-files-pages';
-const RENDER_SCALE = 1.5; // ~108 DPI — suficiente para o Gemini ler texto/produtos
-const MAX_PAGES = 120;    // hard cap defensivo
+const RENDER_SCALE = 1.0; // ~72 DPI — PNGs ~300-700KB, suficiente para Gemini ler texto
+const MAX_PAGES = 200;    // hard cap defensivo
+const DEFAULT_BATCH = 8;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -58,6 +58,9 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const catalogId = body?.catalogId;
+    const startPage = Math.max(0, Number(body?.startPage) || 0);
+    const batchSize = Math.min(20, Math.max(1, Number(body?.batchSize) || DEFAULT_BATCH));
+
     if (!catalogId || typeof catalogId !== 'string') {
       return new Response(JSON.stringify({ error: 'catalogId é obrigatório' }), {
         status: 400,
@@ -79,31 +82,38 @@ serve(async (req) => {
       });
     }
 
-    // Se já tem páginas processadas, retorna imediatamente.
-    const existingMeta = catalog.extracted_metadata || {};
-    if (Array.isArray(existingMeta.pages) && existingMeta.pages.length > 0) {
-      console.log(`Catálogo ${catalogId} já processado (${existingMeta.pages.length} páginas).`);
+    const existingMeta: any = catalog.extracted_metadata || {};
+    const existingPages: string[] = Array.isArray(existingMeta.pages) ? existingMeta.pages : [];
+
+    // Já completou em chamadas anteriores
+    if (existingMeta.processing_complete && existingPages.length > 0) {
       return new Response(JSON.stringify({
         ok: true,
+        done: true,
         cached: true,
-        pages_count: existingMeta.pages.length,
+        processed: existingPages.length,
+        total: existingPages.length,
+        next_page: existingPages.length,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Só processamos PDFs. Imagens já são imagens — nem precisam de conversão.
+    // Só processamos PDFs.
     const isPdf = (catalog.file_type || '').toLowerCase().includes('pdf')
       || (catalog.file_name || '').toLowerCase().endsWith('.pdf');
 
     if (!isPdf) {
-      console.log(`Catálogo ${catalogId} não é PDF (${catalog.file_type}) — sem processamento.`);
       return new Response(JSON.stringify({
         ok: true,
+        done: true,
         skipped: true,
         reason: 'not_pdf',
+        processed: 0,
+        total: 0,
+        next_page: 0,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`Baixando PDF do catálogo ${catalogId} (${catalog.file_path})…`);
+    console.log(`[batch start=${startPage} size=${batchSize}] Baixando PDF ${catalogId}…`);
     const { data: dl, error: dlErr } = await supabase.storage
       .from(SOURCE_BUCKET)
       .download(catalog.file_path);
@@ -118,27 +128,26 @@ serve(async (req) => {
     const pdfBytes = new Uint8Array(ab);
     console.log(`PDF carregado: ${(pdfBytes.length / 1024 / 1024).toFixed(2)}MB`);
 
-    console.log('Inicializando PDFium (base64)…');
-    const library = await PDFiumLibrary.init();
+    console.log('Inicializando PDFium…');
+    const library = await PDFiumLibrary.init({ disableBase64Warning: true } as any);
     const document = await library.loadDocument(pdfBytes);
 
     const pageObjs = Array.from(document.pages());
     const totalPages = Math.min(pageObjs.length, MAX_PAGES);
-    console.log(`PDF tem ${pageObjs.length} páginas — processando ${totalPages}.`);
+    const endPage = Math.min(startPage + batchSize, totalPages);
 
-    const uploadedPaths: string[] = [];
+    console.log(`PDF tem ${pageObjs.length} páginas. Processando ${startPage + 1}–${endPage} de ${totalPages}.`);
 
-    for (let i = 0; i < totalPages; i++) {
+    const newlyUploaded: string[] = [];
+
+    for (let i = startPage; i < endPage; i++) {
       const page = pageObjs[i];
       const pageNumber = i + 1;
       try {
-        // Render → bitmap RGBA cru
         const rendered = await page.render({
           scale: RENDER_SCALE,
           render: 'bitmap',
         });
-
-        // RGBA → PNG (pure-wasm, sem deps nativas)
         const png = encodePng(rendered.data, rendered.width, rendered.height);
 
         const path = `${userId}/${catalogId}/page-${String(pageNumber).padStart(3, '0')}.png`;
@@ -154,7 +163,7 @@ serve(async (req) => {
           continue;
         }
 
-        uploadedPaths.push(path);
+        newlyUploaded.push(path);
         console.log(`Página ${pageNumber}/${totalPages}: ${rendered.width}x${rendered.height}, PNG ${(png.length / 1024).toFixed(0)}KB`);
       } catch (e) {
         console.error(`Erro renderizando página ${pageNumber}:`, e);
@@ -164,19 +173,19 @@ serve(async (req) => {
     document.destroy();
     library.destroy();
 
-    if (uploadedPaths.length === 0) {
-      return new Response(JSON.stringify({ error: 'Nenhuma página processada' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // Mescla com o que já existia (sem duplicar)
+    const allPages = Array.from(new Set([...existingPages, ...newlyUploaded]));
+    const nextPage = endPage;
+    const done = nextPage >= totalPages;
 
-    // Persiste os paths em metadata para a função de geração consumir.
     const newMeta = {
       ...existingMeta,
-      pages: uploadedPaths,
-      pages_count: uploadedPaths.length,
-      pages_processed_at: new Date().toISOString(),
+      pages: allPages,
+      pages_count: allPages.length,
+      total_pages: totalPages,
+      processing_complete: done,
       pages_render_scale: RENDER_SCALE,
+      ...(done ? { pages_processed_at: new Date().toISOString() } : {}),
     };
 
     const { error: updErr } = await supabase
@@ -186,16 +195,19 @@ serve(async (req) => {
 
     if (updErr) {
       console.error('Update metadata error', updErr);
-      return new Response(JSON.stringify({ error: 'Falha ao salvar páginas' }), {
+      return new Response(JSON.stringify({ error: 'Falha ao salvar progresso' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log(`✓ Catálogo ${catalogId} processado: ${uploadedPaths.length} páginas`);
+    console.log(`[batch ok] processed=${allPages.length}/${totalPages} done=${done}`);
 
     return new Response(JSON.stringify({
       ok: true,
-      pages_count: uploadedPaths.length,
+      done,
+      processed: allPages.length,
+      total: totalPages,
+      next_page: nextPage,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e) {
     console.error('process-catalog-pdf fatal', e);

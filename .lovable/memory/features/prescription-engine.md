@@ -1,6 +1,6 @@
 ---
 name: Prescription engine
-description: Receituário+ — catálogo PDF é pré-renderizado em páginas PNG no upload (process-catalog-pdf); geração anexa cada página como image_url via signed URL
+description: Receituário+ — catálogo PDF é pré-renderizado em páginas PNG no upload (process-catalog-pdf, EM LOTES); geração anexa cada página como image_url via signed URL
 type: feature
 ---
 
@@ -11,17 +11,32 @@ type: feature
 - System: `MEDICAL_SYSTEM_PROMPT` + `PRESCRIPTION_TASK_LAYER` + `ATTACHMENT_PRIORITY_NOTE`
 - One-shot (sem histórico)
 
-## Catálogo PDF: pré-renderização obrigatória (CRÍTICO)
+## Catálogo PDF: pré-renderização em LOTES (CRÍTICO)
 
-O Lovable AI Gateway repassa para o Gemini, que **só aceita `image_url` HTTP quando o conteúdo é imagem** (PNG/JPEG/WebP/GIF). Para PDF, exige `data:application/pdf;base64,...` — que estoura RAM (256MB) e o limite de ~7MB do `inline_data` em catálogos médios. Resultado: PDFs de catálogo entre 7MB e 16MB ficam numa "zona morta" sem solução inline.
+O Lovable AI Gateway repassa para o Gemini, que **só aceita `image_url` HTTP quando o conteúdo é imagem** (PNG/JPEG/WebP/GIF). Para PDF, exige base64 inline — que estoura RAM (256MB) e o limite de ~7MB do `inline_data`. Solução: renderizar cada página como PNG e enviar como signed URL.
 
-**Solução:** ao subir um catálogo PDF, o frontend dispara `process-catalog-pdf` (edge function), que:
-1. Baixa o PDF do bucket `prescription-files`.
-2. Usa `@hyzyla/pdfium` (WASM) para renderizar cada página como bitmap RGBA em escala 1.5 (~108 DPI).
-3. Codifica via `deno.land/x/pngs` (WASM puro) e faz upload de cada página em `prescription-files-pages/{userId}/{catalogId}/page-NNN.png`.
-4. Persiste a lista em `prescription_catalogs.extracted_metadata.pages: string[]` + `pages_count`.
+### Por que LOTES?
+Edge functions do Supabase têm CPU time limit de ~10s. Renderizar 80+ páginas numa única invocação estoura o limite (`CPU Time exceeded`) e a função morre na 2ª/3ª página. Por isso `process-catalog-pdf` virou **incremental**:
 
-Cap de segurança: 120 páginas por catálogo. Se já há páginas processadas, retorna cached.
+- Body: `{ catalogId, startPage?: number, batchSize?: number }` (default `startPage=0`, `batchSize=8`).
+- A cada chamada: inicializa PDFium (~1s), renderiza N páginas, faz upload, persiste progresso em `extracted_metadata`.
+- Resposta: `{ ok, done, processed, total, next_page }`.
+- Frontend chama em loop até `done: true`.
+
+### Render
+- `@hyzyla/pdfium@2.1.7/browser/base64` (WASM embutido — evita `createRequire` e fetch externo).
+- `RENDER_SCALE = 1.0` (~72 DPI). PNGs ~300-700KB. Suficiente para Gemini ler texto/produtos. Antes era 1.5 → PNGs de 3MB → batches estouravam.
+- Encode via `deno.land/x/pngs` (WASM puro).
+- Cap defensivo: `MAX_PAGES = 200`.
+
+### Persistência de progresso (`extracted_metadata`)
+- `pages: string[]` — paths acumulados em `prescription-files-pages/{userId}/{catalogId}/page-NNN.png`
+- `pages_count: number`
+- `total_pages: number`
+- `processing_complete: boolean` — gravado quando `next_page >= total_pages`
+- `pages_render_scale: number`
+
+Se `processing_complete && pages.length > 0` na entrada, retorna `done: true` imediatamente (cached).
 
 ### Bucket `prescription-files-pages`
 - Privado, RLS por pasta `{user_id}/...` (mesmo padrão do `prescription-files`).
@@ -29,32 +44,26 @@ Cap de segurança: 120 páginas por catálogo. Se já há páginas processadas, 
 
 ### Geração (`generate-prescription`)
 - Se `extracted_metadata.pages` existe, monta `LoadedFile.pages = [{ signedUrl, mimeType: 'image/png', path }]` e pula extração via Flash.
-- `attachIfMultimodal`: quando há `pages`, faz push de **uma `image_url` por página** no `userContent` — cada uma é uma imagem independente sob o limite do provider.
-- Fallback: se o catálogo não for PDF (ex: imagem direta) ou ainda não foi processado, cai no caminho legado de `loadFile`.
-- Para arquivos não-PDF: imagens grandes podem ir como signed URL HTTP; outros mimes (DOC/DOCX) ainda exigem base64 inline.
+- `attachIfMultimodal`: quando há `pages`, faz push de **uma `image_url` por página** no `userContent`.
+- Fallback: se não-PDF ou ainda não processado, cai no caminho legado de `loadFile`.
 
 ### Frontend
-- `UploadDropzone`: após upload de catálogo PDF, invoca `process-catalog-pdf` e mostra "Processando páginas…". Marca `isProcessing` no `UploadedFile`.
-- `PrescriptionView`: botão "Gerar Receituário" só habilita quando `pages_count > 0` (ou quando o catálogo não é PDF).
+- `UploadDropzone`: após upload de catálogo PDF, chama `process-catalog-pdf` em **loop** (`while (!done)`), atualizando `pages_count`/`total_pages`/`isProcessing` em cada batch. Mostra "Processando páginas (X/Y)…".
+- `PrescriptionView`: botão "Gerar Receituário" só habilita quando `pages_count > 0` (e não-isProcessing). Texto auxiliar mostra progresso real "Processando páginas do catálogo (X/Y)…".
+- Tipo `UploadedFile` inclui `total_pages?: number`.
 
 ## Prontuário (sem mudança)
 Continua via `loadFile` normal — base64 inline para < 2MB, signed URL para > 2MB.
-Atenção: signed URL HTTP só funciona para mime image/*. Prontuários PDF grandes seguem a mesma limitação que motivou a pré-renderização do catálogo; tipicamente são pequenos (< 1MB) e não atingem isso.
 
 ## RAG médico
 - `searchMedicalKnowledgeBase` com `TERM_ALIASES`, `generateSearchQueries`, `sanitizeSearchTerm`.
-- Cada termo sanitizado antes do `.or(content.ilike...)` — sem acentos/pontuação.
+- Cada termo sanitizado antes do `.or(content.ilike...)`.
 - Top 8 chunks, 8000 chars cada.
 
 ## Parâmetros de inferência
 - `max_tokens: 8000`, sem `temperature` fixa.
 
-## Cache de extração
-- Cache só reutilizado se "de qualidade" (catálogo: products.length > 0; prontuário: main_complaint ou symptoms).
-- Páginas pré-renderizadas → pula extração com Flash (Pro vê as imagens direto).
-- Arquivos > 6MB também pulam extração.
-- `uint8ToBase64`: chunks de 8KB, **um único `btoa()`** no final.
-
 ## Não tocar
 - `chat-ai` permanece intacto.
 - RLS dos buckets `prescription-files`, `prescription-files-pages` e tabelas `prescription_*`.
+- Contrato de leitura de `extracted_metadata.pages` em `generate-prescription`.
