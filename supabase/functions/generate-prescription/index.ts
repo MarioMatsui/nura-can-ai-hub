@@ -945,14 +945,14 @@ serve(async (req) => {
     const attachIfMultimodal = (file: LoadedFile | null, label: string) => {
       if (!file) return false;
 
-      // Caminho preferencial para catálogo: páginas PNG pré-renderizadas.
+      // Caminho preferencial para catálogo: páginas JPEG pré-renderizadas.
       // Cada página é uma imagem independente sob o limite de 7MB do provider —
       // sem PDF inline, sem data URL gigante, sem estouro de RAM.
       if (Array.isArray(file.pages) && file.pages.length > 0) {
         for (const p of file.pages) {
           userContent.push({ type: 'image_url', image_url: { url: p.signedUrl } });
         }
-        console.log(`Anexado ${label} — ${file.pages.length} páginas via signed URL (image/png)`);
+        console.log(`Anexado ${label} — ${file.pages.length} páginas via signed URL (JPEG/PNG)`);
         return true;
       }
 
