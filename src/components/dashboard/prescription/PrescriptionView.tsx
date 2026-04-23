@@ -32,6 +32,11 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
+  const { items: savedCatalogs, loading: savedLoading, refresh: refreshSaved } = useSavedCatalogs(userId);
+
+  const isCurrentCatalogSaved = !!catalog && savedCatalogs.some((s) => s.catalog_id === catalog.id);
+  const savedLimitReached = savedCatalogs.length >= SAVED_CATALOGS_LIMIT;
+
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
       .from('prescription_results')
