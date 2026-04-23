@@ -32,11 +32,14 @@ A função `generate-prescription` foi alinhada com `chat-ai` para reduzir diver
 - `max_tokens: 8000`
 - Sem `temperature` explícita (usa default do provedor) — antes era 0.7/0.4 fixo
 
-## Cache de extração
+## Cache de extração + proteção de memória
 - `ensureExtraction` só reutiliza cache de qualidade:
   - catálogo: precisa ter `metadata.products.length > 0` E `extracted_content > 200 chars`
   - prontuário: precisa ter `main_complaint` ou `symptoms.length > 0` E `extracted_content > 200 chars`
 - `extracted_content` armazenado: até 80k chars
+- **CRÍTICO MEMÓRIA**: arquivos > 6MB pulam a extração com Gemini Flash. O Gemini Pro multimodal lê o PDF original direto, então a extração estruturada com Flash é redundante e dobra o uso de RAM.
+- **Download SEQUENCIAL** (não paralelo). Antes: 2 PDFs base64 + 2 extrações em paralelo + 2 anexos = pico > 256MB. Agora: 1 PDF na fase de extração, ambos só coexistem na chamada final do Pro.
+- `uint8ToBase64` usa chunks de 8KB (não 32KB com `String.fromCharCode.apply`, que estoura stack do V8).
 
 ## Logs de comparação
 A função emite resumo objetivo a cada chamada:
