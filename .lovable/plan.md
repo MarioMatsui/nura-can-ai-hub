@@ -1,86 +1,58 @@
 
 
-## Ajustes UI/UX no módulo Receituário +
+## Ajustes finais no Receituário +
 
-### 1. Botão "Receituário +" na sidebar (`ChatSidebar.tsx`)
+### 1. Remover "Pronto para uso (modo rápido)"
 
-- Centralizar texto: trocar `justify-start` por `justify-center` no botão expandido (linha 180), mantendo coerência com "Nova Consulta" e "Buscar em chats".
-- Estado ativo em preto: hoje só aplica `bg-accent`. Adicionar `dark:text-black text-black` quando `activeView === 'prescription'` para que texto + ícone fiquem pretos no estado selecionado (mesmo padrão dos itens de conversa).
-- Mover o ícone `<Lock>` para fora da centralização (manter `ml-auto`) só quando bloqueado.
+**`src/components/dashboard/prescription/UploadDropzone.tsx`** (linha 460)
 
-### 2. Contador de páginas dentro do quadro de upload (`UploadDropzone.tsx`)
+Remover por completo o bloco condicional que renderiza:
+```tsx
+<div className="text-xs text-primary font-medium">✓ Pronto para uso (modo rápido)</div>
+```
+Esse texto não aparecerá em nenhum estado (catálogo recém-enviado nem catálogo salvo reutilizado).
 
-Hoje a mensagem `"Processando páginas do catálogo (x/y)…"` aparece **fora do dropzone**, dentro do `PrescriptionView` na seção do botão. Mover para dentro do dropzone, no estado `isUploading`:
+### 2. Botão "Novo Receituário" ao lado de "Gerar Receituário"
 
-- Quando `isUploading === true` E `kind === 'catalog'` E houver progresso de páginas conhecido (via `value?.pages_count` / `value?.total_pages`), renderizar abaixo de "Enviando…":
-  ```
-  Enviando…
-  Processando páginas do catálogo (x/y)   ← negrito (font-bold)
-  ```
-- Como o progresso do catálogo só existe **após** o insert (durante `runCatalogProcessing`, `isUploading` já é false e cai no branch `isProcessing`), na prática a linha em negrito vai aparecer no branch `isProcessing` (que já mostra "Processando páginas (x/y)…"). Ajuste: trocar esse texto por **dois níveis** dentro do mesmo bloco:
-  - "Enviando…" (label superior)
-  - "Processando páginas do catálogo (x/y)" em **negrito** (`font-bold text-foreground`)
-- Remover do `PrescriptionView.tsx` o parágrafo `"Processando páginas do catálogo (x/y)…"` que aparece sob o botão "Gerar Receituário" (linhas 174-182), substituindo por mensagem genérica apenas quando faltar arquivo.
+**`src/components/dashboard/prescription/PrescriptionView.tsx`** (seção Action, linhas 228–253)
 
-### 3. Efeitos sonoros (SFX)
+- Envolver os dois botões em um wrapper `flex flex-col md:flex-row gap-3 md:items-center` para alinhamento horizontal no desktop e empilhado no mobile.
+- O botão "Gerar Receituário" mantém o estilo atual (primary, destaque forte).
+- Adicionar à direita um novo `<Button variant="outline" size="lg">` com ícone `<RotateCcw />` (lucide) + texto **"Novo Receituário"** — menor peso visual, coerente com o design system existente.
+- O botão "Novo Receituário" fica **desabilitado durante `isGenerating`** para evitar reset no meio da requisição.
+- O botão fica **sempre visível** (não depende de ter resposta gerada) — assim o usuário pode descartar inputs rapidamente também antes de gerar.
 
-Criar utilitário `src/lib/sfx.ts` com cache de `HTMLAudioElement` por arquivo (evita recriar a cada call) e debounce de 300ms para evitar disparo duplo:
+### 3. Comportamento do reset
+
+Adicionar handler `handleNewPrescription` em `PrescriptionView.tsx` que limpa exclusivamente o estado local da tela:
 
 ```ts
-import uploadFoi from '@/assets/uploadFoi.wav';
-import receitaFoi from '@/assets/receitaFoi.mp3';
-
-const cache = new Map<string, HTMLAudioElement>();
-const lastPlay = new Map<string, number>();
-
-export function playSfx(name: 'upload' | 'receita') {
-  const src = name === 'upload' ? uploadFoi : receitaFoi;
-  const now = Date.now();
-  if ((now - (lastPlay.get(name) ?? 0)) < 300) return;
-  lastPlay.set(name, now);
-  let audio = cache.get(name);
-  if (!audio) { audio = new Audio(src); audio.preload = 'auto'; cache.set(name, audio); }
-  audio.currentTime = 0;
-  audio.volume = 0.6;
-  audio.play().catch(() => {}); // silencia bloqueios de autoplay
-}
+const handleNewPrescription = () => {
+  setCatalog(null);
+  setRecord(null);
+  setObservations('');
+  setAiResponse('');
+  setSelectedHistoryId(null);
+  setCopied(false);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 ```
 
-Triggers:
-- **`UploadDropzone.tsx` → `handleUpload`**: chamar `playSfx('upload')` **dentro do bloco try, após o `insertError` validado** (linha ~265, logo após `const uploaded = data as UploadedFile`). Isso garante que toca **APENAS** em upload novo bem-sucedido, **não** quando o usuário clica em "Usar" no `SavedCatalogs` (que só chama `onChange`/`onUse`, não passa por `handleUpload`).
-- **`PrescriptionView.tsx` → `handleGenerate`**: chamar `playSfx('receita')` logo após `setAiResponse(payload?.response || '')` quando `payload?.response` for truthy (linha ~88). Debounce no util já previne duplicação se o usuário clicar duas vezes.
+Garantias:
+- **Não recarrega a página** (sem `window.location.reload`).
+- **Não toca em dados persistidos**: catálogos salvos (`prescription_catalogs`), histórico (`prescription_results`) e arquivos no storage permanecem intactos. O reset só zera os `useState` locais.
+- **Não dispara DELETE** no banco — apenas desvincula do estado os IDs atualmente selecionados.
+- Limpa também `selectedHistoryId` para que, se o usuário estava visualizando um item antigo, o card do histórico volte ao estado neutro — reforçando a leitura de "novo fluxo, novos parâmetros, novo resultado, novo histórico" (o próximo `handleGenerate` criará um registro novo em `prescription_results`, como já acontece hoje).
+- Scroll para o topo para reforçar visualmente que um novo fluxo começou.
 
-### 4. Histórico recente — texto preto no hover/selected (`PrescriptionView.tsx`)
+### Resultado esperado
 
-Bloco do "Histórico recente" (linhas ~213-238) já é uma `<button>` com `hover:bg-accent`. Adicionar:
-- Estado local `selectedHistoryId` que recebe o `item.id` no `openHistoryItem`.
-- Classes condicionais: `hover:text-black dark:hover:text-black` no botão + `selectedHistoryId === item.id && 'bg-accent text-black dark:text-black'`.
-- Aplicar a regra a todos os `div`s internos (nome, queixa, data) com `group-hover:text-black/70` para legibilidade.
-
-### 5. Exclusão de item do histórico (`PrescriptionView.tsx`)
-
-- Adicionar ícone `<X>` (lucide) absolutamente posicionado no canto superior direito do card, visível só em `group-hover` (`opacity-0 group-hover:opacity-100`).
-- Adicionar a classe `group` ao card e mudar de `<button>` para `<div role="button">` para permitir botão filho clicável.
-- Estado `historyToDelete: string | null` + `AlertDialog` reutilizando o padrão já existente em `ChatSidebar`:
-  - Título: "Confirmar exclusão"
-  - Descrição: "Tem certeza que deseja excluir? Esta ação não pode ser desfeita."
-  - Confirm: `await supabase.from('prescription_results').delete().eq('id', id)` → `setHistory(prev => prev.filter(h => h.id !== id))` + `toast.success('Receituário removido.')`.
-- RLS já permite delete pelo dono (`Users can delete own results`), nenhuma migration necessária.
-
-### 6. Nome do usuário no canto inferior — preto no hover (`UserProfileHeader.tsx`)
-
-No botão expandido (linha 177), adicionar à `<div>` com `font-medium text-sm truncate` (linha 183) a classe `group-hover:text-black dark:group-hover:text-black transition-colors`. O wrapper `<button>` já tem `group` implícito via Tailwind — adicionar `group` explicitamente se faltar. Aplicar também ao subtítulo do plano (`group-hover:text-black/70`).
-
-### Memória
-
-Atualizar `mem://features/prescription-engine` registrando: SFX em upload novo (uploadFoi.wav) e em receituário gerado (receitaFoi.mp3); contador de páginas dentro do dropzone em negrito; exclusão de histórico via DELETE em prescription_results.
+- Texto "Pronto para uso (modo rápido)" eliminado de todos os estados do dropzone.
+- Dois botões lado a lado: "Gerar Receituário" (primary) à esquerda, "Novo Receituário" (outline com ícone de reset) à direita.
+- Clique em "Novo Receituário" devolve a tela ao estado inicial em milissegundos, sem afetar histórico nem catálogos salvos, e o usuário pode iniciar imediatamente um novo fluxo que gerará uma nova entrada no histórico.
 
 ### Arquivos alterados
 
-- `src/lib/sfx.ts` (novo)
-- `src/components/dashboard/ChatSidebar.tsx` (botão Receituário centralizado + ativo preto)
-- `src/components/dashboard/prescription/UploadDropzone.tsx` (contador em negrito + SFX upload)
-- `src/components/dashboard/prescription/PrescriptionView.tsx` (remover contador antigo + SFX receita + hover/selected preto + exclusão de histórico com modal)
-- `src/components/dashboard/UserProfileHeader.tsx` (nome preto no hover)
-- `mem://features/prescription-engine` (atualização de regras)
+- `src/components/dashboard/prescription/UploadDropzone.tsx` (remover bloco "Pronto para uso")
+- `src/components/dashboard/prescription/PrescriptionView.tsx` (wrapper flex + botão "Novo Receituário" + handler de reset)
 
