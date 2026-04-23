@@ -1,115 +1,96 @@
 
 
-## Diagnóstico — dois erros distintos, mesma causa raiz
+## Diagnóstico — `Unsupported image format for URL`
 
-Olhando os logs e o código, há **dois erros que se alternam** dependendo do tamanho do catálogo:
+O log do erro é literal:
 
-### Erro 1 — `Memory limit exceeded` (logs 03:30 e 03:31, mais recentes)
-A função estoura os 256MB do edge runtime durante o download do CATÁLOGO, antes de chegar no Gemini. Mesmo com download sequencial, no momento em que o catálogo de 16MB é convertido para base64, **o RECORD ainda está vivo na memória** (precisa estar, porque será anexado depois junto com o catalog na chamada final do Pro).
-
-Cálculo real:
-- RECORD em base64 (~80KB → ~107KB): irrelevante
-- CATALOG em base64 (~16MB → ~21MB)
-- **String binária intermediária `binary` (~16MB)** durante o `uint8ToBase64`
-- **Buffer da resposta do `data.arrayBuffer()` (~16MB)** ainda referenciado
-- Concatenação por `+=` em loop de 8KB: V8 mantém shadow copies da rope string
-
-Pico real durante a conversão do catalog ≈ **60–80MB só para o catalog**, somado ao resto do runtime + record + system prompt + RAG chunks = estoura.
-
-### Erro 2 — `400 Base64 decoding failed` (log 03:26)
-Olhando o início do payload rejeitado: `JVBERi0xLjQK...` é literalmente `%PDF-1.4` em base64 — **o base64 está íntegro**. O Google AI Studio rejeitou porque o **inline_data do Gemini tem limite prático de ~7MB por parte**. Catálogos de 10MB+ batem nesse limite e o provider responde com a mensagem genérica "Base64 decoding failed", o que é enganoso — o problema real é tamanho.
-
-A correção anterior do `btoa()` único foi correta, mas não é suficiente: mesmo com base64 perfeito, o Gemini não aceita inline_data tão grande.
-
-## Solução definitiva — Files API do Gemini
-
-O Gemini tem uma **Files API** específica para arquivos grandes (até 2GB). Em vez de mandar o PDF inline em base64 dentro do prompt, fazemos upload prévio para o Google e passamos apenas a **URI do arquivo** no payload. Isso resolve os dois problemas de uma vez:
-
-1. **Memória do edge function**: o PDF é enviado em streaming direto do Storage → Google, sem precisar materializar base64 em RAM.
-2. **Limite do inline_data**: a Files API foi feita exatamente para isso, suporta arquivos de até 2GB e o limite de 7MB do inline deixa de existir.
-
-### Como o Gateway da Lovable suporta isso
-
-O Lovable AI Gateway repassa requests no formato OpenAI-compatible para o Google. Para anexar um arquivo via URI, usamos o tipo `image_url` com uma URL HTTP pública assinada (signed URL do Supabase Storage) em vez de `data:base64,...`. O Gemini busca o arquivo direto da URL, sem passar pelo edge function nem pelo gateway como base64.
-
-```ts
-// Em vez de:
-{ type: 'image_url', image_url: { url: `data:${mt};base64,${huge_base64}` } }
-
-// Passamos:
-{ type: 'image_url', image_url: { url: signedUrl } }
+```
+Unsupported image format for URL: https://...catalog.pdf
+Supported formats: PNG, JPEG, WebP, GIF
+For other formats, use a data URL with the MIME type specified.
 ```
 
-A signed URL do Supabase Storage é válida por tempo configurável (usaremos 10min, suficiente para o Gemini baixar). Funciona para PDF e imagem.
+**Causa raiz:** o Google AI Studio (provider do Gemini através do Lovable AI Gateway) aceita o tipo `image_url` apontando para uma **URL HTTP só quando o conteúdo é imagem** (PNG/JPEG/WebP/GIF). Para **PDF**, o provider exige `data:application/pdf;base64,...` — ou seja, base64 inline. Não existe equivalente "URL pública" para PDFs no provider via OpenAI-compatible layer.
 
-## Mudanças no `supabase/functions/generate-prescription/index.ts`
+A solução de signed URL funcionaria perfeitamente se o catálogo fosse imagem. Como é PDF, voltamos ao impasse:
 
-### 1. Nova helper `getSignedUrl()`
-Gera signed URL de 600s para o arquivo no bucket `prescription-files`.
-
-```ts
-async function getSignedUrl(supabase: any, path: string): Promise<string | null> {
-  const { data, error } = await supabase.storage
-    .from('prescription-files')
-    .createSignedUrl(path, 600);
-  return error ? null : data.signedUrl;
-}
-```
-
-### 2. `downloadFileAsBase64` deixa de baixar quando o arquivo é grande
-Para arquivos `> 2MB`, não baixamos mais. Apenas geramos signed URL e devolvemos `{ signedUrl, mimeType, sizeBytes }`. Para arquivos pequenos (< 2MB), mantemos o fluxo atual com base64 inline (mais rápido, sem round-trip extra).
-
-```ts
-const INLINE_THRESHOLD = 2 * 1024 * 1024; // 2MB
-```
-
-### 3. `ensureExtraction` se adapta ao novo retorno
-Quando recebe um arquivo "via URL" (sem base64 carregado), e a extração estruturada é necessária, baixa só naquele momento (escopo isolado) e libera ao terminar. Para arquivos grandes (> 6MB) já pulamos a extração, então o caso comum nem precisa baixar.
-
-### 4. Anexação no payload final usa URL quando disponível
-```ts
-const url = file.signedUrl ?? `data:${file.mimeType};base64,${file.base64}`;
-userContent.push({ type: 'image_url', image_url: { url } });
-```
-
-### 5. Remover `assertValidBase64` do caminho de URL
-Validação só roda quando temos base64 inline.
-
-### 6. Logs claros indicando qual caminho foi usado
-```
-PRONTUÁRIO via signed URL (16.2MB) — sem materializar base64
-CATÁLOGO via base64 inline (1.3MB)
-```
-
-## Comportamento esperado por tamanho de arquivo
-
-| Tamanho do arquivo | Caminho |
+| Tamanho do PDF | Problema |
 |---|---|
-| < 2 MB | Base64 inline (rápido, mesmo de antes) |
-| 2 MB – 2 GB | Signed URL → Gemini busca direto do Storage |
+| < 7 MB | Funciona via base64 inline |
+| 7 MB – 16 MB | Estoura limite do `inline_data` do Gemini (erro 400 "Base64 decoding failed") |
+| > 16 MB | Estoura RAM do edge function (256MB) ao gerar base64 |
 
-Memória do edge function fica praticamente constante independente do tamanho do PDF.
+O catálogo do usuário tem **9.97 MB** — exatamente na zona morta entre os dois limites.
+
+## Solução definitiva — converter PDF do catálogo em imagens (uma por página) e mandar como `image_url` via signed URL
+
+Como o provider aceita `image_url` apontando pra URL HTTP **quando é imagem**, vamos:
+
+1. **No upload do catálogo** (não na hora de gerar receituário), processar o PDF e renderizar cada página como **WebP** (ou PNG) num bucket separado `prescription-files-pages/`.
+2. Salvar a lista de paths das páginas no registro `prescription_catalogs.metadata.pages: string[]`.
+3. Na hora de gerar receituário, em vez de anexar o PDF inteiro, **anexar cada página como `image_url` via signed URL**. Cada página renderizada em WebP fica em ~150–400 KB, então 50 páginas ≈ 15 MB, mas distribuídas em 50 partes pequenas — o Gemini aceita sem problema porque cada parte é uma imagem válida sob o limite de 7 MB.
+
+### Por que isso é a solução certa
+- Resolve **definitivamente** o problema do PDF grande sem depender de inline_data nem de URL pra PDF.
+- O Gemini Pro multimodal entende imagens de páginas de PDF nativamente — qualidade de leitura é essencialmente idêntica ao PDF original.
+- Memória do edge function fica constante: nunca materializa base64 do PDF inteiro de novo.
+- Funciona pra catálogos de qualquer tamanho.
+- Conversão acontece **uma única vez** no upload, não a cada geração de receituário.
+
+### Alternativa considerada e descartada
+Renderizar páginas no edge function de geração (sob demanda) — descartado porque:
+- Renderizar PDF em runtime Deno é caro e instável (precisa de pdfium ou similar via WASM, ~30–60s para 30 páginas).
+- Cada chamada de receituário pagaria esse custo de novo.
+- Fazer no upload é "uma vez e pronto".
+
+### Para o PRONTUÁRIO
+Como o prontuário tipicamente é pequeno (< 1 MB), continua usando base64 inline normal. **Sem mudança.** Só o caminho do catálogo grande muda.
+
+## Implementação
+
+### 1. Nova edge function `process-catalog-pdf`
+- Trigger: chamada pelo frontend logo após o upload do catálogo (antes de o usuário clicar em "Gerar Receituário").
+- Lê o PDF do bucket `prescription-files`.
+- Usa `pdfium-wasm` (`https://esm.sh/@hyzyla/pdfium`) para renderizar cada página em WebP a 150 DPI (~1200x1600 px, ~200 KB cada).
+- Faz upload de cada página para `prescription-files-pages/{userId}/{catalogId}/page-{N}.webp`.
+- Atualiza `prescription_catalogs.metadata = { pages: ['path1', 'path2', ...], pages_count: N, processed_at: timestamp }`.
+- Para PDFs muito grandes (> 80 páginas), processa em batches sequenciais para não estourar memória.
+
+### 2. Bucket novo
+- `prescription-files-pages` (privado, mesmo padrão de RLS do `prescription-files`).
+
+### 3. Mudança no frontend (`UploadDropzone.tsx`)
+- Após upload do catálogo bem-sucedido, dispara `supabase.functions.invoke('process-catalog-pdf', { body: { catalogId } })`.
+- Mostra estado "Processando catálogo..." enquanto roda.
+- Bloqueia botão "Gerar Receituário" até `metadata.pages` existir.
+
+### 4. Mudança em `generate-prescription/index.ts`
+- Em `loadFile` para o catálogo: se `metadata.pages` existe, gera signed URL de cada página e devolve `LoadedFile` novo formato `{ pages: Array<{ signedUrl, mimeType: 'image/webp' }> }`.
+- Em `attachIfMultimodal`: se o file tem `pages`, faz push de **uma `image_url` por página** no `userContent`.
+- Remove a lógica de mandar PDF do catálogo via signed URL (que era o que quebrava).
+
+### 5. Memória atualizada
+- Atualizar `mem://features/prescription-engine` documentando: catálogo PDF é pré-processado em páginas WebP no upload; geração apenas anexa as páginas via signed URL.
 
 ## Validação pós-deploy
 
-Depois do deploy, testar com o catálogo de 16MB + prontuário de 80KB. Critérios de sucesso nos logs:
+Testar com o catálogo de 9.97MB do log:
+- Upload dispara `process-catalog-pdf` → gera N páginas WebP no novo bucket.
+- "Gerar Receituário" anexa N `image_url` (signed URLs de WebP) ao payload.
+- Logs esperados:
+  ```
+  Anexado CATÁLOGO multimodal — 47 páginas via signed URL (WebP)
+  AI status: 200, finish_reason: stop
+  ```
+- Sem erro 400 do provider.
+- Sem `Memory limit exceeded`.
 
-- `CATÁLOGO via signed URL (16.06MB)` — confirma novo caminho
-- Sem `Memory limit exceeded`
-- Sem `400 Base64 decoding failed`
-- `finish_reason: stop` e tokens de saída > 0
+## Arquivos alterados/criados
 
-## Arquivos alterados
-
-- `supabase/functions/generate-prescription/index.ts` — nova lógica de signed URL para arquivos grandes
-- `mem://features/prescription-engine` — registrar a regra: PDFs > 2MB vão via signed URL, nunca inline base64
-
-## Por que não tentar comprimir / quebrar / streamar manualmente
-
-Considerei e descartei:
-- **Comprimir o PDF**: dá ganho marginal e não resolve o limite do inline_data
-- **Quebrar o catálogo em chunks**: perde contexto entre páginas, o Gemini precisa ver o catálogo inteiro pra cruzar produtos
-- **Pular o catálogo no payload e confiar só no extracted_content**: derrota o propósito de usar Pro multimodal e volta ao problema de qualidade que motivou o alinhamento com o chat-ai
-
-Signed URL é a solução padrão para esse caso e está alinhada com o que a documentação do Google recomenda para arquivos > 20MB.
+- **CRIAR** `supabase/functions/process-catalog-pdf/index.ts` — render PDF → WebP por página
+- **CRIAR** bucket `prescription-files-pages` via migration + RLS
+- **EDITAR** `supabase/functions/generate-prescription/index.ts` — usar páginas WebP em vez de PDF inline
+- **EDITAR** `src/components/dashboard/prescription/UploadDropzone.tsx` — disparar processamento pós-upload
+- **EDITAR** `src/components/dashboard/prescription/PrescriptionView.tsx` — desabilitar botão até processamento concluir
+- **EDITAR** `mem://features/prescription-engine` — documentar nova arquitetura
 
