@@ -827,10 +827,34 @@ serve(async (req) => {
     const recordFull = await ensureExtraction(supabase, 'prescription_records', recordRow, recordFile);
 
     console.log('Carregando CATALOG...');
-    const catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
-    if (catalogFile) {
-      const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
-      console.log(`CATALOG pronto: ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType}) via ${via}`);
+    // Caminho preferido: catálogo PDF já pré-processado em páginas PNG.
+    // O process-catalog-pdf renderiza cada página no upload e salva em
+    // prescription_catalogs.extracted_metadata.pages = ['userId/catalogId/page-001.png', ...]
+    let catalogFile: LoadedFile | null = null;
+    const cMeta = catalogRow.extracted_metadata || {};
+    if (Array.isArray(cMeta.pages) && cMeta.pages.length > 0) {
+      console.log(`CATALOG tem ${cMeta.pages.length} páginas pré-renderizadas — usando caminho de páginas.`);
+      const pages = await loadCatalogPages(supabase, cMeta.pages);
+      if (pages.length > 0) {
+        catalogFile = {
+          base64: null,
+          signedUrl: null,
+          mimeType: 'application/pdf', // mime original do catálogo (informativo)
+          sizeBytes: catalogRow.file_size || 0,
+          bucket: 'prescription-files',
+          path: catalogRow.file_path,
+          pages,
+        };
+        console.log(`CATALOG pronto: ${pages.length} páginas PNG via signed URL`);
+      }
+    }
+    // Fallback: catálogo sem páginas pré-renderizadas (imagem direta, ou processamento ainda não rodou)
+    if (!catalogFile) {
+      catalogFile = await loadFile(supabase, 'prescription-files', catalogRow.file_path);
+      if (catalogFile) {
+        const via = catalogFile.base64 ? 'base64 inline' : 'signed URL';
+        console.log(`CATALOG pronto (sem páginas): ${(catalogFile.sizeBytes / 1024 / 1024).toFixed(2)}MB (${catalogFile.mimeType}) via ${via}`);
+      }
     }
     console.log('Extraindo CATALOG (se cache inválido)...');
     const catalogFull = await ensureExtraction(supabase, 'prescription_catalogs', catalogRow, catalogFile);
