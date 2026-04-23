@@ -28,7 +28,7 @@ const PAGES_BUCKET = 'prescription-files-pages';
 const RENDER_SCALE = 0.75;   // ~54 DPI — JPEGs ~150-300KB, suficiente para Gemini ler texto
 const JPEG_QUALITY = 80;     // bom equilíbrio nitidez/tamanho
 const MAX_PAGES = 200;       // hard cap defensivo
-const DEFAULT_BATCH = 3;     // 3 páginas por invocação cabem com folga em ~10s de CPU
+const DEFAULT_BATCH = 1;     // 1 página por invocação — runtime real ~6s, bootstrap PDFium ~4s
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
