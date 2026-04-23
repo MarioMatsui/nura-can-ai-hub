@@ -456,12 +456,6 @@ export const UploadDropzone = ({
           {kind === 'catalog'
             && !value.isProcessing
             && !isCatalogPaused
-            && value.skipPageRender && (
-              <div className="text-xs text-primary font-medium">✓ Pronto para uso (modo rápido)</div>
-            )}
-          {kind === 'catalog'
-            && !value.isProcessing
-            && !isCatalogPaused
             && !value.skipPageRender
             && typeof value.pages_count === 'number'
             && value.pages_count > 0 && (
