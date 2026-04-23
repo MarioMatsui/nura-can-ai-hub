@@ -10,7 +10,7 @@
 // Tamanhos típicos: render escala 1.5 → ~1240px largura → 200-500KB por página.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7?target=deno";
 import { encode as encodePng } from "https://deno.land/x/pngs@0.1.1/mod.ts";
 
