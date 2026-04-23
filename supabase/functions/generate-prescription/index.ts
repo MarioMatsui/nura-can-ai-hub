@@ -134,23 +134,28 @@ function sanitizeRAGContent(content: string): string {
 // =============================================================================
 
 // Conversão Uint8Array -> base64 em CHUNKS pequenos.
-// Loop char-by-char (`binary += String.fromCharCode(buf[i])`) explode a memória
-// para PDFs grandes (cada concat realoca string). Chunked é O(n) com pico baixo.
+// IMPORTANTE: usar loop simples (não String.fromCharCode.apply) — apply com arrays
+// grandes pode estourar o stack do V8. Chunks pequenos + concat controlado.
 function uint8ToBase64(buf: Uint8Array): string {
-  const CHUNK = 0x8000; // 32KB por chunk
-  let binary = '';
+  const CHUNK = 0x2000; // 8KB por chunk (seguro pro stack do apply)
+  const parts: string[] = [];
   for (let i = 0; i < buf.length; i += CHUNK) {
     const slice = buf.subarray(i, Math.min(i + CHUNK, buf.length));
-    binary += String.fromCharCode.apply(null, slice as unknown as number[]);
+    let binary = '';
+    for (let j = 0; j < slice.length; j++) binary += String.fromCharCode(slice[j]);
+    parts.push(btoa(binary));
+    // Codifica chunk-a-chunk e descarta string intermediária (já em parts como base64).
   }
-  return btoa(binary);
+  // Concatena strings base64 já comprimidas; pico de memória bem menor que
+  // construir uma string binary monolítica antes do btoa.
+  return parts.join('');
 }
 
 async function downloadFileAsBase64(
   supabase: any,
   bucket: string,
   path: string,
-): Promise<{ base64: string; mimeType: string } | null> {
+): Promise<{ base64: string; mimeType: string; sizeBytes: number } | null> {
   const { data, error } = await supabase.storage.from(bucket).download(path);
   if (error || !data) {
     console.error('Failed to download file:', path, error);
@@ -159,8 +164,10 @@ async function downloadFileAsBase64(
   const ab = await data.arrayBuffer();
   const buf = new Uint8Array(ab);
   const mimeType = data.type || 'application/octet-stream';
+  const sizeBytes = buf.length;
   const base64 = uint8ToBase64(buf);
-  return { base64, mimeType };
+  // buf sai de escopo após retornar; ab também. base64 fica como única cópia viva.
+  return { base64, mimeType, sizeBytes };
 }
 
 function isTextual(mime: string): boolean {
