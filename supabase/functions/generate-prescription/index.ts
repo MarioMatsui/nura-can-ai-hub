@@ -797,6 +797,12 @@ Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre
 
     const aiJson = await aiResp.json();
     const aiText: string = aiJson.choices?.[0]?.message?.content || '';
+    const finishReason = aiJson.choices?.[0]?.finish_reason || 'unknown';
+    const usage = aiJson.usage || {};
+    console.log(`=== PRESCRIPTION RESPONSE ===`);
+    console.log(`- finish_reason: ${finishReason}`);
+    console.log(`- tokens_input: ${usage.prompt_tokens || 0}, tokens_output: ${usage.completion_tokens || 0}`);
+    console.log(`- response length: ${aiText.length} chars`);
 
     if (!aiText) {
       return new Response(JSON.stringify({ error: 'ia_vazia', message: 'A IA não retornou conteúdo.' }), {
