@@ -27,9 +27,19 @@ const PAGES_BUCKET = 'prescription-files-pages';
 const RENDER_SCALE = 1.5; // ~108 DPI — suficiente para o Gemini ler texto/produtos
 const MAX_PAGES = 120;    // hard cap defensivo
 
-// O specifier `npm:` no Deno Edge resolve o `.wasm` adjacente automaticamente,
-// dispensando carregamento manual e evitando o build "browser" do esm.sh que
-// detectava incorretamente o ambiente como browser.
+// Forçamos o build `?target=deno` do esm.sh — esse build NÃO injeta polyfills
+// browser, então `typeof XMLHttpRequest === 'undefined'` e o pdfium entra no
+// caminho Deno. Carregamos o WASM manualmente como fallback defensivo.
+const PDFIUM_WASM_URL = 'https://esm.sh/@hyzyla/pdfium@2.1.7/pdfium.wasm';
+let cachedWasm: ArrayBuffer | null = null;
+
+async function getPdfiumWasm(): Promise<ArrayBuffer> {
+  if (cachedWasm) return cachedWasm;
+  const res = await fetch(PDFIUM_WASM_URL);
+  if (!res.ok) throw new Error(`Falha ao baixar PDFium WASM: HTTP ${res.status}`);
+  cachedWasm = await res.arrayBuffer();
+  return cachedWasm;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
