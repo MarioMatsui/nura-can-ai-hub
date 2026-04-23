@@ -1,54 +1,74 @@
 
 
-## Dois ajustes no Receituário +
+## Novo bloco "Resumo Copiável" no Receituário +
 
-### 1. Contador de caracteres na mesma linha do label
+### Posicionamento
+Inserir entre os botões de ação e o `Card` com o resultado completo (entre as `<section>` das linhas ~241-278 e a `<section>` do response na linha ~281 em `PrescriptionView.tsx`).
 
-**`src/components/dashboard/prescription/PrescriptionView.tsx`** (seção "Observações complementares", linhas ~190-201)
+### Estrutura visual
+- Container com 2 linhas (Produto + Posologia)
+- Cada linha: label à esquerda (largura fixa ~120px no desktop, full width mobile) + campo readonly + botão copiar
+- Campo `Produto`: input readonly de uma linha
+- Campo `Posologia`: textarea readonly multilinha (auto-altura ou min-height)
+- Visível apenas quando `aiResponse` tem conteúdo (mesma condição de exibição que faz sentido)
 
-Reestruturar o bloco do label para usar `flex justify-between items-center`, movendo o contador `{observations.length}/1000` para o canto direito da mesma linha do label. Remover a `<div>` separada com o contador que aparece abaixo do textarea.
+### Lógica de extração
+
+Criar utilitário `extractPrescriptionSummary(text: string): { produto: string; posologia: string }` em arquivo novo `src/lib/prescriptionExtract.ts`:
+
+**Produto:**
+- Regex: localizar primeira ocorrência de `Produto:` (case-insensitive, ignorando `**Produto:**` markdown)
+- Capturar texto até primeira quebra de linha dupla, próximo campo conhecido (`Posologia:`, `Marca:`, `Concentração:`, `Indicação:`) ou fim
+- Tentar capturar também `Marca:` próximo (até 5 linhas antes/depois) para compor `{marca} + {produto}` se a marca não estiver já contida no nome
+- Limpar: remover markdown (`**`, `*`, `-`, `•`), prefixos, espaços extras, quebras múltiplas
+- Resultado: linha única limpa
+
+**Posologia:**
+- Regex: localizar `Posologia:` (case-insensitive, com/sem markdown)
+- Capturar até próximo cabeçalho conhecido (`Observações:`, `Justificativa:`, `Contraindicações:`, `Acompanhamento:`, headings markdown `##`, `###`) ou fim do texto
+- Limpar markdown bold/italic mas **manter bullets** (`- `, `• `, `* ` no início de linha → normalizar para `• `)
+- Preservar quebras de linha entre itens
+
+### UI
+
+Novo subcomponente inline (ou pequeno componente) dentro do `PrescriptionView`:
 
 ```tsx
-<section className="space-y-2">
-  <div className="flex items-center justify-between">
-    <label className="text-sm font-medium text-foreground">
-      Observações complementares <span className="text-muted-foreground font-normal">(opcional)</span>
-    </label>
-    <span className="text-xs text-muted-foreground">{observations.length}/1000</span>
-  </div>
-  <Textarea ... />
-</section>
+{aiResponse && (summary.produto || summary.posologia) && (
+  <section className="space-y-3">
+    <h2 className="text-sm font-medium text-muted-foreground">Resumo</h2>
+    <Card className="p-4 md:p-5 space-y-3">
+      <SummaryRow label="Produto" value={summary.produto} multiline={false} />
+      <SummaryRow label="Posologia" value={summary.posologia} multiline={true} />
+    </Card>
+  </section>
+)}
 ```
 
-Resultado: label à esquerda, contador à direita na mesma linha; textarea limpo abaixo, sem texto interno ou inferior.
+`SummaryRow`:
+- Layout `flex flex-col md:flex-row md:items-start gap-2 md:gap-4`
+- Label: `md:w-24 text-sm font-medium text-foreground`
+- Wrapper do campo: `relative flex-1`
+- Campo readonly: `Input` (single) ou `Textarea` (multi) com `pr-10` para o botão
+- Botão copiar: `absolute top-2 right-2`, ghost size sm, ícone `Copy`/`Check`, feedback "Copiado!" por 2s (estado local por linha)
 
-### 2. Nome do paciente sempre branco no estado padrão
+### Estado e atualização
 
-**`src/components/dashboard/prescription/PrescriptionView.tsx`** (cards do "Histórico recente", linhas ~267-275)
-
-Hoje a classe condicional aplica `text-foreground` no estado padrão. No tema dark `--foreground` já é branco, mas em alguns navegadores/estados (após interação ou foco) a herança pode ficar inconsistente porque o card herda cor do parent quando selecionado/hover muda o pai.
-
-Correção: forçar explicitamente `text-white` no estado padrão do nome do paciente, deixando o hover/selected como `text-black` (já implementado). Mesma regra para garantir que apenas hover e selected mudem para preto, nunca outro estado.
-
-```tsx
-<div
-  className={cn(
-    'text-sm font-medium line-clamp-1 transition-colors',
-    isSelected ? 'text-black' : 'text-white group-hover:text-black',
-  )}
->
-  {item.patient_name || 'Paciente não identificado'}
-</div>
+```ts
+const summary = useMemo(
+  () => extractPrescriptionSummary(aiResponse),
+  [aiResponse]
+);
 ```
 
-Os outros textos do card (queixa, data) continuam com `text-muted-foreground` no padrão e `text-black/70` / `text-black/60` no hover/selected — apenas o **nome** vai forçar branco puro.
+Sempre que `aiResponse` mudar (nova geração ou abertura de item do histórico), o `useMemo` recalcula. Se ambos vierem vazios, o bloco não renderiza.
 
-### Resultado esperado
+### Garantias
+- Não toca em `handleGenerate`, prompts da edge function, nem no `Card` de resultado existente
+- Não altera o histórico nem o reset (`handleNewPrescription` já zera `aiResponse`, então o resumo some junto)
+- Extração é puramente client-side sobre o texto já gerado
 
-- Label "Observações complementares (opcional)" à esquerda + "5/1000" à direita, mesma linha. Textarea limpo abaixo.
-- Nome do paciente no histórico: **sempre branco** no padrão (independente de estado), **preto** apenas no hover ou quando selecionado.
-
-### Arquivos alterados
-
-- `src/components/dashboard/prescription/PrescriptionView.tsx` (única mudança)
+### Arquivos
+- **Novo:** `src/lib/prescriptionExtract.ts` — função de extração + testes manuais cobertos via regex robusto
+- **Editado:** `src/components/dashboard/prescription/PrescriptionView.tsx` — import, `useMemo`, novo bloco entre botões e resultado, subcomponente `SummaryRow` interno
 
