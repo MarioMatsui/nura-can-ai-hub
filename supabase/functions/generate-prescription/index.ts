@@ -905,7 +905,11 @@ serve(async (req) => {
       mt === 'application/csv';
 
     const recordHasOriginal = !!recordFile && isMultimodalMime(recordFile.mimeType);
-    const catalogHasOriginal = !!catalogFile && isMultimodalMime(catalogFile.mimeType);
+    // Catálogo conta como "tem original" se for mime multimodal OU se tiver páginas pré-renderizadas.
+    const catalogHasOriginal = !!catalogFile && (
+      isMultimodalMime(catalogFile.mimeType) ||
+      (Array.isArray(catalogFile.pages) && catalogFile.pages.length > 0)
+    );
 
     // Texto puro só pode ser decodificado se temos o base64 carregado.
     // Para arquivos > 2MB de texto puro (raro), o Gemini buscará via URL.
