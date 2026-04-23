@@ -282,6 +282,17 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             )}
           </section>
 
+          {/* Resumo copiável */}
+          {hasSummary && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium text-muted-foreground">Resumo</h2>
+              <Card className="p-4 md:p-5 space-y-3">
+                <SummaryRow label="Produto" value={summary.produto} multiline={false} />
+                <SummaryRow label="Posologia" value={summary.posologia} multiline={true} />
+              </Card>
+            </section>
+          )}
+
           {/* Response area */}
           <section>
             <Card className="relative min-h-[400px] p-6 md:p-8">
