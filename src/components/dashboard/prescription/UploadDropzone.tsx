@@ -279,14 +279,20 @@ export const UploadDropzone = ({
   const handleRemove = useCallback(async () => {
     if (!value) return;
     try {
-      // Não deletamos do banco — o catálogo pode estar referenciado em saved_catalogs
-      // ou em prescription_results. Apenas removemos da seleção atual.
-      // Storage também é mantido para reaproveitamento.
+      // Catálogo salvo nos favoritos: não apaga arquivo nem registro — só deseleciona.
+      // Caso contrário (prontuário, ou catálogo não salvo): remove storage + registro.
+      if (kind === 'catalog' && isSaved) {
+        // Apenas deseleciona; preservamos o catálogo para o atalho continuar válido.
+      } else {
+        await supabase.storage.from('prescription-files').remove([value.file_path]);
+        const table = kind === 'catalog' ? 'prescription_catalogs' : 'prescription_records';
+        await supabase.from(table).delete().eq('id', value.id);
+      }
     } catch (e) {
       console.error('Remove error', e);
     }
     onChange(null);
-  }, [value, onChange]);
+  }, [value, kind, isSaved, onChange]);
 
   const handleSave = useCallback(async () => {
     if (!value || kind !== 'catalog') return;
