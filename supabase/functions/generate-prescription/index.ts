@@ -133,22 +133,37 @@ function sanitizeRAGContent(content: string): string {
 // EXTRAÇÃO DE CONTEÚDO DOS ARQUIVOS (Gemini multimodal)
 // =============================================================================
 
-// Conversão Uint8Array -> base64 em CHUNKS pequenos.
-// IMPORTANTE: usar loop simples (não String.fromCharCode.apply) — apply com arrays
-// grandes pode estourar o stack do V8. Chunks pequenos + concat controlado.
+// Conversão Uint8Array -> base64.
+// CRÍTICO: btoa() DEVE ser chamado UMA ÚNICA VEZ sobre a string binária inteira.
+// Chamar btoa() por chunk corrompe o resultado: cada chunk vira um bloco base64
+// independente com padding "=" próprio, gerando padding no meio da string final
+// e quebrando o alinhamento de 3 bytes -> 4 chars. Provider rejeita com 400.
+// Para evitar estourar o stack do V8 com String.fromCharCode.apply em arrays
+// grandes, construímos a string binária em chunks de 8KB com loop simples.
 function uint8ToBase64(buf: Uint8Array): string {
-  const CHUNK = 0x2000; // 8KB por chunk (seguro pro stack do apply)
-  const parts: string[] = [];
+  const CHUNK = 0x2000; // 8KB
+  let binary = '';
   for (let i = 0; i < buf.length; i += CHUNK) {
-    const slice = buf.subarray(i, Math.min(i + CHUNK, buf.length));
-    let binary = '';
-    for (let j = 0; j < slice.length; j++) binary += String.fromCharCode(slice[j]);
-    parts.push(btoa(binary));
-    // Codifica chunk-a-chunk e descarta string intermediária (já em parts como base64).
+    const end = Math.min(i + CHUNK, buf.length);
+    for (let j = i; j < end; j++) binary += String.fromCharCode(buf[j]);
   }
-  // Concatena strings base64 já comprimidas; pico de memória bem menor que
-  // construir uma string binary monolítica antes do btoa.
-  return parts.join('');
+  return btoa(binary);
+}
+
+// Validação leve de integridade do base64 antes de enviar ao provider.
+// Detecta padding "=" no meio da string (sintoma do bug antigo de btoa-por-chunk)
+// e tamanho fora do esperado (Math.ceil(bytes/3)*4).
+function assertValidBase64(b64: string, sizeBytes: number, label: string): void {
+  const expectedLen = Math.ceil(sizeBytes / 3) * 4;
+  if (b64.length !== expectedLen) {
+    throw new Error(
+      `${label}: base64 length mismatch (got ${b64.length}, expected ${expectedLen} for ${sizeBytes} bytes)`,
+    );
+  }
+  const firstEq = b64.indexOf('=');
+  if (firstEq !== -1 && firstEq < b64.length - 2) {
+    throw new Error(`${label}: invalid base64 (padding "=" at position ${firstEq}, expected only at end)`);
+  }
 }
 
 async function downloadFileAsBase64(
@@ -166,6 +181,7 @@ async function downloadFileAsBase64(
   const mimeType = data.type || 'application/octet-stream';
   const sizeBytes = buf.length;
   const base64 = uint8ToBase64(buf);
+  assertValidBase64(base64, sizeBytes, `download ${bucket}/${path}`);
   // buf sai de escopo após retornar; ab também. base64 fica como única cópia viva.
   return { base64, mimeType, sizeBytes };
 }

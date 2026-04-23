@@ -39,7 +39,8 @@ A função `generate-prescription` foi alinhada com `chat-ai` para reduzir diver
 - `extracted_content` armazenado: até 80k chars
 - **CRÍTICO MEMÓRIA**: arquivos > 6MB pulam a extração com Gemini Flash. O Gemini Pro multimodal lê o PDF original direto, então a extração estruturada com Flash é redundante e dobra o uso de RAM.
 - **Download SEQUENCIAL** (não paralelo). Antes: 2 PDFs base64 + 2 extrações em paralelo + 2 anexos = pico > 256MB. Agora: 1 PDF na fase de extração, ambos só coexistem na chamada final do Pro.
-- `uint8ToBase64` usa chunks de 8KB (não 32KB com `String.fromCharCode.apply`, que estoura stack do V8).
+- `uint8ToBase64`: constrói a string binária inteira em chunks de 8KB (loop simples por byte, sem `String.fromCharCode.apply` que estoura stack do V8) e chama `btoa()` **UMA ÚNICA VEZ** no final. **NUNCA** chamar `btoa()` por chunk — cada chunk vira um bloco base64 com padding `=` próprio, corrompendo alinhamento de 3 bytes → 4 chars. Provider rejeita com HTTP 400 "Base64 decoding failed". Para PDF de 10MB a binary tem ~10MB e o base64 ~13MB, cabe folgado nos 256MB.
+- `assertValidBase64`: validação antes do envio ao Gemini. Confere `length === Math.ceil(bytes/3)*4` e que `=` só aparece nas últimas 2 posições. Aborta com erro claro em vez de mandar payload corrompido.
 
 ## Logs de comparação
 A função emite resumo objetivo a cada chamada:
