@@ -40,6 +40,8 @@ export interface UploadedFile {
   total_pages?: number;
   /** Para catálogos PDF: indica que o backend ainda está renderizando as páginas */
   isProcessing?: boolean;
+  /** Para catálogos PDF ≤ 5MB: pulou a renderização página-por-página (modo rápido). */
+  skipPageRender?: boolean;
 }
 
 interface UploadDropzoneProps {
@@ -289,8 +291,9 @@ export const UploadDropzone = ({
             pages_count: 1,
             total_pages: 1,
             isProcessing: false,
+            skipPageRender: true,
           });
-          toast.success('Catálogo pronto.');
+          toast.success('Catálogo pronto (modo rápido — leitura direta sem rasterização).');
         } else {
           toast.success('Catálogo enviado. Processando páginas…');
           await runCatalogProcessing(uploaded, 0);
@@ -449,6 +452,13 @@ export const UploadDropzone = ({
           {kind === 'catalog'
             && !value.isProcessing
             && !isCatalogPaused
+            && value.skipPageRender && (
+              <div className="text-xs text-primary font-medium">✓ Pronto para uso (modo rápido)</div>
+            )}
+          {kind === 'catalog'
+            && !value.isProcessing
+            && !isCatalogPaused
+            && !value.skipPageRender
             && typeof value.pages_count === 'number'
             && value.pages_count > 0 && (
               <div className="text-xs text-muted-foreground">{value.pages_count} páginas prontas</div>
