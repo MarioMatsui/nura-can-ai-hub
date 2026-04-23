@@ -248,7 +248,15 @@ async function ensureExtraction(
   table: 'prescription_catalogs' | 'prescription_records',
   row: any,
 ): Promise<any> {
-  if (row.extracted_content && row.extracted_metadata && Object.keys(row.extracted_metadata || {}).length > 0) {
+  // CORREÇÃO 3: cache só é reutilizado se a extração anterior for de qualidade.
+  // Catálogo precisa ter pelo menos 1 produto extraído. Prontuário precisa ter queixa OU sintomas.
+  const meta = row.extracted_metadata || {};
+  const isCatalog = table === 'prescription_catalogs';
+  const cacheValid = isCatalog
+    ? Array.isArray(meta.products) && meta.products.length > 0 && (row.extracted_content?.length || 0) > 200
+    : (!!meta.main_complaint || (Array.isArray(meta.symptoms) && meta.symptoms.length > 0)) && (row.extracted_content?.length || 0) > 200;
+
+  if (cacheValid) {
     return row;
   }
 
@@ -258,14 +266,13 @@ async function ensureExtraction(
   let raw = '';
   let metadata: any = {};
 
-  const isCatalog = table === 'prescription_catalogs';
   const prompt = isCatalog ? CATALOG_EXTRACTION_PROMPT : RECORD_EXTRACTION_PROMPT;
 
   if (isTextual(file.mimeType)) {
     try {
       const decoded = atob(file.base64);
       raw = decoded;
-      const structured = await extractWithGemini(file.base64, file.mimeType, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 8000));
+      const structured = await extractWithGemini(file.base64, file.mimeType, prompt + '\n\nConteúdo:\n' + decoded.slice(0, 12000));
       metadata = structured.metadata;
     } catch (e) {
       console.error('Text decode error', e);
@@ -277,7 +284,8 @@ async function ensureExtraction(
   }
 
   const updates: any = {
-    extracted_content: raw.slice(0, 50000),
+    // CORREÇÃO 2: extracted_content sobe de 50k para 80k
+    extracted_content: raw.slice(0, 80000),
     extracted_metadata: metadata,
   };
 
