@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 
 const schema = z
   .object({
@@ -46,6 +46,11 @@ const schema = z
       .string()
       .optional()
       .refine((val) => !val || /^\+?[\d\s()-]+$/.test(val), { message: "Formato de telefone inválido" }),
+    password: z
+      .string()
+      .min(1, "Senha obrigatória")
+      .regex(/[A-Z]/, "A senha deve conter pelo menos 1 letra maiúscula")
+      .regex(/[0-9]/, "A senha deve conter pelo menos 1 número"),
     acceptTerms: z.boolean().refine((v) => v === true, {
       message: "Você deve aceitar os termos",
     }),
@@ -58,6 +63,7 @@ const CompletarCadastro = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [firstName, setFirstName] = useState<string>("");
   const [checking, setChecking] = useState(true);
+  const [showPassword, setShowPassword] = useState(true);
 
   useEffect(() => {
     const init = async () => {
@@ -91,7 +97,7 @@ const CompletarCadastro = () => {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { cpf: "", birthDate: "", phone: "", acceptTerms: false },
+    defaultValues: { cpf: "", birthDate: "", phone: "", password: "", acceptTerms: false },
   });
 
   const onSubmit = async (data: FormData) => {
@@ -102,6 +108,7 @@ const CompletarCadastro = () => {
           cpf: data.cpf,
           birth_date: data.birthDate,
           phone: data.phone || null,
+          password: data.password,
           accept_terms: data.acceptTerms,
         },
       });
@@ -202,6 +209,37 @@ const CompletarCadastro = () => {
                     <FormLabel>Nº de celular</FormLabel>
                     <FormControl>
                       <Input type="tel" placeholder="(11) 99999-9999" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Senha *</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Crie uma senha"
+                          className="pr-10"
+                          autoComplete="new-password"
+                          {...field}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                          tabIndex={-1}
+                        >
+                          {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
