@@ -696,27 +696,63 @@ A estrutura abaixo é uma referência. Use as seções que fizerem sentido clín
 - **Considerações finais** — limitações da análise, contraindicações, interações com medicações em uso.
 - **Aviso** — esta é uma sugestão de apoio à decisão; a prescrição final cabe ao médico responsável.
 
-### REGRA OBRIGATÓRIA — LINHA "Produto:"
-Para CADA produto sugerido, a linha imediatamente após "Produto:" DEVE conter o nome
-clinicamente completo neste padrão único:
+### CONTRATO DE SAÍDA — BLOCO JSON OBRIGATÓRIO NO FINAL
 
-  {Marca} {Nome do Produto} – {Concentração completa} – {Apresentação/Volume}
+Após terminar TODO o receituário em Markdown (incluindo o "Aviso" final), você DEVE
+anexar — sempre como ÚLTIMA parte da resposta — um bloco oculto exatamente neste
+formato (literal, sem alterar delimitadores):
 
-Regras:
+<!--RX_JSON_START-->
+\`\`\`json
+{
+  "produtos": [
+    {
+      "nome_formatado": "string",
+      "posologia": "string"
+    }
+  ]
+}
+\`\`\`
+<!--RX_JSON_END-->
+
+REGRAS DO \`nome_formatado\` (campo GERADO por você):
+- Pipeline interno: extraia do catálogo \`marca\`, \`nome_produto\`, \`concentracao\`, \`volume\`.
+  Depois monte: \`{marca} {nome_produto} {concentracao} – {volume}\`
+  (separadores: espaço entre marca/nome/concentração; \` – \` antes do volume).
+- Ordem fixa. Se faltar alguma parte, omita SEM deixar hífens órfãos.
 - Se a marca já estiver no nome, NÃO duplicar.
-- Concentração: incluir TODOS os fitocanabinoides relevantes do catálogo (CBD, THC,
-  CBG, CBN, CBC, THCA, THCV, etc.) no formato "X mg/ml CBD + Y mg/ml THC" ou
-  "Xmg CBD + Ymg THC". Se só houver proporção (ex: 1:1), use a proporção.
-- Apresentação: sempre incluir volume/quantidade (ex: 30ml, 10g, 30 cápsulas, 30 gummies).
-- Use apenas dados presentes no catálogo. Se faltar algum dado, omita-o (NUNCA inventar).
-- Sem markdown, sem aspas, sem bullets na linha "Produto:". Texto puro em uma linha só.
-- Você pode (e deve) detalhar Concentração, Apresentação e Posologia em subcampos
-  abaixo — mas a linha "Produto:" precisa ser auto-suficiente para uso em receita.
+- Concentração: incluir TODOS os fitocanabinoides relevantes (CBD, THC, CBG, CBN, CBC,
+  THCA, THCV) no formato \`Xmg/ml CBD + Ymg/ml THC\` ou \`Xmg CBD total\`. Se só houver
+  proporção (ex.: 1:1), use a proporção.
+- Volume: sempre incluir quantidade física (\`30ml\`, \`10g\`, \`30 cápsulas\`, \`30 gummies\`, \`1g\`).
+- PROIBIDO no \`nome_formatado\`: termos genéricos ("terapia basal", "tratamento",
+  "uso oral", "adjuvante"), descrições clínicas, frases longas, markdown (\`**\`, \`*\`,
+  bullets), aspas, quebras de linha. UMA linha limpa.
+- NUNCA inventar dados — se faltar no catálogo, omita.
 
-Exemplos:
-  Produto: Sensia THC & CBD 1:1 Oil Tincture – 10mg/ml THC + 10mg/ml CBD – 30ml
-  Produto: UBSuper General Relief Tincture – 50mg/ml CBD + 16mg/ml CBG + 5mg/ml THC – 30ml
-  Produto: Elite Live Rosin Blue Dream – THC dominante (Live Rosin) – 1g
+REGRAS DA \`posologia\` (campo EXTRAÍDO, NÃO gerado):
+- Copie LITERALMENTE o bloco de posologia que VOCÊ escreveu para AQUELE produto no
+  Markdown acima.
+- Mantenha bullets se existirem (use \`- \` no início de cada item).
+- Preserve quebras de linha entre itens (use \`\\n\` no JSON).
+- NÃO resuma, NÃO reescreva, NÃO simplifique.
+- Permitido apenas: remover \`**\` markdown e ajustes mínimos de espaço.
+- Se realmente não houver posologia identificável (raríssimo), retorne \`""\`.
+
+REGRAS DE CONSISTÊNCIA:
+- Ordem do array = ordem em que os produtos aparecem no Markdown.
+- 1 produto no Markdown = 1 entrada no array. Nunca mais, nunca menos.
+- Cada \`posologia\` pertence ao SEU produto correspondente — nunca misturar instruções
+  entre produtos diferentes.
+
+VALIDAÇÃO ANTES DE ENVIAR:
+- \`nome_formatado\` contém o nome real do produto (não termo genérico).
+- Concentração presente quando o catálogo informa.
+- Posologia capturada quando existe no Markdown.
+- Sem \`**\`, sem markdown, sem aspas internas escapadas erroneamente.
+- JSON válido e parseável.
+
+Esse bloco é INVISÍVEL ao usuário (vai dentro de comentário HTML). NÃO é opcional.
 `;
 
 // =============================================================================
@@ -1109,6 +1145,21 @@ Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre
     console.log(`- finish_reason: ${finishReason}`);
     console.log(`- tokens_input: ${usage.prompt_tokens || 0}, tokens_output: ${usage.completion_tokens || 0}`);
     console.log(`- response length: ${aiText.length} chars`);
+
+    // Best-effort: parseia o sidecar JSON apenas para observabilidade.
+    // Se faltar/quebrar, NÃO bloqueia — front tem fallback regex.
+    try {
+      const sidecarMatch = aiText.match(/<!--RX_JSON_START-->\s*```json\s*([\s\S]*?)\s*```\s*<!--RX_JSON_END-->/);
+      if (sidecarMatch) {
+        const parsed = JSON.parse(sidecarMatch[1]);
+        const count = Array.isArray(parsed?.produtos) ? parsed.produtos.length : 0;
+        console.log(`- sidecar JSON: ${count} produtos`);
+      } else {
+        console.log(`- sidecar JSON: AUSENTE`);
+      }
+    } catch (e) {
+      console.log(`- sidecar JSON: INVÁLIDO (${(e as Error).message})`);
+    }
 
     if (!aiText) {
       return new Response(JSON.stringify({ error: 'ia_vazia', message: 'A IA não retornou conteúdo.' }), {

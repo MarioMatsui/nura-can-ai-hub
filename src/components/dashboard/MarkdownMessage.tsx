@@ -9,6 +9,13 @@ interface MarkdownMessageProps {
 }
 
 export const MarkdownMessage = ({ content, className }: MarkdownMessageProps) => {
+  // Remove o sidecar JSON do Receituário+ antes do render. O bloco fica dentro
+  // de um comentário HTML, mas o ```json``` interno seria interpretado como bloco
+  // de código pelo react-markdown — o strip garante invisibilidade total.
+  const visible = (content ?? '')
+    .replace(/<!--RX_JSON_START-->[\s\S]*?<!--RX_JSON_END-->/g, '')
+    .trimEnd();
+
   return (
     <div className={cn('markdown-content', className)}>
       <ReactMarkdown
@@ -123,7 +130,7 @@ export const MarkdownMessage = ({ content, className }: MarkdownMessageProps) =>
         ),
       }}
       >
-        {content}
+        {visible}
       </ReactMarkdown>
     </div>
   );

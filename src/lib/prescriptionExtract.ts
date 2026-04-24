@@ -1,12 +1,14 @@
 /**
- * Extrai um resumo estruturado (Produto + Posologia) a partir do
- * texto bruto gerado pela IA do Receituário+.
+ * Extrai pares (Produto + Posologia) do receituário gerado pela IA.
  *
- * Suporta múltiplos produtos: cada ocorrência de "Produto:" gera
- * um item independente, com posologia isolada no bloco daquele produto.
+ * Estratégia híbrida:
+ *  1. CAMINHO PREFERIDO — JSON sidecar emitido pela IA no fim da resposta,
+ *     dentro de um bloco delimitado por <!--RX_JSON_START--> ... <!--RX_JSON_END-->.
+ *     Esse contrato é estrito: nome_formatado é GERADO pela IA seguindo o padrão
+ *     clínico, e posologia é EXTRAÍDA literalmente do Markdown da própria IA.
  *
- * Puramente client-side e tolerante a variações de formatação
- * (markdown, bullets, numeração, espaçamentos).
+ *  2. FALLBACK LEGADO — regex sobre o Markdown. Mantido por retrocompatibilidade
+ *     com receituários antigos no histórico (gerados antes do contrato JSON).
  */
 
 export interface PrescriptionItem {
@@ -14,14 +16,35 @@ export interface PrescriptionItem {
   posologia: string;
 }
 
-/**
- * Mantido por retrocompatibilidade caso algum chamador ainda use
- * o formato antigo. Preferir `PrescriptionItem[]`.
- */
+/** Mantido por retrocompatibilidade. Preferir `PrescriptionItem[]`. */
 export interface PrescriptionSummary {
   produto: string;
   posologia: string;
 }
+
+const SIDECAR_RE =
+  /<!--RX_JSON_START-->\s*```json\s*([\s\S]*?)\s*```\s*<!--RX_JSON_END-->/;
+
+/** Limpa o nome do produto: tira markdown, normaliza espaços, uma linha. */
+const cleanLine = (s: unknown): string =>
+  String(s ?? '')
+    .replace(/\*\*/g, '')
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** Limpa a posologia preservando quebras de linha e bullets. */
+const cleanPosologia = (s: unknown): string =>
+  String(s ?? '')
+    .replace(/\*\*/g, '')
+    .split('\n')
+    .map((l) => l.replace(/\s+$/g, ''))
+    .join('\n')
+    .trim();
+
+// =============================================================================
+// FALLBACK LEGADO (regex sobre Markdown)
+// =============================================================================
 
 const KNOWN_FIELDS = [
   'posologia',
@@ -43,27 +66,19 @@ const KNOWN_FIELDS = [
   'apresentacao',
 ];
 
-/** Remove marcações markdown comuns mantendo o texto legível. */
 const stripInlineMarkdown = (text: string): string => {
   return text
-    // bold/italic
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/__(.+?)__/g, '$1')
     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '$1')
     .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '$1')
-    // inline code
     .replace(/`([^`]+)`/g, '$1');
 };
 
-/** Remove prefixos de lista no começo de uma linha. */
 const stripLeadingBullet = (line: string): string => {
   return line.replace(/^\s*(?:[-*•·●▪►▶]|\d+[.)])\s+/, '');
 };
 
-/**
- * Constrói regex que casa um rótulo de campo no início de uma linha,
- * tolerando markdown, bullets, numeração ("Produto 1:") e variantes.
- */
 const buildFieldRegex = (field: string, flags = 'i'): RegExp => {
   return new RegExp(
     String.raw`(?:^|\n)\s*(?:[*_#>\-•·●▪►▶]+\s*)*\**\s*${field}(?:\s*\d+)?\s*\**\s*[:\-–—]\s*`,
@@ -71,7 +86,6 @@ const buildFieldRegex = (field: string, flags = 'i'): RegExp => {
   );
 };
 
-/** Procura o índice de início do conteúdo logo após um rótulo (ex.: "Produto:"). */
 const findFieldStart = (text: string, field: string): number => {
   const re = buildFieldRegex(field);
   const match = re.exec(text);
@@ -79,20 +93,6 @@ const findFieldStart = (text: string, field: string): number => {
   return match.index + match[0].length;
 };
 
-/** Encontra todos os índices de início de conteúdo de um rótulo. */
-const findAllFieldStarts = (text: string, field: string): number[] => {
-  const re = buildFieldRegex(field, 'gi');
-  const out: number[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    out.push(m.index + m[0].length);
-    // evita loop infinito caso o match tenha length 0
-    if (m.index === re.lastIndex) re.lastIndex++;
-  }
-  return out;
-};
-
-/** Encontra o próximo rótulo conhecido a partir de uma posição. */
 const findNextFieldIndex = (
   text: string,
   fromIndex: number,
@@ -112,7 +112,6 @@ const findNextFieldIndex = (
       if (nearest === -1 || abs < nearest) nearest = abs;
     }
   }
-  // também considerar headings markdown
   const headingRe = /\n\s*#{1,6}\s+\S/;
   const hm = headingRe.exec(slice);
   if (hm) {
@@ -122,7 +121,6 @@ const findNextFieldIndex = (
   return nearest;
 };
 
-/** Extrai a primeira linha não-vazia de um campo nominal dentro do bloco. */
 const extractSingleLineField = (block: string, field: string): string => {
   const start = findFieldStart(block, field);
   if (start === -1) return '';
@@ -133,19 +131,15 @@ const extractSingleLineField = (block: string, field: string): string => {
   return raw;
 };
 
-/** Anexa um detalhe ao nome se ainda não estiver contido (case-insensitive). */
 const appendDetail = (base: string, detail: string): string => {
   if (!detail) return base;
   const baseLc = base.toLowerCase();
   const detailLc = detail.toLowerCase();
   if (!base) return detail;
   if (baseLc.includes(detailLc)) return base;
-  // Evita duplicar se o nome já termina com a info principal do detalhe
   return `${base} – ${detail}`;
 };
 
-/** Extrai o nome do produto a partir de um bloco já isolado, compondo
- *  Marca + Nome – Concentração – Apresentação quando disponível. */
 const extractProdutoFromBlock = (block: string): string => {
   const start = findFieldStart(block, 'produto');
   if (start === -1) return '';
@@ -157,7 +151,6 @@ const extractProdutoFromBlock = (block: string): string => {
   raw = stripLeadingBullet(raw);
   raw = raw.replace(/\s+/g, ' ').trim();
 
-  // Marca dentro do mesmo bloco
   const marca = extractSingleLineField(block, 'marca');
   let nome = raw;
   if (marca && nome && !nome.toLowerCase().includes(marca.toLowerCase())) {
@@ -166,7 +159,6 @@ const extractProdutoFromBlock = (block: string): string => {
     nome = marca;
   }
 
-  // Composição defensiva: anexar concentração e apresentação quando ausentes na linha
   const concentracao =
     extractSingleLineField(block, 'concentração') ||
     extractSingleLineField(block, 'concentracao');
@@ -182,7 +174,6 @@ const extractProdutoFromBlock = (block: string): string => {
   return composed.replace(/\s+/g, ' ').trim();
 };
 
-/** Extrai a posologia a partir de um bloco já isolado. */
 const extractPosologiaFromBlock = (block: string): string => {
   const start = findFieldStart(block, 'posologia');
   if (start === -1) return '';
@@ -213,20 +204,7 @@ const extractPosologiaFromBlock = (block: string): string => {
   return cleaned.join('\n');
 };
 
-/**
- * Extrai TODOS os pares (produto + posologia) presentes no texto.
- * - Localiza todas as ocorrências de "Produto:".
- * - Para cada uma, isola o bloco até o próximo "Produto:" (ou fim).
- * - Extrai produto e posologia restritos àquele bloco.
- */
-export const extractPrescriptionSummary = (
-  text: string | null | undefined,
-): PrescriptionItem[] => {
-  if (!text || typeof text !== 'string') return [];
-
-  // Para localizar inícios de "Produto:" considerando o casamento do rótulo,
-  // precisamos das posições do MATCH (não do conteúdo após o rótulo).
-  // Reaproveitamos a regex e calculamos os índices do início do match.
+const extractFromMarkdownLegacy = (text: string): PrescriptionItem[] => {
   const re = buildFieldRegex('produto', 'gi');
   const matchStarts: number[] = [];
   let m: RegExpExecArray | null;
@@ -252,4 +230,39 @@ export const extractPrescriptionSummary = (
   }
 
   return items;
+};
+
+// =============================================================================
+// API PÚBLICA
+// =============================================================================
+
+/**
+ * Extrai pares (produto + posologia). Preferência absoluta pelo JSON sidecar;
+ * se ausente ou inválido, cai no parser legado de Markdown.
+ */
+export const extractPrescriptionSummary = (
+  text: string | null | undefined,
+): PrescriptionItem[] => {
+  if (!text || typeof text !== 'string') return [];
+
+  // 1) CAMINHO PREFERIDO: sidecar JSON
+  const m = text.match(SIDECAR_RE);
+  if (m) {
+    try {
+      const parsed = JSON.parse(m[1]);
+      const arr = Array.isArray(parsed?.produtos) ? parsed.produtos : [];
+      const items: PrescriptionItem[] = arr
+        .map((p: any) => ({
+          produto: cleanLine(p?.nome_formatado),
+          posologia: cleanPosologia(p?.posologia),
+        }))
+        .filter((it: PrescriptionItem) => it.produto || it.posologia);
+      if (items.length > 0) return items;
+    } catch {
+      // segue pro fallback
+    }
+  }
+
+  // 2) FALLBACK: regex sobre Markdown (retrocompatibilidade)
+  return extractFromMarkdownLegacy(text);
 };
