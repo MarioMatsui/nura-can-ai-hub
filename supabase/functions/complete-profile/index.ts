@@ -186,6 +186,7 @@ serve(async (req) => {
     }
 
     // Set password to enable email+password login (links to existing OAuth identity by user_id)
+    // NOTE: This revokes all existing sessions for the user.
     const { error: pwdErr } = await supabase.auth.admin.updateUserById(userId, {
       password: data.password,
     });
@@ -200,6 +201,50 @@ serve(async (req) => {
         JSON.stringify({ error: "Erro ao definir senha. Tente novamente.", request_id: requestId }),
         { status: 500, headers: responseHeaders }
       );
+    }
+
+    // Generate a fresh session for the user (the password update above revoked the old one).
+    // We use generateLink + verify to obtain valid access/refresh tokens server-side.
+    let newSession: { access_token: string; refresh_token: string } | null = null;
+    try {
+      const userEmail = updatedProfile?.email;
+      if (userEmail) {
+        const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+          type: "magiclink",
+          email: userEmail,
+        });
+        if (linkErr) {
+          console.error(`[${requestId}] generateLink error:`, linkErr.message);
+        } else {
+          const hashedToken = (linkData as any)?.properties?.hashed_token;
+          if (hashedToken) {
+            const verifyResp = await fetch(`${supabaseUrl}/auth/v1/verify`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "apikey": anonKey,
+              },
+              body: JSON.stringify({
+                type: "magiclink",
+                token: hashedToken,
+              }),
+            });
+            if (verifyResp.ok) {
+              const tokens = await verifyResp.json();
+              if (tokens?.access_token && tokens?.refresh_token) {
+                newSession = {
+                  access_token: tokens.access_token,
+                  refresh_token: tokens.refresh_token,
+                };
+              }
+            } else {
+              console.error(`[${requestId}] verify failed status=${verifyResp.status}`);
+            }
+          }
+        }
+      }
+    } catch (sessionErr) {
+      console.error(`[${requestId}] Session regeneration error (non-blocking)`);
     }
 
     // Sync to Brevo (non-blocking)
@@ -236,7 +281,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, request_id: requestId }),
+      JSON.stringify({ success: true, session: newSession, request_id: requestId }),
       { status: 200, headers: responseHeaders }
     );
   } catch (error) {
