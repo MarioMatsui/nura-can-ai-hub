@@ -58,6 +58,8 @@ interface UploadDropzoneProps {
   isSaved?: boolean;
   /** Para catálogos: indica se o limite de salvos foi atingido (3). */
   savedLimitReached?: boolean;
+  /** Para catálogos: indica se o usuário tem permissão de salvar catálogos (false para plano free). */
+  canSave?: boolean;
 }
 
 export const UploadDropzone = ({
@@ -70,6 +72,7 @@ export const UploadDropzone = ({
   onSaved,
   isSaved = false,
   savedLimitReached = false,
+  canSave = true,
 }: UploadDropzoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -349,6 +352,10 @@ export const UploadDropzone = ({
 
   const handleSave = useCallback(async () => {
     if (!value || kind !== 'catalog') return;
+    if (!canSave) {
+      toast.info('Disponível apenas para planos pagos.');
+      return;
+    }
     if (isSaved) {
       toast.info('Catálogo já salvo.');
       return;
@@ -365,8 +372,11 @@ export const UploadDropzone = ({
         display_name: value.file_name,
       });
       if (error) {
+        const msg = String((error as any).message || '');
         if ((error as any).code === '23505') {
           toast.info('Catálogo já salvo.');
+        } else if (msg.includes('PLANO_FREE_NAO_PODE_SALVAR_CATALOGO')) {
+          toast.info('Disponível apenas para planos pagos.');
         } else {
           throw error;
         }
@@ -376,11 +386,16 @@ export const UploadDropzone = ({
       onSaved?.();
     } catch (e: any) {
       console.error('Save catalog error', e);
-      toast.error(e?.message || 'Falha ao salvar catálogo.');
+      const msg = String(e?.message || '');
+      if (msg.includes('PLANO_FREE_NAO_PODE_SALVAR_CATALOGO')) {
+        toast.info('Disponível apenas para planos pagos.');
+      } else {
+        toast.error(msg || 'Falha ao salvar catálogo.');
+      }
     } finally {
       setIsSaving(false);
     }
-  }, [value, kind, userId, isSaved, savedLimitReached, onSaved]);
+  }, [value, kind, userId, isSaved, savedLimitReached, canSave, onSaved]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -483,14 +498,19 @@ export const UploadDropzone = ({
                 variant={isSaved ? 'secondary' : 'outline'}
                 size="sm"
                 onClick={handleSave}
-                disabled={isSaving || isSaved || (savedLimitReached && !isSaved)}
-                className="gap-1"
+                disabled={isSaving || isSaved || (canSave && savedLimitReached && !isSaved)}
+                className={cn(
+                  'gap-1',
+                  !canSave && 'opacity-50 cursor-not-allowed',
+                )}
                 title={
-                  isSaved
-                    ? 'Catálogo já salvo'
-                    : savedLimitReached
-                      ? 'Limite de 3 catálogos salvos atingido'
-                      : 'Salvar catálogo nos favoritos'
+                  !canSave
+                    ? 'Disponível apenas para planos pagos'
+                    : isSaved
+                      ? 'Catálogo já salvo'
+                      : savedLimitReached
+                        ? 'Limite de 3 catálogos salvos atingido'
+                        : 'Salvar catálogo nos favoritos'
                 }
               >
                 {isSaving ? (

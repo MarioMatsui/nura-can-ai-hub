@@ -15,19 +15,42 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // PLANOS PERMITIDOS
 // =============================================================================
 
-const ALLOWED_PLANS = new Set(['medical', 'medico', 'specialist', 'especialista']);
+const MEDICAL_PLANS = new Set(['medical', 'medico', 'specialist', 'especialista']);
+const PAID_PLANS = new Set(['medical', 'medico', 'specialist', 'especialista', 'legal', 'juridico', 'veterinary', 'veterinario']);
 
-async function userHasMedicalAccess(supabase: any, userId: string): Promise<boolean> {
+interface UserPlanContext {
+  hasPaidMedical: boolean;
+  hasOtherPaid: boolean;
+  isFreeOnly: boolean;
+}
+
+async function getUserPlanContext(supabase: any, userId: string): Promise<UserPlanContext> {
   const { data, error } = await supabase
     .from('user_plans')
     .select('plan_type, status')
     .eq('user_id', userId);
 
-  if (error || !data) return false;
+  if (error || !data) {
+    return { hasPaidMedical: false, hasOtherPaid: false, isFreeOnly: true };
+  }
 
-  return data.some((p: any) =>
-    p.status === 'active' && ALLOWED_PLANS.has(String(p.plan_type).toLowerCase())
+  const activePaid = data.filter((p: any) =>
+    p.status === 'active' && PAID_PLANS.has(String(p.plan_type).toLowerCase())
   );
+
+  const hasPaidMedical = activePaid.some((p: any) =>
+    MEDICAL_PLANS.has(String(p.plan_type).toLowerCase())
+  );
+
+  const hasOtherPaid = activePaid.some((p: any) =>
+    !MEDICAL_PLANS.has(String(p.plan_type).toLowerCase())
+  );
+
+  return {
+    hasPaidMedical,
+    hasOtherPaid,
+    isFreeOnly: activePaid.length === 0,
+  };
 }
 
 // =============================================================================
@@ -1234,8 +1257,10 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const hasAccess = await userHasMedicalAccess(supabase, userId);
-    if (!hasAccess) {
+    const planCtx = await getUserPlanContext(supabase, userId);
+    // Permitido: usuário com plano médico/especialista OU somente free (generalista).
+    // Bloqueado: planos pagos não-médicos (jurídico, veterinário) sem acesso médico.
+    if (!planCtx.hasPaidMedical && !planCtx.isFreeOnly) {
       return new Response(JSON.stringify({
         error: 'plano_invalido',
         message: 'O Receituário+ está disponível apenas para o plano Médico.',
@@ -1262,6 +1287,31 @@ serve(async (req) => {
       });
     }
 
+    // Consome cota mensal (only counts for free users; non-free returns allowed=true sem incrementar).
+    const { data: quotaData, error: quotaError } = await supabase.rpc('consume_receituario_quota', {
+      _user_id: userId,
+      _is_free: planCtx.isFreeOnly,
+    });
+    if (quotaError) {
+      console.error('Quota RPC error', quotaError);
+      return new Response(JSON.stringify({ error: 'erro_interno', message: 'Falha ao verificar cota.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const quota = quotaData as any;
+    if (!quota?.allowed) {
+      return new Response(JSON.stringify({
+        error: 'limite_mensal',
+        message: 'Você atingiu o limite mensal de 5 receituários no plano gratuito.',
+        used: quota?.used ?? 5,
+        limit: quota?.limit ?? 5,
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Cria job antes de retornar — front faz polling em prescription_jobs.
     const { data: job, error: jobError } = await supabase
       .from('prescription_jobs')
@@ -1278,6 +1328,10 @@ serve(async (req) => {
 
     if (jobError || !job) {
       console.error('Failed to create job:', jobError);
+      // Devolve a cota se não conseguiu criar o job.
+      if (planCtx.isFreeOnly) {
+        await supabase.rpc('refund_receituario_quota', { _user_id: userId }).catch(() => {});
+      }
       return new Response(JSON.stringify({ error: 'erro_interno', message: 'Falha ao iniciar processamento.' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1285,8 +1339,28 @@ serve(async (req) => {
     }
 
     // Dispara processamento em background (até ~400s sem matar a function).
+    // Se a geração falhar lá dentro, devolve a cota (best-effort).
+    const wrapped = (async () => {
+      try {
+        await runGeneration(job.id, userId, catalogId, recordId, observations || '');
+        // Verifica se o job realmente terminou com sucesso para decidir refund.
+        const { data: finalJob } = await supabase
+          .from('prescription_jobs')
+          .select('status')
+          .eq('id', job.id)
+          .maybeSingle();
+        if (finalJob?.status === 'failed' && planCtx.isFreeOnly) {
+          await supabase.rpc('refund_receituario_quota', { _user_id: userId }).catch(() => {});
+        }
+      } catch (e) {
+        console.error('Background generation crashed', e);
+        if (planCtx.isFreeOnly) {
+          await supabase.rpc('refund_receituario_quota', { _user_id: userId }).catch(() => {});
+        }
+      }
+    })();
     // @ts-ignore EdgeRuntime existe no runtime do Supabase Functions.
-    EdgeRuntime.waitUntil(runGeneration(job.id, userId, catalogId, recordId, observations || ''));
+    EdgeRuntime.waitUntil(wrapped);
 
     return new Response(JSON.stringify({ jobId: job.id }), {
       status: 202,
