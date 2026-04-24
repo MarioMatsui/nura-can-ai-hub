@@ -967,6 +967,8 @@ async function runGeneration(
     ].filter(Boolean);
     const ragQuery = ragQueryParts.join(' ').trim();
 
+    await updateJob(supabase, jobId, { progress: 'Consultando base científica…' });
+
     console.log('RAG query:', ragQuery.slice(0, 200));
     const ragChunks = ragQuery ? await searchMedicalKnowledgeBase(supabase, ragQuery) : [];
     console.log(`RAG retornou ${ragChunks.length} chunks`);
