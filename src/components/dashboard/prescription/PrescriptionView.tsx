@@ -527,9 +527,10 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
                         }
                       }}
                       className={cn(
-                        'group relative text-left p-3 pr-9 rounded-lg border border-border bg-card transition-colors cursor-pointer',
+                        'group relative text-left p-3 pr-16 rounded-lg border bg-card transition-colors cursor-pointer',
                         'hover:bg-accent hover:text-black dark:hover:text-black',
                         isSelected && 'bg-accent text-black dark:text-black',
+                        item.pinned_at ? 'border-primary/50' : 'border-border',
                       )}
                     >
                       <div
@@ -559,6 +560,24 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
                           hour: '2-digit', minute: '2-digit',
                         })}
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePin(item);
+                        }}
+                        className={cn(
+                          'absolute top-2 right-9 p-1 rounded-md transition-opacity',
+                          item.pinned_at
+                            ? 'opacity-100 text-primary hover:text-primary/80'
+                            : 'opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-primary',
+                          isSelected && !item.pinned_at && 'text-black/60 hover:text-primary',
+                        )}
+                        title={item.pinned_at ? 'Desfixar receituário' : 'Fixar receituário'}
+                        aria-label={item.pinned_at ? 'Desfixar receituário' : 'Fixar receituário'}
+                      >
+                        <Pin className={cn('w-4 h-4', item.pinned_at && 'fill-current')} />
+                      </button>
                       <button
                         type="button"
                         onClick={(e) => {
