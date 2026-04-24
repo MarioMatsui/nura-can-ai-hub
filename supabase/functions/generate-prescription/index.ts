@@ -904,6 +904,15 @@ async function runGeneration(
     console.log('Extraindo RECORD (se cache inválido)...');
     const recordFull = await ensureExtraction(supabase, 'prescription_records', recordRow, recordFile);
 
+    const catalogPagesCount = Array.isArray((catalogRow.extracted_metadata || {}).pages)
+      ? (catalogRow.extracted_metadata as any).pages.length
+      : 0;
+    await updateJob(supabase, jobId, {
+      progress: catalogPagesCount > 0
+        ? `Preparando catálogo (${catalogPagesCount} páginas)…`
+        : 'Preparando catálogo…',
+    });
+
     console.log('Carregando CATALOG...');
     // Caminho preferido: catálogo PDF já pré-processado em páginas PNG.
     // O process-catalog-pdf renderiza cada página no upload e salva em
