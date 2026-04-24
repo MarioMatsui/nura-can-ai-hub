@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw } from 'lucide-react';
+import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,8 @@ import { MarkdownMessage } from '@/components/dashboard/MarkdownMessage';
 import { cn } from '@/lib/utils';
 import { playSfx } from '@/lib/sfx';
 import { extractPrescriptionSummary } from '@/lib/prescriptionExtract';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +28,7 @@ import {
 
 interface PrescriptionViewProps {
   userId: string;
+  subscriptions?: Array<{ plan_type?: string; status?: string }>;
 }
 
 interface HistoryItem {
@@ -36,7 +39,7 @@ interface HistoryItem {
   created_at: string;
 }
 
-export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
+export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionViewProps) => {
   const [catalog, setCatalog] = useState<UploadedFile | null>(null);
   const [record, setRecord] = useState<UploadedFile | null>(null);
   const [observations, setObservations] = useState('');
@@ -48,6 +51,13 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [historyToDelete, setHistoryToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+
+  const isMobile = useIsMobile();
+  const { toggleSidebar } = useSidebar();
+
+  const activeSubs = subscriptions.filter((s) => s?.status === 'active');
+  const isFreeOnly = activeSubs.length > 0 && activeSubs.every((s) => s?.plan_type === 'free');
 
   const { items: savedCatalogs, loading: savedLoading, refresh: refreshSaved } = useSavedCatalogs(userId);
 
@@ -56,6 +66,8 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
   const summaryItems = useMemo(() => extractPrescriptionSummary(aiResponse), [aiResponse]);
   const hasSummary = !!aiResponse && summaryItems.length > 0;
+
+  const quotaExhausted = isFreeOnly && quota !== null && quota.used >= quota.limit;
 
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
@@ -67,7 +79,20 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
     if (!error && data) setHistory(data as HistoryItem[]);
   }, [userId]);
 
+  const loadQuota = useCallback(async () => {
+    if (!isFreeOnly) {
+      setQuota(null);
+      return;
+    }
+    const { data, error } = await supabase.rpc('get_receituario_quota', { _user_id: userId });
+    if (!error && data) {
+      const d = data as any;
+      setQuota({ used: Number(d.used) || 0, limit: Number(d.limit) || 5 });
+    }
+  }, [userId, isFreeOnly]);
+
   useEffect(() => { loadHistory(); }, [loadHistory]);
+  useEffect(() => { loadQuota(); }, [loadQuota]);
 
   const isCatalogPdf = !!catalog && (
     (catalog.file_type || '').toLowerCase().includes('pdf')
@@ -82,7 +107,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
       && catalog.pages_count === catalog.total_pages
     )
   );
-  const canGenerate = catalogReady && !!record && !isGenerating;
+  const canGenerate = catalogReady && !!record && !isGenerating && !quotaExhausted;
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
@@ -104,6 +129,9 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
       if (error) throw error;
       const payload = data as any;
       if (payload?.error) {
+        if (payload.error === 'limite_mensal') {
+          setQuota({ used: Number(payload.used) || 5, limit: Number(payload.limit) || 5 });
+        }
         toast.error(payload.message || 'Falha ao gerar receituário.');
         return;
       }
@@ -154,10 +182,13 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
         }
         toast.success('Receituário gerado.');
         loadHistory();
+        loadQuota();
       } else if (finalStatus === 'failed') {
         toast.error(finalErrorMsg);
+        loadQuota();
       } else {
         toast.error('Falha ao gerar receituário. Tente novamente em alguns minutos.');
+        loadQuota();
       }
     } catch (e: any) {
       console.error(e);
@@ -220,18 +251,38 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
+      {/* Mobile header com hamburger — paridade com ChatArea */}
+      {isMobile && (
+        <div className="p-4 flex items-center gap-2 border-b border-border">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="h-10 w-10 shrink-0"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-primary" />
+            <span className="text-base font-semibold text-foreground">Receituário +</span>
+          </div>
+        </div>
+      )}
       <ScrollArea className="flex-1">
         <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-8">
-          {/* Header */}
-          <header className="space-y-1">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="w-6 h-6 text-primary" />
-              <h1 className="text-2xl font-semibold text-foreground">Receituário +</h1>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Envie o catálogo de produtos e o prontuário do paciente. A IA cruzará os dados com a base científica para sugerir um receituário.
-            </p>
-          </header>
+          {/* Header (desktop) */}
+          {!isMobile && (
+            <header className="space-y-1">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-6 h-6 text-primary" />
+                <h1 className="text-2xl font-semibold text-foreground">Receituário +</h1>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Envie o catálogo de produtos e o prontuário do paciente. A IA cruzará os dados com a base científica para sugerir um receituário.
+              </p>
+            </header>
+          )}
 
           {/* Uploads */}
           <section className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-3 items-stretch">
@@ -245,6 +296,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
               isSaved={isCurrentCatalogSaved}
               savedLimitReached={savedLimitReached}
               onSaved={refreshSaved}
+              canSave={!isFreeOnly}
             />
 
             <div className="flex md:flex-col items-center justify-center">
@@ -263,14 +315,16 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
             />
           </section>
 
-          {/* Catálogos salvos */}
-          <SavedCatalogs
-            userId={userId}
-            items={savedCatalogs}
-            loading={savedLoading}
-            onRefresh={refreshSaved}
-            onUse={(file) => setCatalog(file)}
-          />
+          {/* Catálogos salvos — escondido para usuários free (não podem salvar) */}
+          {!isFreeOnly && (
+            <SavedCatalogs
+              userId={userId}
+              items={savedCatalogs}
+              loading={savedLoading}
+              onRefresh={refreshSaved}
+              onUse={(file) => setCatalog(file)}
+            />
+          )}
 
           {/* Observações */}
           <section className="space-y-2">
@@ -322,9 +376,19 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
                 Novo Receituário
               </Button>
             </div>
-            {!canGenerate && !isGenerating && (!catalog || !record) && (
+            {!canGenerate && !isGenerating && (!catalog || !record) && !quotaExhausted && (
               <p className="text-xs text-muted-foreground mt-2">
                 Envie o catálogo e o prontuário para liberar a geração.
+              </p>
+            )}
+            {isFreeOnly && quota && !quotaExhausted && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Usos restantes este mês: {Math.max(0, quota.limit - quota.used)}/{quota.limit}
+              </p>
+            )}
+            {quotaExhausted && (
+              <p className="text-xs font-medium text-destructive mt-2">
+                Você atingiu o limite mensal de 5 receituários no plano gratuito.
               </p>
             )}
           </section>

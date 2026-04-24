@@ -498,7 +498,7 @@ const Dashboard = () => {
         />
 
         {activeView === 'prescription' && user ? (
-          <PrescriptionView userId={user.id} />
+          <PrescriptionView userId={user.id} subscriptions={subscriptions} />
         ) : (
           <ChatArea
             user={user}

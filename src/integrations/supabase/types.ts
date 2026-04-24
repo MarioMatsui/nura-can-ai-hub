@@ -937,6 +937,8 @@ export type Database = {
           full_name: string
           id: string
           phone: string | null
+          receituario_usage_count: number
+          receituario_usage_month: string | null
           region: string | null
           updated_at: string
         }
@@ -949,6 +951,8 @@ export type Database = {
           full_name: string
           id: string
           phone?: string | null
+          receituario_usage_count?: number
+          receituario_usage_month?: string | null
           region?: string | null
           updated_at?: string
         }
@@ -961,6 +965,8 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
+          receituario_usage_count?: number
+          receituario_usage_month?: string | null
           region?: string | null
           updated_at?: string
         }
@@ -1205,12 +1211,21 @@ export type Database = {
     }
     Functions: {
       cleanup_old_webhooks: { Args: never; Returns: undefined }
+      consume_receituario_quota: {
+        Args: { _is_free: boolean; _user_id: string }
+        Returns: Json
+      }
+      get_receituario_quota: { Args: { _user_id: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      refund_receituario_quota: {
+        Args: { _user_id: string }
+        Returns: undefined
       }
       search_semantic_chunks: {
         Args: {
