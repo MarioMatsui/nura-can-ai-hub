@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw } from 'lucide-react';
+import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,8 @@ import { MarkdownMessage } from '@/components/dashboard/MarkdownMessage';
 import { cn } from '@/lib/utils';
 import { playSfx } from '@/lib/sfx';
 import { extractPrescriptionSummary } from '@/lib/prescriptionExtract';
+import { useSidebar } from '@/components/ui/sidebar';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +28,7 @@ import {
 
 interface PrescriptionViewProps {
   userId: string;
+  subscriptions?: Array<{ plan_type?: string; status?: string }>;
 }
 
 interface HistoryItem {
