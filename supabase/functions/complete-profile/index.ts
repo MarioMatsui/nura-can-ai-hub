@@ -16,6 +16,7 @@ interface CompleteProfileData {
   cpf: string;
   birth_date: string;
   phone?: string;
+  password: string;
   accept_terms: boolean;
 }
 
@@ -124,6 +125,25 @@ serve(async (req) => {
       );
     }
 
+    if (typeof data.password !== "string" || data.password.length < 1) {
+      return new Response(
+        JSON.stringify({ error: "Senha obrigatória.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+    if (!/[A-Z]/.test(data.password) || !/[0-9]/.test(data.password)) {
+      return new Response(
+        JSON.stringify({ error: "A senha deve conter pelo menos 1 letra maiúscula e 1 número.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+    if (data.password.length > 128) {
+      return new Response(
+        JSON.stringify({ error: "Senha muito longa.", request_id: requestId }),
+        { status: 400, headers: responseHeaders }
+      );
+    }
+
     // Check CPF uniqueness (excluding current user)
     const { data: existing } = await supabase
       .from("profiles")
@@ -161,6 +181,23 @@ serve(async (req) => {
       console.error(`[${requestId}] Update error:`, updErr.message);
       return new Response(
         JSON.stringify({ error: "Erro ao salvar dados. Tente novamente.", request_id: requestId }),
+        { status: 500, headers: responseHeaders }
+      );
+    }
+
+    // Set password to enable email+password login (links to existing OAuth identity by user_id)
+    const { error: pwdErr } = await supabase.auth.admin.updateUserById(userId, {
+      password: data.password,
+    });
+    if (pwdErr) {
+      console.error(`[${requestId}] Password set error:`, pwdErr.message);
+      // Rollback profile_completed so user can retry
+      await supabase
+        .from("profiles")
+        .update({ profile_completed: false, terms_accepted_at: null })
+        .eq("id", userId);
+      return new Response(
+        JSON.stringify({ error: "Erro ao definir senha. Tente novamente.", request_id: requestId }),
         { status: 500, headers: responseHeaders }
       );
     }
