@@ -79,7 +79,20 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
     if (!error && data) setHistory(data as HistoryItem[]);
   }, [userId]);
 
+  const loadQuota = useCallback(async () => {
+    if (!isFreeOnly) {
+      setQuota(null);
+      return;
+    }
+    const { data, error } = await supabase.rpc('get_receituario_quota', { _user_id: userId });
+    if (!error && data) {
+      const d = data as any;
+      setQuota({ used: Number(d.used) || 0, limit: Number(d.limit) || 5 });
+    }
+  }, [userId, isFreeOnly]);
+
   useEffect(() => { loadHistory(); }, [loadHistory]);
+  useEffect(() => { loadQuota(); }, [loadQuota]);
 
   const isCatalogPdf = !!catalog && (
     (catalog.file_type || '').toLowerCase().includes('pdf')
