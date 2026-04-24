@@ -702,18 +702,29 @@ Após terminar TODO o receituário em Markdown (incluindo o "Aviso" final), voc�
 anexar — sempre como ÚLTIMA parte da resposta — um bloco oculto exatamente neste
 formato (literal, sem alterar delimitadores):
 
+EXEMPLO LITERAL (siga este padrão ASCII puro, sem markdown nas strings):
+
 <!--RX_JSON_START-->
 \`\`\`json
 {
   "produtos": [
     {
-      "nome_formatado": "string",
-      "posologia": "string"
+      "nome_formatado": "Canfy Full Spectrum 1500mg (50mg/ml CBD) – 30ml",
+      "posologia": "- Iniciar com 2 gotas sublinguais à noite por 3-4 dias\n- Após tolerância, adicionar 2 gotas pela manhã\n- Aumentar 1 gota por tomada a cada 3-5 dias até controle da dor"
     }
   ]
 }
 \`\`\`
 <!--RX_JSON_END-->
+
+ATENÇÃO CRÍTICA — ANTI-MARKDOWN NO JSON:
+- O valor de \`nome_formatado\` é uma STRING JSON pura. NUNCA inclua os caracteres
+  \`*\` ou \`_\` dentro dele, mesmo que apareçam no Markdown acima. Faça strip explícito.
+- NUNCA emita \`**\` como separador (você estava fazendo isso). O ÚNICO separador
+  permitido entre concentração e volume é \` – \` (espaço, en-dash, espaço).
+- NUNCA use \`|\` como separador no \`nome_formatado\`. Apenas espaços e \` – \`.
+- Antes de fechar o JSON, releia mentalmente cada \`nome_formatado\`: se contém
+  \`*\`, \`_\`, \`|\`, \`**\`, ou hífen órfão (\` – \` no fim/início), CORRIJA antes de enviar.
 
 REGRAS DO \`nome_formatado\` (campo GERADO por você):
 - Pipeline interno: extraia do catálogo \`marca\`, \`nome_produto\`, \`concentracao\`, \`volume\`.
