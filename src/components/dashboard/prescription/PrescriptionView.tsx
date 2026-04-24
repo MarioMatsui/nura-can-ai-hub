@@ -396,9 +396,14 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
           {/* Resumo copiável */}
           {hasSummary && (
             <section className="space-y-3">
-              <h2 className="text-sm font-medium text-muted-foreground">
-                Resumo{summaryItems.length > 1 ? ` (${summaryItems.length} produtos)` : ''}
-              </h2>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <h2 className="text-sm font-medium text-muted-foreground">
+                  Resumo{summaryItems.length > 1 ? ` (${summaryItems.length} produtos)` : ''}
+                </h2>
+                <p className="text-xs text-muted-foreground italic text-right max-w-xs">
+                  Sempre cheque o nome dos produtos e das marcas antes de concluir a receita.
+                </p>
+              </div>
               <div className="space-y-3">
                 {summaryItems.map((item, idx) => (
                   <Card key={idx} className="p-4 md:p-5 space-y-3">
