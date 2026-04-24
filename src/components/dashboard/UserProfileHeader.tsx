@@ -174,16 +174,16 @@ export const UserProfileHeader = ({
     <div className="mt-auto border-t border-border pt-1.5 pb-[18px] px-3">
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
-          <button className="w-full flex items-center gap-3 h-[50px] sm:h-[60px] px-2.5 rounded-xl hover:bg-accent transition-all duration-200 hover:shadow-sm group">
-            <Avatar className="h-10 w-10 ring-2 ring-primary/10 group-hover:ring-primary/20 transition-all">
+          <button className="w-full flex items-center gap-3 h-[50px] sm:h-[60px] px-2.5 rounded-xl hover:bg-accent transition-all duration-200 hover:shadow-sm group/profile">
+            <Avatar className="h-10 w-10 ring-2 ring-primary/10 group-hover/profile:ring-primary/20 transition-all">
               <AvatarImage src={AVATAR_DEFAULT_URL} alt="Profile" />
               <AvatarFallback>{profile?.full_name?.[0] || 'U'}</AvatarFallback>
             </Avatar>
             <div className="flex-1 text-left min-w-0">
-              <div className="font-medium text-sm truncate group-hover:text-black dark:group-hover:text-black transition-colors">
+              <div className="font-medium text-sm truncate group-hover/profile:text-black dark:group-hover/profile:text-black transition-colors">
                 {profile?.full_name || user?.email || 'Usuário'}
               </div>
-              <div className="text-xs text-muted-foreground truncate group-hover:text-black/70 dark:group-hover:text-black/70 transition-colors">
+              <div className="text-xs text-muted-foreground truncate group-hover/profile:text-black/70 dark:group-hover/profile:text-black/70 transition-colors">
                 {getPlanLabel()}
               </div>
             </div>
