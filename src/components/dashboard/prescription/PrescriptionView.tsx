@@ -86,11 +86,12 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
       .from('prescription_results')
-      .select('id, patient_name, main_complaint, ai_response, created_at')
+      .select('id, patient_name, main_complaint, ai_response, created_at, pinned_at')
       .eq('user_id', userId)
+      .order('pinned_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
-      .limit(10);
-    if (!error && data) setHistory(data as HistoryItem[]);
+      .limit(16);
+    if (!error && data) setHistory(sortHistory(data as HistoryItem[]));
   }, [userId]);
 
   const loadQuota = useCallback(async () => {
