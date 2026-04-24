@@ -39,7 +39,7 @@ interface HistoryItem {
   created_at: string;
 }
 
-export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
+export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionViewProps) => {
   const [catalog, setCatalog] = useState<UploadedFile | null>(null);
   const [record, setRecord] = useState<UploadedFile | null>(null);
   const [observations, setObservations] = useState('');
@@ -51,6 +51,13 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [historyToDelete, setHistoryToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [quota, setQuota] = useState<{ used: number; limit: number } | null>(null);
+
+  const isMobile = useIsMobile();
+  const { toggleSidebar } = useSidebar();
+
+  const activeSubs = subscriptions.filter((s) => s?.status === 'active');
+  const isFreeOnly = activeSubs.length > 0 && activeSubs.every((s) => s?.plan_type === 'free');
 
   const { items: savedCatalogs, loading: savedLoading, refresh: refreshSaved } = useSavedCatalogs(userId);
 
@@ -59,6 +66,8 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
 
   const summaryItems = useMemo(() => extractPrescriptionSummary(aiResponse), [aiResponse]);
   const hasSummary = !!aiResponse && summaryItems.length > 0;
+
+  const quotaExhausted = isFreeOnly && quota !== null && quota.used >= quota.limit;
 
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
