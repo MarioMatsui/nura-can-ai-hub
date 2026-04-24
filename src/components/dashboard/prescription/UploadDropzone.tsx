@@ -313,8 +313,7 @@ export const UploadDropzone = ({
     } catch (e: any) {
       console.error('Upload error', e);
       toast.error(e?.message || 'Falha no upload.');
-    } finally {
-      setIsUploading(false);
+      setIsUploading(false); // salvaguarda em caso de erro antes do release acima
     }
   }, [userId, kind, onChange, runCatalogProcessing]);
 
