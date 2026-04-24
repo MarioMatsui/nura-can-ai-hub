@@ -211,7 +211,10 @@ export const UploadDropzone = ({
             total_pages: total,
             isProcessing: false,
           });
-          if (done) toast.success(`Catálogo pronto (${processed} páginas).`);
+          if (done) {
+            playSfx('upload');
+            toast.success(`Catálogo pronto (${processed} páginas).`);
+          }
         }
       } finally {
         setIsProcessing(false);
@@ -236,6 +239,11 @@ export const UploadDropzone = ({
     if (err) {
       toast.error(err);
       return;
+    }
+
+    // Aviso de demora para arquivos > 5MB (qualquer tipo/kind)
+    if (file.size > PDF_SMALL_THRESHOLD) {
+      toast.info('Documento maior que 5MB — o carregamento pode demorar alguns minutos.');
     }
 
     setIsUploading(true);
@@ -265,8 +273,6 @@ export const UploadDropzone = ({
       if (insertError) throw insertError;
 
       const uploaded = data as UploadedFile;
-      // SFX: toca apenas em upload novo bem-sucedido (não em "Usar" de salvos).
-      playSfx('upload');
 
       const isPdf = (uploaded.file_type || '').toLowerCase().includes('pdf')
         || uploaded.file_name.toLowerCase().endsWith('.pdf');
@@ -280,9 +286,6 @@ export const UploadDropzone = ({
         // Pipeline condicional: PDFs ≤ 5MB são leves o bastante pra ir direto
         // pro Gemini Pro multimodal — sem rasterização, sem batch, sem checkpoint.
         if (file.size <= PDF_SMALL_THRESHOLD) {
-          // Marca o catálogo como "renderização pulada" — o backend vai usar
-          // o PDF original inline. extracted_metadata fica como sinal pro
-          // frontend liberar o botão de gerar imediatamente.
           await supabase
             .from('prescription_catalogs')
             .update({
@@ -301,14 +304,23 @@ export const UploadDropzone = ({
             isProcessing: false,
             skipPageRender: true,
           });
+          // Catálogo + fim do processo (modo rápido) → toca som
+          playSfx('upload');
           toast.success('Catálogo pronto (modo rápido — leitura direta sem rasterização).');
         } else {
+          // PDF grande: NÃO toca som aqui — só ao concluir runCatalogProcessing.
           toast.success('Catálogo enviado. Processando páginas…');
           await runCatalogProcessing(uploaded, 0);
         }
-      } else {
+      } else if (kind === 'catalog') {
+        // Catálogo não-PDF (imagem/doc): processo termina no insert
         onChange(uploaded);
-        toast.success(kind === 'catalog' ? 'Catálogo enviado.' : 'Prontuário enviado.');
+        playSfx('upload');
+        toast.success('Catálogo enviado.');
+      } else {
+        // Prontuário: nunca toca som de upload
+        onChange(uploaded);
+        toast.success('Prontuário enviado.');
       }
     } catch (e: any) {
       console.error('Upload error', e);
