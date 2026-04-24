@@ -472,6 +472,8 @@ const Dashboard = () => {
     );
   }
 
+  const profileIncomplete = profile && profile.profile_completed === false;
+
   return (
     <SidebarProvider 
       defaultOpen={!isMobile}
@@ -479,37 +481,57 @@ const Dashboard = () => {
         '--sidebar-width-icon': '5.125rem'
       } as React.CSSProperties}
     >
-      <div id="app-root" data-theme={appTheme} className="flex h-screen w-full overflow-hidden bg-background">
-        <ChatSidebar
-          conversations={conversations}
-          currentConversation={currentConversation}
-          onSelectConversation={handleSelectConversation}
-          onNewConversation={handleNewConversation}
-          onRenameConversation={handleRenameConversation}
-          onDeleteConversation={handleDeleteConversation}
-          appTheme={appTheme}
-          onThemeToggle={handleThemeToggle}
-          profile={profile}
-          user={user}
-          subscriptions={subscriptions}
-          onOpenSearch={() => setSearchModalOpen(true)}
-          activeView={activeView}
-          onOpenPrescription={() => setActiveView('prescription')}
-        />
-
-        {activeView === 'prescription' && user ? (
-          <PrescriptionView userId={user.id} subscriptions={subscriptions} />
-        ) : (
-          <ChatArea
-            user={user}
-            profile={profile}
-            messages={messages}
-            subscriptions={subscriptions}
+      {profileIncomplete && (
+        <div className="fixed top-0 left-0 right-0 z-50 h-12 bg-primary text-primary-foreground flex items-center justify-center px-4 text-sm sm:text-base font-semibold shadow-md">
+          <span className="text-center">
+            Para iniciar seu uso da Nuracan você precisa{" "}
+            <button
+              type="button"
+              onClick={() => navigate('/auth/completar-cadastro')}
+              className="underline underline-offset-2 hover:opacity-90 font-bold"
+            >
+              Completar seu cadastro
+            </button>
+          </span>
+        </div>
+      )}
+      <div
+        id="app-root"
+        data-theme={appTheme}
+        className={`flex h-screen w-full overflow-hidden bg-background ${profileIncomplete ? 'pt-12' : ''}`}
+      >
+        <div className={profileIncomplete ? 'flex w-full pointer-events-none opacity-50 select-none' : 'flex w-full'}>
+          <ChatSidebar
+            conversations={conversations}
             currentConversation={currentConversation}
-            onSendMessage={handleSendMessage}
-            onOpenSidebar={() => {}}
+            onSelectConversation={handleSelectConversation}
+            onNewConversation={handleNewConversation}
+            onRenameConversation={handleRenameConversation}
+            onDeleteConversation={handleDeleteConversation}
+            appTheme={appTheme}
+            onThemeToggle={handleThemeToggle}
+            profile={profile}
+            user={user}
+            subscriptions={subscriptions}
+            onOpenSearch={() => setSearchModalOpen(true)}
+            activeView={activeView}
+            onOpenPrescription={() => setActiveView('prescription')}
           />
-        )}
+
+          {activeView === 'prescription' && user ? (
+            <PrescriptionView userId={user.id} subscriptions={subscriptions} />
+          ) : (
+            <ChatArea
+              user={user}
+              profile={profile}
+              messages={messages}
+              subscriptions={subscriptions}
+              currentConversation={currentConversation}
+              onSendMessage={handleSendMessage}
+              onOpenSidebar={() => {}}
+            />
+          )}
+        </div>
 
         <SearchModal
           open={searchModalOpen}

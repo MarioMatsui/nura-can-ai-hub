@@ -940,9 +940,11 @@ export type Database = {
           full_name: string
           id: string
           phone: string | null
+          profile_completed: boolean
           receituario_usage_count: number
           receituario_usage_month: string | null
           region: string | null
+          terms_accepted_at: string | null
           updated_at: string
         }
         Insert: {
@@ -954,9 +956,11 @@ export type Database = {
           full_name: string
           id: string
           phone?: string | null
+          profile_completed?: boolean
           receituario_usage_count?: number
           receituario_usage_month?: string | null
           region?: string | null
+          terms_accepted_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -968,9 +972,11 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
+          profile_completed?: boolean
           receituario_usage_count?: number
           receituario_usage_month?: string | null
           region?: string | null
+          terms_accepted_at?: string | null
           updated_at?: string
         }
         Relationships: []
