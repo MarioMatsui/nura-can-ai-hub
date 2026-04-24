@@ -251,18 +251,38 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
+      {/* Mobile header com hamburger — paridade com ChatArea */}
+      {isMobile && (
+        <div className="p-4 flex items-center gap-2 border-b border-border">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="h-10 w-10 shrink-0"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-primary" />
+            <span className="text-base font-semibold text-foreground">Receituário +</span>
+          </div>
+        </div>
+      )}
       <ScrollArea className="flex-1">
         <div className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-8">
-          {/* Header */}
-          <header className="space-y-1">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="w-6 h-6 text-primary" />
-              <h1 className="text-2xl font-semibold text-foreground">Receituário +</h1>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Envie o catálogo de produtos e o prontuário do paciente. A IA cruzará os dados com a base científica para sugerir um receituário.
-            </p>
-          </header>
+          {/* Header (desktop) */}
+          {!isMobile && (
+            <header className="space-y-1">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-6 h-6 text-primary" />
+                <h1 className="text-2xl font-semibold text-foreground">Receituário +</h1>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Envie o catálogo de produtos e o prontuário do paciente. A IA cruzará os dados com a base científica para sugerir um receituário.
+              </p>
+            </header>
+          )}
 
           {/* Uploads */}
           <section className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-3 items-stretch">
@@ -276,6 +296,7 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
               isSaved={isCurrentCatalogSaved}
               savedLimitReached={savedLimitReached}
               onSaved={refreshSaved}
+              canSave={!isFreeOnly}
             />
 
             <div className="flex md:flex-col items-center justify-center">
@@ -294,14 +315,16 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
             />
           </section>
 
-          {/* Catálogos salvos */}
-          <SavedCatalogs
-            userId={userId}
-            items={savedCatalogs}
-            loading={savedLoading}
-            onRefresh={refreshSaved}
-            onUse={(file) => setCatalog(file)}
-          />
+          {/* Catálogos salvos — escondido para usuários free (não podem salvar) */}
+          {!isFreeOnly && (
+            <SavedCatalogs
+              userId={userId}
+              items={savedCatalogs}
+              loading={savedLoading}
+              onRefresh={refreshSaved}
+              onUse={(file) => setCatalog(file)}
+            />
+          )}
 
           {/* Observações */}
           <section className="space-y-2">
