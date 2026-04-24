@@ -14,6 +14,7 @@ import AdminBlog from "./pages/AdminBlog";
 import AdminBlogEditor from "./pages/AdminBlogEditor";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
+import Privacidade from "./pages/Privacidade";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
@@ -38,6 +39,7 @@ const App = () => (
     <Route path="/admin/blog" element={<AdminBlog />} />
     <Route path="/admin/blog/new" element={<AdminBlogEditor />} />
     <Route path="/admin/blog/edit/:id" element={<AdminBlogEditor />} />
+    <Route path="/privacidade" element={<Privacidade />} />
     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
     <Route path="*" element={<NotFound />} />
   </Routes>
