@@ -271,6 +271,11 @@ export const UploadDropzone = ({
       const isPdf = (uploaded.file_type || '').toLowerCase().includes('pdf')
         || uploaded.file_name.toLowerCase().endsWith('.pdf');
 
+      // Upload de arquivo + insert no banco terminaram. Liberar isUploading
+      // ANTES de iniciar o processamento de páginas, para que a UI transite
+      // para o bloco "Processando páginas do catálogo (X/Y)" com contador.
+      setIsUploading(false);
+
       if (kind === 'catalog' && isPdf) {
         // Pipeline condicional: PDFs ≤ 5MB são leves o bastante pra ir direto
         // pro Gemini Pro multimodal — sem rasterização, sem batch, sem checkpoint.
@@ -308,8 +313,7 @@ export const UploadDropzone = ({
     } catch (e: any) {
       console.error('Upload error', e);
       toast.error(e?.message || 'Falha no upload.');
-    } finally {
-      setIsUploading(false);
+      setIsUploading(false); // salvaguarda em caso de erro antes do release acima
     }
   }, [userId, kind, onChange, runCatalogProcessing]);
 
