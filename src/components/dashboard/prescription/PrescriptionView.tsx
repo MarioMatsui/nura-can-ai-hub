@@ -107,7 +107,7 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
       && catalog.pages_count === catalog.total_pages
     )
   );
-  const canGenerate = catalogReady && !!record && !isGenerating;
+  const canGenerate = catalogReady && !!record && !isGenerating && !quotaExhausted;
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
@@ -129,6 +129,9 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
       if (error) throw error;
       const payload = data as any;
       if (payload?.error) {
+        if (payload.error === 'limite_mensal') {
+          setQuota({ used: Number(payload.used) || 5, limit: Number(payload.limit) || 5 });
+        }
         toast.error(payload.message || 'Falha ao gerar receituário.');
         return;
       }
@@ -179,10 +182,13 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
         }
         toast.success('Receituário gerado.');
         loadHistory();
+        loadQuota();
       } else if (finalStatus === 'failed') {
         toast.error(finalErrorMsg);
+        loadQuota();
       } else {
         toast.error('Falha ao gerar receituário. Tente novamente em alguns minutos.');
+        loadQuota();
       }
     } catch (e: any) {
       console.error(e);
