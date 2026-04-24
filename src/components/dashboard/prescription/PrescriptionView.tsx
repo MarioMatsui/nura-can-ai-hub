@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw, Menu } from 'lucide-react';
+import { Plus, Sparkles, Copy, Check, Loader2, FileText, ClipboardList, X, RotateCcw, Menu, Pin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -37,7 +37,21 @@ interface HistoryItem {
   main_complaint: string | null;
   ai_response: string;
   created_at: string;
+  pinned_at: string | null;
 }
+
+const PIN_LIMIT = 6;
+
+const sortHistory = (items: HistoryItem[]): HistoryItem[] => {
+  return [...items].sort((a, b) => {
+    if (a.pinned_at && !b.pinned_at) return -1;
+    if (!a.pinned_at && b.pinned_at) return 1;
+    if (a.pinned_at && b.pinned_at) {
+      return new Date(b.pinned_at).getTime() - new Date(a.pinned_at).getTime();
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+};
 
 export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionViewProps) => {
   const [catalog, setCatalog] = useState<UploadedFile | null>(null);
@@ -72,11 +86,12 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
   const loadHistory = useCallback(async () => {
     const { data, error } = await supabase
       .from('prescription_results')
-      .select('id, patient_name, main_complaint, ai_response, created_at')
+      .select('id, patient_name, main_complaint, ai_response, created_at, pinned_at')
       .eq('user_id', userId)
+      .order('pinned_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
-      .limit(10);
-    if (!error && data) setHistory(data as HistoryItem[]);
+      .limit(16);
+    if (!error && data) setHistory(sortHistory(data as HistoryItem[]));
   }, [userId]);
 
   const loadQuota = useCallback(async () => {
@@ -246,6 +261,35 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
     } finally {
       setIsDeleting(false);
       setHistoryToDelete(null);
+    }
+  };
+
+  const handleTogglePin = async (item: HistoryItem) => {
+    const isPinned = !!item.pinned_at;
+    const pinnedCount = history.filter((h) => h.pinned_at).length;
+
+    if (!isPinned && pinnedCount >= PIN_LIMIT) {
+      toast.error(`Você pode fixar no máximo ${PIN_LIMIT} receituários`);
+      return;
+    }
+
+    const newPinnedAt = isPinned ? null : new Date().toISOString();
+    // Otimista
+    setHistory((prev) =>
+      sortHistory(prev.map((h) => (h.id === item.id ? { ...h, pinned_at: newPinnedAt } : h))),
+    );
+
+    const { error } = await supabase
+      .from('prescription_results')
+      .update({ pinned_at: newPinnedAt })
+      .eq('id', item.id);
+
+    if (error) {
+      // rollback
+      setHistory((prev) =>
+        sortHistory(prev.map((h) => (h.id === item.id ? { ...h, pinned_at: item.pinned_at } : h))),
+      );
+      toast.error('Falha ao atualizar fixação.');
     }
   };
 
@@ -483,9 +527,10 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
                         }
                       }}
                       className={cn(
-                        'group relative text-left p-3 pr-9 rounded-lg border border-border bg-card transition-colors cursor-pointer',
+                        'group relative text-left p-3 pr-16 rounded-lg border bg-card transition-colors cursor-pointer',
                         'hover:bg-accent hover:text-black dark:hover:text-black',
                         isSelected && 'bg-accent text-black dark:text-black',
+                        item.pinned_at ? 'border-primary/50' : 'border-border',
                       )}
                     >
                       <div
@@ -515,6 +560,24 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
                           hour: '2-digit', minute: '2-digit',
                         })}
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePin(item);
+                        }}
+                        className={cn(
+                          'absolute top-2 right-9 p-1 rounded-md transition-opacity',
+                          item.pinned_at
+                            ? 'opacity-100 text-primary hover:text-primary/80'
+                            : 'opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-primary',
+                          isSelected && !item.pinned_at && 'text-black/60 hover:text-primary',
+                        )}
+                        title={item.pinned_at ? 'Desfixar receituário' : 'Fixar receituário'}
+                        aria-label={item.pinned_at ? 'Desfixar receituário' : 'Fixar receituário'}
+                      >
+                        <Pin className={cn('w-4 h-4', item.pinned_at && 'fill-current')} />
+                      </button>
                       <button
                         type="button"
                         onClick={(e) => {

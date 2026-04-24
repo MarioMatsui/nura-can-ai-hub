@@ -811,6 +811,7 @@ export type Database = {
           main_complaint: string | null
           model_used: string | null
           patient_name: string | null
+          pinned_at: string | null
           record_id: string | null
           suggested_products: Json | null
           user_id: string
@@ -824,6 +825,7 @@ export type Database = {
           main_complaint?: string | null
           model_used?: string | null
           patient_name?: string | null
+          pinned_at?: string | null
           record_id?: string | null
           suggested_products?: Json | null
           user_id: string
@@ -837,6 +839,7 @@ export type Database = {
           main_complaint?: string | null
           model_used?: string | null
           patient_name?: string | null
+          pinned_at?: string | null
           record_id?: string | null
           suggested_products?: Json | null
           user_id?: string
