@@ -107,7 +107,22 @@ const CompletarCadastro = () => {
       });
 
       if (error) {
-        toast.error(error.message || "Erro ao finalizar cadastro.");
+        let message = "Erro ao finalizar cadastro.";
+        try {
+          const ctx: any = (error as any).context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) message = body.error;
+          } else if (ctx?.body) {
+            const body = typeof ctx.body === "string" ? JSON.parse(ctx.body) : ctx.body;
+            if (body?.error) message = body.error;
+          } else if (error.message && !error.message.includes("non-2xx")) {
+            message = error.message;
+          }
+        } catch {
+          /* ignore parse errors, use default message */
+        }
+        toast.error(message);
         return;
       }
       if (!result?.success) {
