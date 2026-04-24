@@ -376,9 +376,19 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
                 Novo Receituário
               </Button>
             </div>
-            {!canGenerate && !isGenerating && (!catalog || !record) && (
+            {!canGenerate && !isGenerating && (!catalog || !record) && !quotaExhausted && (
               <p className="text-xs text-muted-foreground mt-2">
                 Envie o catálogo e o prontuário para liberar a geração.
+              </p>
+            )}
+            {isFreeOnly && quota && !quotaExhausted && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Usos restantes este mês: {Math.max(0, quota.limit - quota.used)}/{quota.limit}
+              </p>
+            )}
+            {quotaExhausted && (
+              <p className="text-xs font-medium text-destructive mt-2">
+                Você atingiu o limite mensal de 5 receituários no plano gratuito.
               </p>
             )}
           </section>
