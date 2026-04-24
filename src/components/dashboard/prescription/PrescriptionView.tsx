@@ -301,7 +301,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Analisando documentos e cruzando com base científica…
+                    {progressMessage || 'Analisando documentos e cruzando com base científica…'}
                   </>
                 ) : (
                   <>
