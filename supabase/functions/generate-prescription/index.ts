@@ -845,73 +845,48 @@ Execute o raciocínio clínico (prontuário → evidência → catálogo → rec
 // HANDLER
 // =============================================================================
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+// =============================================================================
+// BACKGROUND JOB RUNNER
+// Toda a lógica pesada (RAG, multimodal, fetch IA) roda aqui em background
+// via EdgeRuntime.waitUntil para não estourar o wall-clock da request HTTP.
+// =============================================================================
+
+async function updateJob(
+  supabase: any,
+  jobId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await supabase.from('prescription_jobs').update(patch).eq('id', jobId);
+  } catch (e) {
+    console.error(`Failed to update job ${jobId}:`, e);
   }
+}
+
+async function runGeneration(
+  jobId: string,
+  userId: string,
+  catalogId: string,
+  recordId: string,
+  observations: string,
+): Promise<void> {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Não autenticado' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const authClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userError } = await authClient.auth.getUser();
-    if (userError || !userData?.user) {
-      return new Response(JSON.stringify({ error: 'Não autenticado' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    const userId = userData.user.id;
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    const hasAccess = await userHasMedicalAccess(supabase, userId);
-    if (!hasAccess) {
-      return new Response(JSON.stringify({
-        error: 'plano_invalido',
-        message: 'O Receituário+ está disponível apenas para o plano Médico.',
-      }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const body = await req.json();
-    const { catalogId, recordId, observations } = body || {};
-
-    if (!catalogId || !recordId) {
-      return new Response(JSON.stringify({ error: 'catalogId e recordId são obrigatórios' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (typeof observations === 'string' && observations.length > 1000) {
-      return new Response(JSON.stringify({ error: 'observations excede 1000 caracteres' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const [{ data: catalogRow }, { data: recordRow }] = await Promise.all([
       supabase.from('prescription_catalogs').select('*').eq('id', catalogId).eq('user_id', userId).maybeSingle(),
       supabase.from('prescription_records').select('*').eq('id', recordId).eq('user_id', userId).maybeSingle(),
     ]);
 
     if (!catalogRow || !recordRow) {
-      return new Response(JSON.stringify({ error: 'Arquivos não encontrados' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      await updateJob(supabase, jobId, {
+        status: 'failed',
+        error_message: 'Arquivos não encontrados.',
       });
+      return;
     }
+
+    await updateJob(supabase, jobId, { progress: 'Carregando prontuário…' });
 
     // CORREÇÃO MEMÓRIA CRÍTICA:
     // - Download SEQUENCIAL (não paralelo) para nunca ter dois PDFs em RAM ao mesmo tempo.
