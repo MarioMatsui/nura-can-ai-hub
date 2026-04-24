@@ -130,7 +130,7 @@ export const MarkdownMessage = ({ content, className }: MarkdownMessageProps) =>
         ),
       }}
       >
-        {content}
+        {visible}
       </ReactMarkdown>
     </div>
   );
