@@ -1098,6 +1098,8 @@ Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre
     console.log(`- User text length: ${userMessageText.length} chars`);
     console.log(`- Total user content parts: ${userContent.length}`);
 
+    await updateJob(supabase, jobId, { progress: 'Analisando com IA…' });
+
     // CORREÇÃO 3: parâmetros de inferência alinhados ao chat-ai
     // (max_tokens: 8000, sem temperature fixa — usa default do provedor).
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -1117,21 +1119,20 @@ Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre
     });
 
     if (!aiResp.ok) {
+      let errMsg = 'Falha ao gerar receituário.';
       if (aiResp.status === 429) {
-        return new Response(JSON.stringify({ error: 'rate_limit', message: 'Limite de requisições atingido. Tente novamente em alguns instantes.' }), {
-          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        errMsg = 'Limite de requisições atingido. Tente novamente em alguns instantes.';
+      } else if (aiResp.status === 402) {
+        errMsg = 'Créditos de IA esgotados.';
+      } else {
+        const t = await aiResp.text().catch(() => '');
+        console.error('AI error', aiResp.status, t);
       }
-      if (aiResp.status === 402) {
-        return new Response(JSON.stringify({ error: 'sem_credito', message: 'Créditos de IA esgotados.' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      const t = await aiResp.text();
-      console.error('AI error', aiResp.status, t);
-      return new Response(JSON.stringify({ error: 'ia_falhou', message: 'Falha ao gerar receituário.' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      await updateJob(supabase, jobId, {
+        status: 'failed',
+        error_message: errMsg,
       });
+      return;
     }
 
     const aiJson = await aiResp.json();
@@ -1159,10 +1160,14 @@ Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre
     }
 
     if (!aiText) {
-      return new Response(JSON.stringify({ error: 'ia_vazia', message: 'A IA não retornou conteúdo.' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      await updateJob(supabase, jobId, {
+        status: 'failed',
+        error_message: 'A IA não retornou conteúdo.',
       });
+      return;
     }
+
+    await updateJob(supabase, jobId, { progress: 'Salvando resultado…' });
 
     const { data: saved, error: saveError } = await supabase
       .from('prescription_results')
@@ -1182,16 +1187,113 @@ Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre
 
     if (saveError) console.error('Save result error', saveError);
 
-    return new Response(JSON.stringify({
-      id: saved?.id,
-      response: aiText,
-      patient_name: recordFull.patient_name,
-      main_complaint: recordFull.main_complaint,
-    }), {
+    await updateJob(supabase, jobId, {
+      status: 'completed',
+      ai_response: aiText,
+      result_id: saved?.id || null,
+      progress: null,
+    });
+  } catch (e) {
+    console.error('generate-prescription background fatal', e);
+    await updateJob(supabase, jobId, {
+      status: 'failed',
+      error_message: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
+// =============================================================================
+// HTTP HANDLER — cria o job e dispara processamento em background
+// =============================================================================
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Não autenticado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const authClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userError } = await authClient.auth.getUser();
+    if (userError || !userData?.user) {
+      return new Response(JSON.stringify({ error: 'Não autenticado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const userId = userData.user.id;
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    const hasAccess = await userHasMedicalAccess(supabase, userId);
+    if (!hasAccess) {
+      return new Response(JSON.stringify({
+        error: 'plano_invalido',
+        message: 'O Receituário+ está disponível apenas para o plano Médico.',
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const { catalogId, recordId, observations } = body || {};
+
+    if (!catalogId || !recordId) {
+      return new Response(JSON.stringify({ error: 'catalogId e recordId são obrigatórios' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (typeof observations === 'string' && observations.length > 1000) {
+      return new Response(JSON.stringify({ error: 'observations excede 1000 caracteres' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Cria job antes de retornar — front faz polling em prescription_jobs.
+    const { data: job, error: jobError } = await supabase
+      .from('prescription_jobs')
+      .insert({
+        user_id: userId,
+        catalog_id: catalogId,
+        record_id: recordId,
+        observations: observations || null,
+        status: 'processing',
+        progress: 'Iniciando…',
+      })
+      .select()
+      .single();
+
+    if (jobError || !job) {
+      console.error('Failed to create job:', jobError);
+      return new Response(JSON.stringify({ error: 'erro_interno', message: 'Falha ao iniciar processamento.' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Dispara processamento em background (até ~400s sem matar a function).
+    // @ts-ignore EdgeRuntime existe no runtime do Supabase Functions.
+    EdgeRuntime.waitUntil(runGeneration(job.id, userId, catalogId, recordId, observations || ''));
+
+    return new Response(JSON.stringify({ jobId: job.id }), {
+      status: 202,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
-    console.error('generate-prescription fatal', e);
+    console.error('generate-prescription handler fatal', e);
     return new Response(JSON.stringify({ error: 'erro_interno', message: e instanceof Error ? e.message : String(e) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
