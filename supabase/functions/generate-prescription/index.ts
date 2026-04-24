@@ -1146,6 +1146,21 @@ Esses documentos têm PRIORIDADE sobre qualquer texto auxiliar extraído. Sempre
     console.log(`- tokens_input: ${usage.prompt_tokens || 0}, tokens_output: ${usage.completion_tokens || 0}`);
     console.log(`- response length: ${aiText.length} chars`);
 
+    // Best-effort: parseia o sidecar JSON apenas para observabilidade.
+    // Se faltar/quebrar, NÃO bloqueia — front tem fallback regex.
+    try {
+      const sidecarMatch = aiText.match(/<!--RX_JSON_START-->\s*```json\s*([\s\S]*?)\s*```\s*<!--RX_JSON_END-->/);
+      if (sidecarMatch) {
+        const parsed = JSON.parse(sidecarMatch[1]);
+        const count = Array.isArray(parsed?.produtos) ? parsed.produtos.length : 0;
+        console.log(`- sidecar JSON: ${count} produtos`);
+      } else {
+        console.log(`- sidecar JSON: AUSENTE`);
+      }
+    } catch (e) {
+      console.log(`- sidecar JSON: INVÁLIDO (${(e as Error).message})`);
+    }
+
     if (!aiText) {
       return new Response(JSON.stringify({ error: 'ia_vazia', message: 'A IA não retornou conteúdo.' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
