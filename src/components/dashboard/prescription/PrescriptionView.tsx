@@ -92,6 +92,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
     }
     setIsGenerating(true);
     setAiResponse('');
+    setProgressMessage('Iniciando…');
     try {
       const { data, error } = await supabase.functions.invoke('generate-prescription', {
         body: {
@@ -106,19 +107,64 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
         toast.error(payload.message || 'Falha ao gerar receituário.');
         return;
       }
-      const response = payload?.response || '';
-      setAiResponse(response);
-      if (response) {
-        // SFX: receituário gerado com sucesso
-        playSfx('receita');
+      const jobId: string | undefined = payload?.jobId;
+      if (!jobId) {
+        toast.error('Falha ao iniciar geração. Tente novamente.');
+        return;
       }
-      toast.success('Receituário gerado.');
-      loadHistory();
+
+      // Polling: até 8 minutos, intervalo de 3s
+      const intervalMs = 3000;
+      const timeoutMs = 8 * 60 * 1000;
+      const start = Date.now();
+      let finalResponse = '';
+      let finalStatus: 'completed' | 'failed' | 'timeout' = 'timeout';
+      let finalErrorMsg = '';
+
+      while (Date.now() - start < timeoutMs) {
+        await new Promise((r) => setTimeout(r, intervalMs));
+        const { data: jobRow, error: jobErr } = await supabase
+          .from('prescription_jobs')
+          .select('status, progress, ai_response, error_message')
+          .eq('id', jobId)
+          .maybeSingle();
+        if (jobErr) {
+          console.error('Polling error', jobErr);
+          continue;
+        }
+        if (!jobRow) continue;
+        if (jobRow.progress) setProgressMessage(jobRow.progress);
+        if (jobRow.status === 'completed') {
+          finalStatus = 'completed';
+          finalResponse = jobRow.ai_response || '';
+          break;
+        }
+        if (jobRow.status === 'failed') {
+          finalStatus = 'failed';
+          finalErrorMsg = jobRow.error_message || 'Falha ao gerar receituário.';
+          break;
+        }
+      }
+
+      if (finalStatus === 'completed') {
+        setAiResponse(finalResponse);
+        if (finalResponse) {
+          // SFX: receituário gerado com sucesso
+          playSfx('receita');
+        }
+        toast.success('Receituário gerado.');
+        loadHistory();
+      } else if (finalStatus === 'failed') {
+        toast.error(finalErrorMsg);
+      } else {
+        toast.error('Falha ao gerar receituário. Tente novamente em alguns minutos.');
+      }
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || 'Erro ao gerar receituário.');
     } finally {
       setIsGenerating(false);
+      setProgressMessage('');
     }
   };
 
