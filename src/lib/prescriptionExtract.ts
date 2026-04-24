@@ -4,11 +4,13 @@
  * Estratégia híbrida:
  *  1. CAMINHO PREFERIDO — JSON sidecar emitido pela IA no fim da resposta,
  *     dentro de um bloco delimitado por <!--RX_JSON_START--> ... <!--RX_JSON_END-->.
- *     Esse contrato é estrito: nome_formatado é GERADO pela IA seguindo o padrão
- *     clínico, e posologia é EXTRAÍDA literalmente do Markdown da própria IA.
  *
  *  2. FALLBACK LEGADO — regex sobre o Markdown. Mantido por retrocompatibilidade
  *     com receituários antigos no histórico (gerados antes do contrato JSON).
+ *
+ * AMBOS os caminhos passam pelo mesmo sanitizador final (`cleanLine` /
+ * `cleanPosologia`), garantindo que `**`, `*`, `_`, `|` ou hífens órfãos
+ * NUNCA cheguem ao Resumo Copiável.
  */
 
 export interface PrescriptionItem {
@@ -22,28 +24,95 @@ export interface PrescriptionSummary {
   posologia: string;
 }
 
-const SIDECAR_RE =
-  /<!--RX_JSON_START-->\s*```json\s*([\s\S]*?)\s*```\s*<!--RX_JSON_END-->/;
+// =============================================================================
+// SANITIZADORES (compartilhados entre sidecar e fallback)
+// =============================================================================
 
-/** Limpa o nome do produto: tira markdown, normaliza espaços, uma linha. */
+/** Remove markdown inline (negrito, itálico, código). Usado em linhas de posologia. */
+const stripInlineMarkdown = (text: string): string => {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '$1')
+    .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1');
+};
+
+/** Limpa nome do produto: remove TODO markdown, pipes, separadores órfãos. UMA linha. */
 const cleanLine = (s: unknown): string =>
   String(s ?? '')
-    .replace(/\*\*/g, '')
-    .replace(/[`*_]/g, '')
+    .replace(/\*+/g, '')                              // remove ** e *
+    .replace(/[`_]/g, '')                             // remove ` e _
+    .replace(/\s*[–—-]\s*(?=[–—-]|$)/g, '')           // hífens órfãos no fim
+    .replace(/\s*[|│]\s*[|│]\s*/g, ' | ')             // dedup pipes consecutivos
     .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—|]+|[\s\-–—|]+$/g, '')          // separadores nas pontas
     .trim();
 
-/** Limpa a posologia preservando quebras de linha e bullets. */
-const cleanPosologia = (s: unknown): string =>
-  String(s ?? '')
-    .replace(/\*\*/g, '')
-    .split('\n')
-    .map((l) => l.replace(/\s+$/g, ''))
-    .join('\n')
-    .trim();
+/** Limpa posologia preservando bullets/quebras, descartando linhas residuais. */
+const cleanPosologia = (s: unknown): string => {
+  const lines = String(s ?? '').split('\n');
+  const cleaned: string[] = [];
+  for (const original of lines) {
+    let line = stripInlineMarkdown(original).replace(/\s+$/g, '');
+    // Descarta linha que sobrou só com pontuação/markdown residual (ex.: "**" sozinho).
+    if (!line.replace(/[\s\-–—*•·●▪►▶|]/g, '')) {
+      if (cleaned.length && cleaned[cleaned.length - 1] !== '') cleaned.push('');
+      continue;
+    }
+    const bm = line.match(/^\s*(?:[-*•·●▪►▶]|\d+[.)])\s+(.*)$/);
+    if (bm) {
+      line = `• ${bm[1].trim()}`;
+    } else {
+      line = line.trim();
+    }
+    cleaned.push(line);
+  }
+  while (cleaned.length && cleaned[0] === '') cleaned.shift();
+  while (cleaned.length && cleaned[cleaned.length - 1] === '') cleaned.pop();
+  return cleaned.join('\n');
+};
 
 // =============================================================================
-// FALLBACK LEGADO (regex sobre Markdown)
+// SIDECAR JSON (caminho preferido)
+// =============================================================================
+
+/**
+ * Tenta extrair o JSON sidecar com tolerância a variações:
+ *  - bloco ```json``` dentro dos comentários
+ *  - JSON cru entre os comentários (sem fences)
+ *  - fences sem o tag `json`
+ */
+const trySidecarParse = (text: string): any | null => {
+  // Variante 1: bloco ```json``` (ou ```) bem formado
+  const v1 = text.match(
+    /<!--RX_JSON_START-->\s*```(?:json)?\s*([\s\S]*?)\s*```\s*<!--RX_JSON_END-->/i,
+  );
+  if (v1) {
+    try {
+      return JSON.parse(v1[1]);
+    } catch {
+      // segue
+    }
+  }
+  // Variante 2: qualquer conteúdo entre os comentários — tira fences se existirem
+  const v2 = text.match(/<!--RX_JSON_START-->\s*([\s\S]*?)\s*<!--RX_JSON_END-->/i);
+  if (v2) {
+    const inner = v2[1]
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .trim();
+    try {
+      return JSON.parse(inner);
+    } catch {
+      // segue
+    }
+  }
+  return null;
+};
+
+// =============================================================================
+// FALLBACK LEGADO (regex sobre Markdown — retrocompatibilidade)
 // =============================================================================
 
 const KNOWN_FIELDS = [
@@ -65,15 +134,6 @@ const KNOWN_FIELDS = [
   'apresentação',
   'apresentacao',
 ];
-
-const stripInlineMarkdown = (text: string): string => {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/__(.+?)__/g, '$1')
-    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '$1')
-    .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '$1')
-    .replace(/`([^`]+)`/g, '$1');
-};
 
 const stripLeadingBullet = (line: string): string => {
   return line.replace(/^\s*(?:[-*•·●▪►▶]|\d+[.)])\s+/, '');
@@ -132,12 +192,13 @@ const extractSingleLineField = (block: string, field: string): string => {
 };
 
 const appendDetail = (base: string, detail: string): string => {
-  if (!detail) return base;
+  const cleanDetail = cleanLine(detail);
+  if (!cleanDetail) return base;
   const baseLc = base.toLowerCase();
-  const detailLc = detail.toLowerCase();
-  if (!base) return detail;
+  const detailLc = cleanDetail.toLowerCase();
+  if (!base) return cleanDetail;
   if (baseLc.includes(detailLc)) return base;
-  return `${base} – ${detail}`;
+  return `${base} – ${cleanDetail}`;
 };
 
 const extractProdutoFromBlock = (block: string): string => {
@@ -167,11 +228,11 @@ const extractProdutoFromBlock = (block: string): string => {
     extractSingleLineField(block, 'apresentacao') ||
     extractSingleLineField(block, 'volume');
 
-  let composed = nome;
+  let composed = cleanLine(nome);
   composed = appendDetail(composed, concentracao);
   composed = appendDetail(composed, apresentacao);
 
-  return composed.replace(/\s+/g, ' ').trim();
+  return cleanLine(composed);
 };
 
 const extractPosologiaFromBlock = (block: string): string => {
@@ -179,29 +240,7 @@ const extractPosologiaFromBlock = (block: string): string => {
   if (start === -1) return '';
   const end = findNextFieldIndex(block, start, ['posologia']);
   const raw = (end === -1 ? block.slice(start) : block.slice(start, end)).trim();
-
-  const lines = raw.split(/\n/);
-  const cleaned: string[] = [];
-  for (const original of lines) {
-    let line = original.replace(/\s+$/g, '');
-    if (!line.trim()) {
-      if (cleaned.length && cleaned[cleaned.length - 1] !== '') cleaned.push('');
-      continue;
-    }
-    line = stripInlineMarkdown(line);
-    const bulletMatch = line.match(/^\s*(?:[-*•·●▪►▶]|\d+[.)])\s+(.*)$/);
-    if (bulletMatch) {
-      line = `• ${bulletMatch[1].trim()}`;
-    } else {
-      line = line.trim();
-    }
-    cleaned.push(line);
-  }
-
-  while (cleaned.length && cleaned[0] === '') cleaned.shift();
-  while (cleaned.length && cleaned[cleaned.length - 1] === '') cleaned.pop();
-
-  return cleaned.join('\n');
+  return cleanPosologia(raw);
 };
 
 const extractFromMarkdownLegacy = (text: string): PrescriptionItem[] => {
@@ -239,28 +278,26 @@ const extractFromMarkdownLegacy = (text: string): PrescriptionItem[] => {
 /**
  * Extrai pares (produto + posologia). Preferência absoluta pelo JSON sidecar;
  * se ausente ou inválido, cai no parser legado de Markdown.
+ *
+ * Em AMBOS os caminhos, os campos passam pelos sanitizadores `cleanLine` e
+ * `cleanPosologia` — garantindo saída ASCII limpa, sem markdown residual.
  */
 export const extractPrescriptionSummary = (
   text: string | null | undefined,
 ): PrescriptionItem[] => {
   if (!text || typeof text !== 'string') return [];
 
-  // 1) CAMINHO PREFERIDO: sidecar JSON
-  const m = text.match(SIDECAR_RE);
-  if (m) {
-    try {
-      const parsed = JSON.parse(m[1]);
-      const arr = Array.isArray(parsed?.produtos) ? parsed.produtos : [];
-      const items: PrescriptionItem[] = arr
-        .map((p: any) => ({
-          produto: cleanLine(p?.nome_formatado),
-          posologia: cleanPosologia(p?.posologia),
-        }))
-        .filter((it: PrescriptionItem) => it.produto || it.posologia);
-      if (items.length > 0) return items;
-    } catch {
-      // segue pro fallback
-    }
+  // 1) CAMINHO PREFERIDO: sidecar JSON (com parsing tolerante)
+  const parsed = trySidecarParse(text);
+  if (parsed) {
+    const arr = Array.isArray(parsed?.produtos) ? parsed.produtos : [];
+    const items: PrescriptionItem[] = arr
+      .map((p: any) => ({
+        produto: cleanLine(p?.nome_formatado),
+        posologia: cleanPosologia(p?.posologia),
+      }))
+      .filter((it: PrescriptionItem) => it.produto || it.posologia);
+    if (items.length > 0) return items;
   }
 
   // 2) FALLBACK: regex sobre Markdown (retrocompatibilidade)
