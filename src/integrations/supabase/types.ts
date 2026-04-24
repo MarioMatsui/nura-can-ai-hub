@@ -715,6 +715,51 @@ export type Database = {
         }
         Relationships: []
       }
+      prescription_jobs: {
+        Row: {
+          ai_response: string | null
+          catalog_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          observations: string | null
+          progress: string | null
+          record_id: string
+          result_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_response?: string | null
+          catalog_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          observations?: string | null
+          progress?: string | null
+          record_id: string
+          result_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_response?: string | null
+          catalog_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          observations?: string | null
+          progress?: string | null
+          record_id?: string
+          result_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       prescription_records: {
         Row: {
           created_at: string
