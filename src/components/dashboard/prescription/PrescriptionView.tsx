@@ -377,7 +377,8 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
               {isGenerating ? (
                 <div className="flex flex-col items-center justify-center min-h-[350px] gap-3 text-muted-foreground">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-sm">Analisando documentos e cruzando com base científica…</p>
+                  <p className="text-sm">{progressMessage || 'Analisando documentos e cruzando com base científica…'}</p>
+                  <p className="text-xs opacity-70">Catálogos grandes podem levar alguns minutos.</p>
                 </div>
               ) : aiResponse ? (
                 <div className="pt-6">
