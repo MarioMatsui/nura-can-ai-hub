@@ -264,6 +264,35 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
     }
   };
 
+  const handleTogglePin = async (item: HistoryItem) => {
+    const isPinned = !!item.pinned_at;
+    const pinnedCount = history.filter((h) => h.pinned_at).length;
+
+    if (!isPinned && pinnedCount >= PIN_LIMIT) {
+      toast.error(`Você pode fixar no máximo ${PIN_LIMIT} receituários`);
+      return;
+    }
+
+    const newPinnedAt = isPinned ? null : new Date().toISOString();
+    // Otimista
+    setHistory((prev) =>
+      sortHistory(prev.map((h) => (h.id === item.id ? { ...h, pinned_at: newPinnedAt } : h))),
+    );
+
+    const { error } = await supabase
+      .from('prescription_results')
+      .update({ pinned_at: newPinnedAt })
+      .eq('id', item.id);
+
+    if (error) {
+      // rollback
+      setHistory((prev) =>
+        sortHistory(prev.map((h) => (h.id === item.id ? { ...h, pinned_at: item.pinned_at } : h))),
+      );
+      toast.error('Falha ao atualizar fixação.');
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
       {/* Mobile header com hamburger — paridade com ChatArea */}
