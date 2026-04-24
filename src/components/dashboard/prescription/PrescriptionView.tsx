@@ -41,6 +41,7 @@ export const PrescriptionView = ({ userId }: PrescriptionViewProps) => {
   const [record, setRecord] = useState<UploadedFile | null>(null);
   const [observations, setObservations] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progressMessage, setProgressMessage] = useState<string>('');
   const [aiResponse, setAiResponse] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
