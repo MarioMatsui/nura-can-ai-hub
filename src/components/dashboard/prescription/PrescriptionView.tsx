@@ -37,7 +37,21 @@ interface HistoryItem {
   main_complaint: string | null;
   ai_response: string;
   created_at: string;
+  pinned_at: string | null;
 }
+
+const PIN_LIMIT = 6;
+
+const sortHistory = (items: HistoryItem[]): HistoryItem[] => {
+  return [...items].sort((a, b) => {
+    if (a.pinned_at && !b.pinned_at) return -1;
+    if (!a.pinned_at && b.pinned_at) return 1;
+    if (a.pinned_at && b.pinned_at) {
+      return new Date(b.pinned_at).getTime() - new Date(a.pinned_at).getTime();
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+};
 
 export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionViewProps) => {
   const [catalog, setCatalog] = useState<UploadedFile | null>(null);
