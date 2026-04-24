@@ -569,9 +569,9 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
                         className={cn(
                           'absolute top-2 right-9 p-1 rounded-md transition-opacity',
                           item.pinned_at
-                            ? 'opacity-100 text-primary hover:text-primary/80'
-                            : 'opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground hover:text-primary',
-                          isSelected && !item.pinned_at && 'text-black/60 hover:text-primary',
+                            ? 'opacity-100 text-primary group-hover:text-black group-active:text-black'
+                            : 'opacity-0 group-hover:opacity-100 focus:opacity-100 text-muted-foreground group-hover:text-black group-active:text-black',
+                          isSelected && 'text-black hover:text-black',
                         )}
                         title={item.pinned_at ? 'Desfixar receituário' : 'Fixar receituário'}
                         aria-label={item.pinned_at ? 'Desfixar receituário' : 'Fixar receituário'}
