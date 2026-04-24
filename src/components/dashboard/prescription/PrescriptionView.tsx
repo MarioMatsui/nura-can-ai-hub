@@ -400,8 +400,8 @@ export const PrescriptionView = ({ userId, subscriptions = [] }: PrescriptionVie
                 <h2 className="text-sm font-medium text-muted-foreground">
                   Resumo{summaryItems.length > 1 ? ` (${summaryItems.length} produtos)` : ''}
                 </h2>
-                <p className="text-xs text-muted-foreground italic text-right max-w-xs">
-                  Sempre cheque o nome dos produtos e das marcas antes de concluir a receita.
+                <p className="text-[11px] text-muted-foreground italic text-right whitespace-nowrap">
+                  Sempre cheque o nome dos produtos/marca antes de concluir a receita
                 </p>
               </div>
               <div className="space-y-3">
