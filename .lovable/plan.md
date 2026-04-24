@@ -1,103 +1,138 @@
 
 
-## Ajustes nos sons e notificações de upload do Receituário+
+## Permitir catálogos grandes (até 100 páginas, 10MB+) sem timeout na geração
 
-### Diagnóstico
+### Diagnóstico real
 
-No `UploadDropzone.tsx`:
+Você tem razão: o pipeline de pré-renderização página-a-página **deve** continuar funcionando como está — ele já resolveu o problema de upload de catálogos grandes. O problema é **só na hora da geração**:
 
-1. **Som tocando para prontuário:** `playSfx('upload')` é chamado em `handleUpload` logo após o insert, **sem verificar `kind`** — então toca tanto para catálogo quanto para prontuário.
+A edge `generate-prescription` monta um payload com 85 signed URLs de PNGs + prontuário + RAG, dispara um único `fetch` pro `ai.gateway.lovable.dev`, e morre no `shutdown` antes da resposta voltar. Os logs confirmam: nenhum `=== PRESCRIPTION RESPONSE ===`, só `Shutdown`.
 
-2. **Som tocando antes do catálogo terminar:** Para PDFs > 5MB, `playSfx('upload')` toca **antes** de `runCatalogProcessing`, que é a parte demorada (página a página). O usuário ouve o som no início, mas o catálogo só fica pronto minutos depois.
+A causa não é o tamanho do PDF original (10MB), nem o sidecar de produto/posologia. É o **wall-clock da edge function** (~150s) sendo excedido enquanto o Gemini baixa e processa as 85 imagens em sequência multimodal.
 
-3. **Sem aviso para arquivos > 5MB:** Não existe toast informativo sobre demora esperada para PDFs grandes.
+### Solução — manter as 85 páginas, mas processar em background
 
-### Solução
+Em vez de cortar páginas (que degradaria a qualidade), mover a chamada à IA para **background task** com `EdgeRuntime.waitUntil()`. A edge responde imediatamente com um `job_id`, o front faz polling, e o trabalho pesado roda até ~400s em background sem matar a função.
 
-#### `src/components/dashboard/prescription/UploadDropzone.tsx`
+#### Mudança 1 — Nova tabela `prescription_jobs`
 
-**Mudança 1 — Som apenas para catálogo:** condicionar `playSfx('upload')` a `kind === 'catalog'`.
+Migration para criar tabela de jobs com RLS por `user_id`:
+```sql
+create table public.prescription_jobs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  status text not null default 'processing', -- processing | completed | failed
+  catalog_id uuid not null,
+  record_id uuid not null,
+  observations text,
+  progress text, -- ex: "Analisando catálogo (85 páginas)…"
+  ai_response text,
+  result_id uuid, -- fk pro prescription_results criado ao final
+  error_message text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
-**Mudança 2 — Som no fim do processamento:**
-- **Catálogo PDF ≤ 5MB (modo rápido):** tocar som imediatamente após o update (já é o "fim" do processo).
-- **Catálogo PDF > 5MB:** **NÃO** tocar som antes de `runCatalogProcessing`. Tocar som **somente quando o processamento de páginas terminar com sucesso** (`done === true`), dentro de `runCatalogProcessing`, no ramo de sucesso final.
-- **Catálogo não-PDF (imagem, doc):** tocar som logo após o insert (não há processamento posterior).
+alter table public.prescription_jobs enable row level security;
 
-**Mudança 3 — Aviso para arquivos > 5MB:** logo no início de `handleUpload`, após validação, se `file.size > PDF_SMALL_THRESHOLD` (5MB), disparar:
-```ts
-toast.info('Documento maior que 5MB — o carregamento pode demorar alguns minutos.');
+create policy "users read own jobs" on public.prescription_jobs
+  for select using (auth.uid() = user_id);
+
+-- INSERT/UPDATE feitos pela edge com service role (bypass RLS)
 ```
-Aplicado a **qualquer kind** (catálogo ou prontuário) e **qualquer tipo** de arquivo > 5MB, já que o aviso é sobre tamanho, não sobre tipo.
 
-### Estrutura da mudança em `handleUpload`
+Trigger de `updated_at` via função genérica já existente no projeto.
+
+#### Mudança 2 — Refatorar `supabase/functions/generate-prescription/index.ts`
+
+Estrutura nova:
 
 ```ts
-const err = validate(file);
-if (err) { toast.error(err); return; }
+Deno.serve(async (req) => {
+  // ... auth + validação atuais ...
 
-// Aviso de demora para arquivos > 5MB
-if (file.size > PDF_SMALL_THRESHOLD) {
-  toast.info('Documento maior que 5MB — o carregamento pode demorar alguns minutos.');
-}
+  // 1. Cria job
+  const { data: job } = await admin
+    .from('prescription_jobs')
+    .insert({ user_id, catalog_id, record_id, observations, status: 'processing' })
+    .select()
+    .single();
 
-setIsUploading(true);
-try {
-  // ... upload + insert ...
-  const uploaded = data as UploadedFile;
+  // 2. Dispara processamento em background
+  EdgeRuntime.waitUntil(runGeneration(job.id, { user_id, catalog_id, record_id, observations }));
 
-  setIsUploading(false);
+  // 3. Responde imediatamente
+  return new Response(JSON.stringify({ jobId: job.id }), { status: 202, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+});
 
-  if (kind === 'catalog' && isPdf) {
-    if (file.size <= PDF_SMALL_THRESHOLD) {
-      // modo rápido: terminou aqui → toca som
-      await supabase.from('prescription_catalogs').update({...}).eq('id', uploaded.id);
-      onChange({...});
-      playSfx('upload');  // ✅ catálogo + fim do processo
-      toast.success('Catálogo pronto (modo rápido…).');
-    } else {
-      // PDF grande: NÃO toca aqui, toca dentro de runCatalogProcessing ao concluir
-      toast.success('Catálogo enviado. Processando páginas…');
-      await runCatalogProcessing(uploaded, 0);
-    }
-  } else if (kind === 'catalog') {
-    // catálogo não-PDF (imagem/doc): terminou no insert
-    onChange(uploaded);
-    playSfx('upload');  // ✅ catálogo + fim do processo
-    toast.success('Catálogo enviado.');
-  } else {
-    // prontuário: SEM som
-    onChange(uploaded);
-    toast.success('Prontuário enviado.');
+async function runGeneration(jobId, params) {
+  try {
+    // Toda a lógica atual: carregar catálogo, prontuário, RAG, montar userContent,
+    // chamar ai.gateway.lovable.dev, parsear resposta, salvar prescription_results.
+    // Atualizar progress em pontos chave:
+    await updateJob(jobId, { progress: 'Preparando catálogo (85 páginas)…' });
+    // ... fetch IA ...
+    await updateJob(jobId, { progress: 'Analisando com IA…' });
+    // ... salvar resultado ...
+    await updateJob(jobId, { status: 'completed', ai_response, result_id });
+  } catch (e) {
+    await updateJob(jobId, { status: 'failed', error_message: e.message });
   }
 }
 ```
 
-### Estrutura da mudança em `runCatalogProcessing`
+**Zero mudanças** na lógica de RAG, sanitização, sidecar JSON, regex de extração, formatação de saída — só envelopa tudo num background task.
 
-No ramo de sucesso final (quando `done === true`), antes do `toast.success(...)` de "Catálogo pronto":
+#### Mudança 3 — Frontend: polling em `PrescriptionView.tsx`
+
+Substituir o `await supabase.functions.invoke(...)` síncrono por:
+
 ```ts
-} else {
-  onChange({...isProcessing: false});
-  if (done) {
-    playSfx('upload');  // ✅ som toca exatamente quando o catálogo terminou
-    toast.success(`Catálogo pronto (${processed} páginas).`);
-  }
+const { data, error } = await supabase.functions.invoke('generate-prescription', {...});
+if (error || !data?.jobId) throw new Error(...);
+
+const jobId = data.jobId;
+// Polling a cada 3s, timeout total de 8min
+const result = await pollJob(jobId, {
+  onProgress: (msg) => setProgressMessage(msg),
+  intervalMs: 3000,
+  timeoutMs: 8 * 60 * 1000,
+});
+
+if (result.status === 'failed') {
+  toast.error(result.error_message || 'Falha ao gerar receituário.');
+  return;
 }
+
+setAiResponse(result.ai_response);
+playSfx('receita');
+toast.success('Receituário gerado.');
+loadHistory();
 ```
 
-**Importante:** o som **não** toca quando o processamento pausa por falha (ramo `if (!done && lastError)`), só no sucesso real.
+`pollJob` faz `supabase.from('prescription_jobs').select(...).eq('id', jobId).maybeSingle()` em loop até `status !== 'processing'`.
+
+**Bonus UX:** mostrar `progress` da tabela no botão/loading state ("Analisando com IA…" em vez de só spinner).
+
+#### Mudança 4 — Mensagem de erro útil
+
+Caso o polling estoure timeout (8min) ou o job venha `failed`, toast claro:
+```
+'Falha ao gerar receituário. Tente novamente em alguns minutos.'
+```
 
 ### Garantias
 
-- **Prontuário:** nunca toca som de upload.
-- **Catálogo PDF ≤ 5MB:** som toca uma vez, ao final (que é imediato).
-- **Catálogo PDF > 5MB:** som toca uma única vez, quando o contador X/Y chega ao fim e o catálogo está realmente pronto.
-- **Catálogo não-PDF:** som toca após upload (que é o fim do processo para esses tipos).
-- **Pausa/retomada de processamento:** se pausar por erro, sem som; se retomar e concluir via `handleResume` → `runCatalogProcessing`, som toca normalmente no fim (mesmo caminho).
-- **Aviso > 5MB:** toast `info` aparece imediatamente após selecionar o arquivo, antes do upload começar.
-- Zero impacto em geração, sidecar, RAG, sanitização.
+- **Catálogo 85 páginas / 10MB:** todas as páginas continuam sendo enviadas pra IA, processamento até 400s sem morrer.
+- **Catálogos pequenos:** mesmo caminho, só com overhead de ~3s do primeiro polling. Aceitável.
+- **Reload de página durante geração:** job continua rodando em background; usuário pode voltar e ver no histórico (próxima iteração — fora do escopo agora).
+- **Erros de IA (rate limit, payment required):** capturados no `runGeneration`, gravados em `error_message`, exibidos no toast.
+- **RLS:** usuário só lê os próprios jobs. Edge usa service role pra UPDATE.
+- **Zero impacto** em upload, processamento de páginas, sidecar, sanitização, RAG, prontuário.
 
-### Arquivo
+### Arquivos
 
-- **Editado:** `src/components/dashboard/prescription/UploadDropzone.tsx` — `handleUpload` toca `playSfx` condicionalmente (catálogo + fim do processo); `runCatalogProcessing` toca `playSfx` no sucesso final do batch loop; toast `info` para arquivos > 5MB no início de `handleUpload`.
+- **Nova migration:** criar `prescription_jobs` com RLS.
+- **Editado:** `supabase/functions/generate-prescription/index.ts` — envelopa lógica atual em `EdgeRuntime.waitUntil`, retorna `jobId` em 202.
+- **Editado:** `src/components/dashboard/prescription/PrescriptionView.tsx` — `handleGenerate` faz polling do job; opcional exibir `progress` no botão.
 
