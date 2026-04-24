@@ -211,7 +211,10 @@ export const UploadDropzone = ({
             total_pages: total,
             isProcessing: false,
           });
-          if (done) toast.success(`Catálogo pronto (${processed} páginas).`);
+          if (done) {
+            playSfx('upload');
+            toast.success(`Catálogo pronto (${processed} páginas).`);
+          }
         }
       } finally {
         setIsProcessing(false);
