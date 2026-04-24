@@ -7,6 +7,8 @@ import PaymentCanceled from "./pages/PaymentCanceled";
 import SignUp from "./pages/auth/SignUp";
 import Login from "./pages/auth/Login";
 import ForgotPassword from "./pages/auth/ForgotPassword";
+import CompletarCadastro from "./pages/auth/CompletarCadastro";
+import LoginCallback from "./pages/auth/LoginCallback";
 import Admin from "./pages/Admin";
 import AdminBlog from "./pages/AdminBlog";
 import AdminBlogEditor from "./pages/AdminBlogEditor";
@@ -26,6 +28,8 @@ const App = () => (
     <Route path="/auth/signup" element={<SignUp />} />
     <Route path="/auth/login" element={<Login />} />
     <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+    <Route path="/auth/completar-cadastro" element={<CompletarCadastro />} />
+    <Route path="/auth/login-callback" element={<LoginCallback />} />
     <Route path="/admin" element={<Admin />} />
     <Route path="/admin/users" element={<Admin />} />
     <Route path="/admin/knowledge" element={<Admin />} />

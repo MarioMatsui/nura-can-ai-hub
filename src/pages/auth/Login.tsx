@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import logo from "@/assets/logo.png";
+import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido").max(255, "E-mail deve ter no máximo 255 caracteres"),
@@ -71,6 +72,17 @@ const Login = () => {
         </div>
 
         <div className="gradient-card border-border p-6 sm:p-8">
+          <GoogleAuthButton label="Entrar com Google" />
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">ou</span>
+            </div>
+          </div>
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
