@@ -70,6 +70,16 @@ const Header = ({ isLoggedIn = false }: HeaderProps) => {
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
+
+    // If the server session is already gone (e.g. revoked after password change),
+    // clear the local storage and proceed as if logout succeeded.
+    if (error && (error as any).code === 'session_not_found') {
+      await supabase.auth.signOut({ scope: 'local' });
+      toast.success("Você saiu com sucesso");
+      navigate("/");
+      return;
+    }
+
     if (error) {
       toast.error("Erro ao sair");
     } else {

@@ -137,6 +137,16 @@ const CompletarCadastro = () => {
         return;
       }
 
+      // Apply the new session returned by the edge function. Setting the password
+      // server-side revoked the previous session, so we must replace local tokens
+      // with the freshly issued ones to keep the user authenticated.
+      if (result?.session?.access_token && result?.session?.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: result.session.access_token,
+          refresh_token: result.session.refresh_token,
+        });
+      }
+
       toast.success("Cadastro finalizado com sucesso!");
       navigate("/app", { replace: true });
     } catch (e) {
