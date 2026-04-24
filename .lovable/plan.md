@@ -1,70 +1,197 @@
 
 
-## Padronização clínica do nome do produto no Resumo Copiável
+## Saída estruturada via JSON sidecar — Produto + Posologia confiáveis
 
-### Problema
-O campo "Produto" do Resumo mostra só o nome cru (ex.: "Sensia THC & CBD 1:1") porque:
-1. O extrator pega apenas a primeira linha após `Produto:`.
-2. O prompt da IA permite que `Concentração` e `Apresentação` venham em campos separados, então o extrator não os agrega.
+### Diagnóstico
+O fluxo atual depende 100% de regex no Markdown gerado pela IA. Mesmo com o reforço de prompt, o modelo às vezes:
+- Quebra o padrão da linha `Produto:` (deixa só "Terapia Basal", joga `**` no meio, omite concentração)
+- Detalha posologia em blocos longos que o regex pega parcialmente ou perde quando o título não é exatamente `Posologia:`
+- Lista subcampos (`Apresentação`, `Concentração`) em qualquer ordem
 
-### Solução — duas frentes coordenadas
+A correção sólida é **trocar parsing por contrato estruturado**: a IA passa a devolver um JSON sidecar com `nome_formatado` + `posologia` para cada produto, e o front consome **apenas** esse JSON.
 
-#### A) Reforço no prompt (`supabase/functions/generate-prescription/index.ts`)
+### Estratégia: bloco JSON sidecar no fim da resposta
 
-Adicionar ao `PRESCRIPTION_TASK_LAYER` uma regra explícita de formatação do campo "Produto:" para garantir que a IA já entregue a linha clinicamente completa, mesmo quando descreva os detalhes em subcampos:
+A IA continua produzindo o receituário Markdown completo (zero impacto no card de resultado). Logo no **fim** da mensagem, ela anexa um bloco delimitado:
 
 ```
-### REGRA OBRIGATÓRIA — LINHA "Produto:"
-Para CADA produto sugerido, a linha imediatamente após "Produto:" DEVE conter o nome
-clinicamente completo neste padrão único:
+<!--RX_JSON_START-->
+```json
+{
+  "produtos": [
+    {
+      "nome_formatado": "Canfy Óleo de Cannabis Full Spectrum 1500mg (50mg/ml) – 30ml",
+      "posologia": "- Iniciar com 2 gotas sublinguais à noite por 3-4 dias\n- Após tolerância, adicionar 2 gotas pela manhã\n- Aumentar 1 gota por tomada a cada 3-5 dias até controle da dor"
+    }
+  ]
+}
+```
+<!--RX_JSON_END-->
+```
 
-  {Marca} {Nome do Produto} – {Concentração completa} – {Apresentação/Volume}
+Vantagens:
+- Mantém Markdown intocado para o card de resultado (`MarkdownMessage` ignora comentários HTML).
+- Separa render do contrato de dados.
+- O front extrai o JSON com 1 regex trivial — sem ambiguidade.
+- Posologia preservada literalmente no JSON (a IA copia do bloco textual que ela mesma produziu, não reescreve).
+- Robusto a múltiplos produtos: sempre 1 array, sempre 1 par `nome_formatado`+`posologia` por item.
 
-Regras:
+### Mudanças
+
+#### 1) `supabase/functions/generate-prescription/index.ts`
+
+**A. Substituir `### REGRA OBRIGATÓRIA — LINHA "Produto:"` por uma seção mais forte ao final do `PRESCRIPTION_TASK_LAYER`:**
+
+```
+### CONTRATO DE SAÍDA — BLOCO JSON OBRIGATÓRIO NO FINAL
+
+Após terminar todo o receituário em Markdown (incluindo "Aviso" final), você DEVE anexar — sempre na última linha — um bloco oculto exatamente neste formato:
+
+<!--RX_JSON_START-->
+```json
+{
+  "produtos": [
+    {
+      "nome_formatado": "string",
+      "posologia": "string"
+    }
+  ]
+}
+```
+<!--RX_JSON_END-->
+
+REGRAS DO `nome_formatado` (campo gerado por VOCÊ):
+- Pipeline interno: extraia `marca`, `nome_produto`, `concentracao`, `volume` do catálogo. Depois monte:
+  `{marca} {nome_produto} {concentracao} – {volume}` (separadores: espaço entre marca/nome/concentração; ` – ` antes do volume).
+- Ordem fixa. Omitir partes ausentes sem quebrar a estrutura (sem hífens órfãos).
 - Se a marca já estiver no nome, NÃO duplicar.
-- Concentração: incluir TODOS os fitocanabinoides relevantes do catálogo (CBD, THC,
-  CBG, CBN, CBC, THCA, THCV, etc.) no formato "X mg/ml CBD + Y mg/ml THC" ou
-  "Xmg CBD + Ymg THC". Se só houver proporção (ex: 1:1), use a proporção.
-- Apresentação: sempre incluir volume/quantidade (ex: 30ml, 10g, 30 cápsulas, 30 gummies).
-- Use apenas dados presentes no catálogo. Se faltar algum dado, omita-o (NUNCA inventar).
-- Sem markdown, sem aspas, sem bullets na linha "Produto:". Texto puro em uma linha só.
-- Você pode (e deve) detalhar Concentração, Apresentação e Posologia em subcampos
-  abaixo — mas a linha "Produto:" precisa ser auto-suficiente para uso em receita.
+- Concentração inclui TODOS os fitocanabinoides relevantes (CBD, THC, CBG, CBN, CBC, THCA, THCV) no formato `Xmg/ml CBD + Ymg/ml THC` ou `Xmg CBD total`. Se só houver proporção, use a proporção.
+- Volume: sempre incluir quantidade física (`30ml`, `10g`, `30 cápsulas`, `30 gummies`, `1g`).
+- PROIBIDO: termos genéricos ("terapia basal", "tratamento", "uso oral", "adjuvante"), descrições clínicas, frases longas, markdown (`**`, `*`, bullets), aspas, quebras de linha. UMA linha limpa.
+- NUNCA inventar dados — se faltar, omita.
 
-Exemplos:
-  Produto: Sensia THC & CBD 1:1 Oil Tincture – 10mg/ml THC + 10mg/ml CBD – 30ml
-  Produto: UBSuper General Relief Tincture – 50mg/ml CBD + 16mg/ml CBG + 5mg/ml THC – 30ml
-  Produto: Elite Live Rosin Blue Dream – THC dominante (Live Rosin) – 1g
+REGRAS DA `posologia` (campo EXTRAÍDO, não gerado):
+- Copie LITERALMENTE o bloco de posologia que você escreveu para AQUELE produto no Markdown acima.
+- Mantenha bullets se existirem (use `- ` no início de cada item).
+- Preserve quebras de linha entre itens (use `\n` no JSON).
+- Não resuma, não reescreva, não simplifique.
+- Permitido apenas: remover `**` markdown e ajustes mínimos de espaço.
+- Se realmente não houver posologia identificável para o produto (raríssimo), retorne `""`.
+
+REGRAS DE CONSISTÊNCIA:
+- Ordem do array = ordem em que os produtos aparecem no Markdown.
+- 1 produto no Markdown = 1 entrada no array. Nunca mais, nunca menos.
+- Cada `posologia` pertence ao seu produto correspondente — nunca misturar instruções.
+
+VALIDAÇÃO ANTES DE ENVIAR:
+- `nome_formatado` contém o nome real (não termo genérico).
+- Concentração presente quando o catálogo informa.
+- Posologia capturada quando existe no Markdown.
+- Sem `**`, sem markdown, sem aspas internas escapadas erroneamente.
+- JSON válido e parseável.
+
+Esse bloco JSON é INVISÍVEL ao usuário (vai dentro de comentário HTML). Não é opcional.
 ```
 
-Esta regra é instrucional — não muda nenhuma outra parte do raciocínio nem o formato Markdown global. O bloco de "Produtos sugeridos" continua existindo; apenas a linha `Produto:` ganha contrato de formato.
+**B. Validação leve no backend** (logo após receber `aiText`, antes de salvar):
 
-#### B) Composição defensiva no extrator (`src/lib/prescriptionExtract.ts`)
+```ts
+// Best-effort: tenta parsear o sidecar para log/observabilidade.
+// Se falhar, NÃO bloqueia — front tem fallback regex.
+function tryParseSidecar(text: string): { produtos: any[] } | null {
+  const m = text.match(/<!--RX_JSON_START-->\s*```json\s*([\s\S]*?)\s*```\s*<!--RX_JSON_END-->/);
+  if (!m) return null;
+  try { return JSON.parse(m[1]); } catch { return null; }
+}
+const sidecar = tryParseSidecar(aiText);
+console.log(`- sidecar JSON: ${sidecar ? `${sidecar.produtos?.length || 0} produtos` : 'AUSENTE'}`);
+```
 
-Mesmo com o prompt reforçado, o extrator passa a ser **resiliente**: se a IA emitir o nome curto e detalhar em subcampos, a UI ainda monta a string clínica completa.
+Sem retry, sem reprompt — apenas observabilidade. Front é resiliente.
 
-Em `extractProdutoFromBlock`, após extrair `marca + nome` (lógica atual), buscar dentro do mesmo bloco:
-- `Concentração:` / `Concentracao:` → primeira linha após o rótulo, limpa de markdown/bullets
-- `Apresentação:` / `Apresentacao:` (ou `Volume:`) → primeira linha após o rótulo
+**Não tocar:** RAG, anexos multimodais, modelo, max_tokens, fluxo de salvamento.
 
-Compor: `{nome} – {concentração} – {apresentação}` usando `–` (en dash) como separador. Pular partes vazias. Deduplicar: se a string base já contiver a concentração ou a apresentação (case-insensitive substring), não anexar de novo.
+#### 2) `src/lib/prescriptionExtract.ts`
 
-Resultado: linha única, sem markdown, sem bullets, pronta pra copiar.
+Reescrever o módulo mantendo a mesma assinatura pública (`extractPrescriptionSummary(text) → PrescriptionItem[]`) para zero impacto em quem importa:
 
-#### C) UI (`src/components/dashboard/prescription/PrescriptionView.tsx`)
+```ts
+export interface PrescriptionItem {
+  produto: string;
+  posologia: string;
+}
 
-Adicionar `title={item.produto}` no `Input` do `SummaryRow` quando `multiline=false` para tooltip do nome completo (já é readonly e ocupa uma linha — ellipsis natural do input). Nenhuma outra mudança de layout.
+const SIDECAR_RE = /<!--RX_JSON_START-->\s*```json\s*([\s\S]*?)\s*```\s*<!--RX_JSON_END-->/;
+
+const cleanLine = (s: string): string =>
+  String(s ?? '')
+    .replace(/\*\*/g, '')
+    .replace(/[`*_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const cleanPosologia = (s: string): string =>
+  String(s ?? '')
+    .replace(/\*\*/g, '')
+    .split('\n')
+    .map((l) => l.replace(/\s+$/g, ''))
+    .join('\n')
+    .trim();
+
+export const extractPrescriptionSummary = (text: string | null | undefined): PrescriptionItem[] => {
+  if (!text || typeof text !== 'string') return [];
+
+  // 1) CAMINHO PREFERIDO: sidecar JSON
+  const m = text.match(SIDECAR_RE);
+  if (m) {
+    try {
+      const parsed = JSON.parse(m[1]);
+      const arr = Array.isArray(parsed?.produtos) ? parsed.produtos : [];
+      const items: PrescriptionItem[] = arr
+        .map((p: any) => ({
+          produto: cleanLine(p?.nome_formatado),
+          posologia: cleanPosologia(p?.posologia),
+        }))
+        .filter((it) => it.produto || it.posologia);
+      if (items.length > 0) return items;
+    } catch {
+      // cai pro fallback
+    }
+  }
+
+  // 2) FALLBACK: regex antigo (retrocompatibilidade com receituários históricos sem sidecar)
+  return extractFromMarkdownLegacy(text);
+};
+```
+
+Mover toda a lógica regex atual para `extractFromMarkdownLegacy` (mesma função, renomeada). Receituários antigos no histórico continuam abrindo normalmente.
+
+#### 3) `src/components/dashboard/MarkdownMessage.tsx` — esconder o sidecar do render
+
+Verificar e adicionar (se necessário) um pre-processamento que strippa o bloco antes de passar pro `react-markdown`:
+
+```ts
+const visible = content.replace(/<!--RX_JSON_START-->[\s\S]*?<!--RX_JSON_END-->/g, '').trimEnd();
+```
+
+Comentários HTML normalmente já são ignorados pelo `react-markdown`, mas o conteúdo dentro deles (o `\`\`\`json`) **não é** — ficaria visível como bloco de código. Esse strip garante invisibilidade total.
+
+#### 4) `src/components/dashboard/prescription/PrescriptionView.tsx`
+
+Sem mudanças — já consome `extractPrescriptionSummary(aiResponse)` via `useMemo`. O contrato externo está preservado.
 
 ### Garantias
 
-- Receituários antigos (cache no banco) continuam abrindo: o extrator faz fallback à lógica atual quando os subcampos não existem.
-- Nada muda no bloco do receituário completo (markdown integral preservado).
-- Botão de copiar continua funcionando — agora copia a string clínica completa.
-- Múltiplos produtos: cada bloco compõe sua própria linha independentemente (já suportado).
+- **Card de resultado (Markdown):** intocado. Sidecar invisível.
+- **Resumo Copiável:** passa a usar dados estruturados — fim do parsing impreciso.
+- **Múltiplos produtos:** array nativo, ordem preservada, sem cruzamento de posologias.
+- **Receituários antigos no histórico:** abrem via fallback regex (lógica atual preservada como `extractFromMarkdownLegacy`).
+- **Falha silenciosa:** se a IA esquecer o sidecar (improvável dado o contrato explícito), o fallback regex assume — usuário nunca vê tela vazia.
+- **Botões de copiar, "Novo Receituário", histórico, geração:** zero impacto.
 
 ### Arquivos
 
-- **Editado:** `supabase/functions/generate-prescription/index.ts` — adicionar regra de formato da linha `Produto:` em `PRESCRIPTION_TASK_LAYER`.
-- **Editado:** `src/lib/prescriptionExtract.ts` — em `extractProdutoFromBlock`, buscar `Concentração` e `Apresentação` no bloco e compor `{nome} – {concentração} – {apresentação}` com deduplicação.
-- **Editado:** `src/components/dashboard/prescription/PrescriptionView.tsx` — atributo `title` no input de produto para tooltip com nome completo.
+- **Editado:** `supabase/functions/generate-prescription/index.ts` — substituir a regra "LINHA Produto:" pela seção "CONTRATO DE SAÍDA — BLOCO JSON OBRIGATÓRIO" + log de observabilidade do sidecar.
+- **Editado:** `src/lib/prescriptionExtract.ts` — caminho primário via JSON sidecar; lógica regex atual preservada como fallback (`extractFromMarkdownLegacy`).
+- **Editado:** `src/components/dashboard/MarkdownMessage.tsx` — strip do bloco `<!--RX_JSON_START-->...<!--RX_JSON_END-->` antes do render.
 
