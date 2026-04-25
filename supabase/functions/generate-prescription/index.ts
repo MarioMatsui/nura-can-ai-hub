@@ -1330,7 +1330,7 @@ serve(async (req) => {
       console.error('Failed to create job:', jobError);
       // Devolve a cota se não conseguiu criar o job.
       if (planCtx.isFreeOnly) {
-        await supabase.rpc('refund_receituario_quota', { _user_id: userId }).catch(() => {});
+        try { await supabase.rpc('refund_receituario_quota', { _user_id: userId }); } catch {}
       }
       return new Response(JSON.stringify({ error: 'erro_interno', message: 'Falha ao iniciar processamento.' }), {
         status: 500,
@@ -1350,12 +1350,12 @@ serve(async (req) => {
           .eq('id', job.id)
           .maybeSingle();
         if (finalJob?.status === 'failed' && planCtx.isFreeOnly) {
-          await supabase.rpc('refund_receituario_quota', { _user_id: userId }).catch(() => {});
+          try { await supabase.rpc('refund_receituario_quota', { _user_id: userId }); } catch {}
         }
       } catch (e) {
         console.error('Background generation crashed', e);
         if (planCtx.isFreeOnly) {
-          await supabase.rpc('refund_receituario_quota', { _user_id: userId }).catch(() => {});
+          try { await supabase.rpc('refund_receituario_quota', { _user_id: userId }); } catch {}
         }
       }
     })();
