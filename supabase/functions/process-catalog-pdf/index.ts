@@ -11,7 +11,7 @@
 //  - persiste o progresso em `extracted_metadata`.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 import { PDFiumLibrary } from "https://esm.sh/@hyzyla/pdfium@2.1.7/browser/base64";
 import { Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
 
