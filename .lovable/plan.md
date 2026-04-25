@@ -1,35 +1,56 @@
 
 
-## Criar página `/termos-uso` com os Termos de Serviço
+## Corrigir falha de segurança: INSERT público em `admin_notifications`
 
-### Visão geral
+### Causa raiz
 
-Criar nova página estática `/termos-uso` espelhando exatamente a estrutura, layout e estilos da `/privacidade` recém-criada, contendo o texto completo dos Termos de Serviço fornecido. Atualizar o link "Termos de Uso" do Footer para apontar para essa rota.
+A política atual permite `INSERT` para qualquer um (`WITH CHECK (true)` no role `public`). Qualquer cliente — inclusive não autenticado — pode poluir a fila de notificações administrativas com payloads arbitrários.
+
+### Estratégia
+
+1. **Substituir a política permissiva** por uma que só permite INSERT a administradores autenticados. Edge functions que usam `SERVICE_ROLE_KEY` continuam funcionando porque o service role **bypassa RLS** por padrão.
+2. **Ajustar `activate-specialist`** — única função que insere em `admin_notifications` usando a sessão do usuário comum (não-admin). Vou criar um segundo cliente com `SERVICE_ROLE_KEY` apenas para a inserção da notificação, mantendo o cliente autenticado para validar o usuário.
 
 ### Mudanças
 
-**1. Nova página `src/pages/TermosUso.tsx`**
+**1. Migração SQL** (via migration tool)
 
-- Mesma estrutura da `Privacidade.tsx`: `<Header />` + `<main>` com container `max-w-3xl` + `<Footer />`.
-- Mesmos paddings (`pt-32 sm:pt-40 pb-16`) e mesmo background (`bg-background`).
-- Renderização via `ReactMarkdown` + `remark-gfm` com os mesmos componentes customizados (h1, h2, h3, p, ul, strong, a, hr, em) já definidos em Privacidade — garantindo identidade visual idêntica.
-- `document.title` = `"Termos de Serviço — NuraCan AI"` via `useEffect`.
-- Conteúdo armazenado em uma constante `const TERMS_MARKDOWN = \`...\`` no topo do arquivo, exatamente como fornecido.
-- Os links internos `[Política de Privacidade](#)` no texto serão mantidos como `(#)` exatamente como no conteúdo enviado (sem reescrever o markdown — preservando fielmente o texto pedido).
+```sql
+-- Remover a política aberta
+DROP POLICY IF EXISTS "System can insert notifications" ON public.admin_notifications;
 
-**2. Registrar a rota em `src/App.tsx`**
+-- Permitir INSERT apenas a admins autenticados
+-- (service_role bypassa RLS, então edge functions internas continuam funcionando)
+CREATE POLICY "Admins can insert notifications"
+ON public.admin_notifications
+FOR INSERT
+TO authenticated
+WITH CHECK (public.has_role(auth.uid(), 'admin'::app_role));
+```
 
-- Importar `TermosUso`.
-- Adicionar `<Route path="/termos-uso" element={<TermosUso />} />` antes do catch-all `*`, próxima à rota `/privacidade`.
+As políticas existentes de `SELECT` (admins) e `UPDATE` (admins) ficam intactas.
 
-**3. Atualizar link do Footer em `src/components/Footer.tsx`**
+**2. `supabase/functions/activate-specialist/index.ts`**
 
-- Trocar `<a href="#">Termos de Uso</a>` por `<a href="/termos-uso">Termos de Uso</a>`.
-- Manter o link "Privacidade" intacto.
+- Adicionar um segundo cliente com `SERVICE_ROLE_KEY` (`adminClient`) usado **somente** para:
+  - `update` em `user_subscriptions` (já feito hoje com sessão do usuário, mas é mais seguro com service role)
+  - `update` em `user_subscriptions` para `scheduled_cancellation`
+  - `insert` em `cancellation_requests`
+  - `insert` em `admin_notifications` ← essencial após a nova RLS
+- Manter o cliente anon apenas para `auth.getUser()` (validação do solicitante).
+
+Justificativa: o usuário não é admin, então com a nova RLS o `insert` em `admin_notifications` falharia. Usar service role é o padrão correto para "ações administrativas iniciadas pelo usuário".
+
+### Impacto
+
+- ✅ `request-cancellation` — já usa service role, sem mudanças.
+- ✅ `revert-cancellation` — já usa service role, sem mudanças.
+- ✅ `activate-specialist` — ajustado para usar service role nas escritas administrativas.
+- ✅ Cliente do app (`CancellationRequests.tsx`) — só faz `select`/`update`, sem mudanças.
+- 🔒 Brecha fechada: usuários não autenticados (e usuários autenticados não-admin) não conseguem mais inserir lixo em `admin_notifications` via REST direto.
 
 ### Arquivos editados
 
-- `src/pages/TermosUso.tsx` — novo arquivo.
-- `src/App.tsx` — registrar rota `/termos-uso`.
-- `src/components/Footer.tsx` — atualizar `href` do link "Termos de Uso".
+- **Migração SQL** — substituir política `INSERT` em `admin_notifications`.
+- `supabase/functions/activate-specialist/index.ts` — usar `SERVICE_ROLE_KEY` para escritas administrativas.
 
