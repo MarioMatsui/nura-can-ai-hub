@@ -13,6 +13,7 @@ serve(async (req) => {
   }
 
   try {
+    // Auth client (only used to validate the requesting user)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -21,6 +22,12 @@ serve(async (req) => {
           headers: { Authorization: req.headers.get('Authorization')! },
         },
       }
+    );
+
+    // Admin client (bypasses RLS) for privileged writes initiated by the user
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     // Get the authenticated user
@@ -37,8 +44,8 @@ serve(async (req) => {
 
     console.log('Activating specialist plan for user:', user.id, 'subscription:', subscriptionId);
 
-    // Get all active individual plans (medical, legal, veterinary)
-    const { data: activePlans, error: plansError } = await supabase
+    // Get all active individual plans (medical, legal, veterinary) — scoped to this user
+    const { data: activePlans, error: plansError } = await adminClient
       .from('user_subscriptions')
       .select('*')
       .eq('user_id', user.id)
@@ -52,8 +59,8 @@ serve(async (req) => {
 
     console.log('Found active individual plans:', activePlans?.length || 0);
 
-    // Update specialist subscription to active
-    const { error: updateError } = await supabase
+    // Update specialist subscription to active — verify ownership via user_id filter
+    const { error: updateError } = await adminClient
       .from('user_subscriptions')
       .update({
         status: 'active',
@@ -61,7 +68,8 @@ serve(async (req) => {
         started_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', subscriptionId);
+      .eq('id', subscriptionId)
+      .eq('user_id', user.id);
 
     if (updateError) {
       console.error('Error updating subscription:', updateError);
@@ -72,14 +80,15 @@ serve(async (req) => {
     if (activePlans && activePlans.length > 0) {
       for (const plan of activePlans) {
         // Update plan status to scheduled_cancellation
-        const { error: cancelError } = await supabase
+        const { error: cancelError } = await adminClient
           .from('user_subscriptions')
           .update({
             status: 'scheduled_cancellation',
             cancel_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
             updated_at: new Date().toISOString(),
           })
-          .eq('id', plan.id);
+          .eq('id', plan.id)
+          .eq('user_id', user.id);
 
         if (cancelError) {
           console.error('Error scheduling cancellation for plan:', plan.id, cancelError);
@@ -87,7 +96,7 @@ serve(async (req) => {
         }
 
         // Create cancellation request
-        const { error: requestError } = await supabase
+        const { error: requestError } = await adminClient
           .from('cancellation_requests')
           .insert({
             user_id: user.id,
@@ -104,8 +113,8 @@ serve(async (req) => {
           console.error('Error creating cancellation request:', requestError);
         }
 
-        // Create admin notification
-        const { error: notifError } = await supabase
+        // Create admin notification (requires service role after RLS hardening)
+        const { error: notifError } = await adminClient
           .from('admin_notifications')
           .insert({
             type: 'cancellation_request',
