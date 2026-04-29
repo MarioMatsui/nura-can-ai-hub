@@ -9,7 +9,13 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12 mb-12">
           {/* Brand */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
+            <a
+              href="https://canfy.com.br/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 mb-1"
+              aria-label="Canfy"
+            >
               <img 
                 src={logoLight} 
                 alt="NuraCan AI" 
@@ -20,7 +26,7 @@ const Footer = () => {
                 alt="NuraCan AI" 
                 className="h-14 w-auto hidden dark:block"
               />
-            </div>
+            </a>
             <p className="text-sm text-muted-foreground leading-relaxed">
               IA especialista.
               <br />
