@@ -171,7 +171,6 @@ const Dashboard = () => {
         .filter(plan => plan.status === 'active')
         .map(plan => {
           const mappedPlanType = planTypeMap[plan.plan_type] || 'free';
-          console.log('[Dashboard] Mapping plan type:', plan.plan_type, '->', mappedPlanType);
           
           // Check if plan should still be active (not past cancellation date)
           const isCanceled = plan.cancel_at_period_end && plan.current_period_end && new Date(plan.current_period_end) < new Date();
@@ -189,8 +188,6 @@ const Dashboard = () => {
           return null;
         })
         .filter(Boolean);
-
-      console.log('[Dashboard] Active plans found:', activePlans.length);
 
       if (activePlans.length > 0) {
         setSubscriptions(activePlans as any);
