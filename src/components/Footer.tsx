@@ -24,7 +24,7 @@ const Footer = () => {
             <p className="text-sm text-muted-foreground leading-relaxed">
               IA especialista.
               <br />
-              Um produto Canfy.
+              <em>Um produto Canfy.</em>
             </p>
           </div>
 
