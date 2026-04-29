@@ -12,20 +12,12 @@ serve(async (req) => {
   }
 
   try {
-    // Validate authentication - accept either internal secret OR authorization header from cron
+    // Only accept internal secret (server-to-server / cron with x-internal-secret header)
     const internalSecret = req.headers.get("x-internal-secret");
-    const authHeader = req.headers.get("Authorization");
     const expectedSecret = Deno.env.get("INTERNAL_FUNCTIONS_SECRET");
-    
-    // Check for internal secret (server-to-server calls)
-    const hasValidInternalSecret = expectedSecret && internalSecret === expectedSecret;
-    
-    // Check for authorization header (cron job calls with anon key)
-    // The cron job uses the anon key but this function uses service role for operations
-    const hasValidAuthHeader = authHeader?.startsWith("Bearer ");
-    
-    if (!hasValidInternalSecret && !hasValidAuthHeader) {
-      console.error("Unauthorized: Invalid or missing authentication");
+
+    if (!expectedSecret || internalSecret !== expectedSecret) {
+      console.error("Unauthorized: Invalid or missing internal secret");
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
