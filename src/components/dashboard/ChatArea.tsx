@@ -71,8 +71,6 @@ export const ChatArea = ({
       return false;
     });
     
-    console.log('[ChatArea] Active subscriptions:', activeSubs);
-    
     // Priority: specialist > medical > legal > veterinary > free/generic
     if (activeSubs.some(sub => sub.plan_type === 'specialist')) return 'specialist';
     if (activeSubs.some(sub => sub.plan_type === 'medical')) return 'medical';
@@ -84,19 +82,11 @@ export const ChatArea = ({
 
   // Initialize model selection with priority logic
   useEffect(() => {
-    console.log('[ChatArea] Initializing model selection', {
-      currentConversation: currentConversation?.model_type,
-      subscriptions: subscriptions.length,
-      subscriptionsData: subscriptions,
-    });
-
     // Get default model from subscriptions
     const defaultModel = getDefaultModelFromSubscriptions();
-    console.log('[ChatArea] Default model from subscriptions:', defaultModel);
     
     // If no active plans (defaultModel is 'generic'), FORCE generic model
     if (defaultModel === 'generic') {
-      console.log('[ChatArea] No active plans - forcing generic model');
       setSelectedModel('generic');
       localStorage.setItem('lastUsedModel', 'generic');
       return;
@@ -105,11 +95,9 @@ export const ChatArea = ({
     // Priority 1: Model from current conversation (if user has access to it)
     if (currentConversation?.model_type && currentConversation.model_type !== 'generic') {
       if (hasAccess(currentConversation.model_type)) {
-        console.log('[ChatArea] Using conversation model:', currentConversation.model_type);
         setSelectedModel(currentConversation.model_type);
         return;
       } else {
-        console.log('[ChatArea] No access to conversation model, using default:', defaultModel);
         setSelectedModel(defaultModel);
         localStorage.setItem('lastUsedModel', defaultModel);
         return;
@@ -117,7 +105,6 @@ export const ChatArea = ({
     }
 
     // Priority 2: Use the default model from active subscription
-    console.log('[ChatArea] Setting model from subscription:', defaultModel);
     setSelectedModel(defaultModel);
     localStorage.setItem('lastUsedModel', defaultModel);
   }, [currentConversation, subscriptions]);
@@ -138,17 +125,6 @@ export const ChatArea = ({
     // Generic model is always available for everyone
     if (modelType === 'generic') return true;
     
-    console.log('[ChatArea] hasAccess check:', {
-      modelType,
-      subscriptions: subscriptions.map(sub => ({
-        plan_type: sub.plan_type,
-        status: sub.status,
-        cancel_at: sub.cancel_at,
-        planMatch: sub.plan_type === modelType || (sub.plan_type as string) === 'specialist',
-        isFuture: sub.cancel_at ? new Date(sub.cancel_at) > new Date() : null
-      }))
-    });
-    
     // Check for specific model type plan or specialist (which has access to all)
     const hasAccessResult = subscriptions.some(
       sub => {
@@ -165,20 +141,13 @@ export const ChatArea = ({
         if (sub.status === 'scheduled_cancellation' && planMatch && sub.cancel_at) {
           const cancelDate = new Date(sub.cancel_at);
           const now = new Date();
-          const hasAccess = cancelDate > now;
-          console.log('[ChatArea] Scheduled cancellation check:', {
-            cancelDate: cancelDate.toISOString(),
-            now: now.toISOString(),
-            hasAccess
-          });
-          return hasAccess;
+          return cancelDate > now;
         }
         
         return false;
       }
     );
     
-    console.log('[ChatArea] hasAccess result:', hasAccessResult);
     return hasAccessResult;
   };
 
