@@ -135,7 +135,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           .eq('user_id', currentUserId)
           .eq('status', 'active');
         
-        console.log('Pricing - User plans data:', { userPlans, error, userId: currentUserId });
+        
         
         if (!error && userPlans && userPlans.length > 0) {
           const activePlanTypes = userPlans.map(plan => plan.plan_type);
