@@ -144,11 +144,12 @@ serve(async (req) => {
     );
 
   } catch (err) {
-    console.error('[create-portal-session] Error:', err);
+    const requestId = crypto.randomUUID();
+    console.error(`[create-portal-session] [${requestId}] Error:`, err);
     return new Response(
       JSON.stringify({ 
         error: 'Falha ao criar sessão do portal.',
-        details: err instanceof Error ? err.message : 'Unknown error'
+        request_id: requestId
       }),
       { 
         status: 500,
