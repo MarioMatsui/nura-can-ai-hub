@@ -125,17 +125,6 @@ export const ChatArea = ({
     // Generic model is always available for everyone
     if (modelType === 'generic') return true;
     
-    console.log('[ChatArea] hasAccess check:', {
-      modelType,
-      subscriptions: subscriptions.map(sub => ({
-        plan_type: sub.plan_type,
-        status: sub.status,
-        cancel_at: sub.cancel_at,
-        planMatch: sub.plan_type === modelType || (sub.plan_type as string) === 'specialist',
-        isFuture: sub.cancel_at ? new Date(sub.cancel_at) > new Date() : null
-      }))
-    });
-    
     // Check for specific model type plan or specialist (which has access to all)
     const hasAccessResult = subscriptions.some(
       sub => {
@@ -152,20 +141,13 @@ export const ChatArea = ({
         if (sub.status === 'scheduled_cancellation' && planMatch && sub.cancel_at) {
           const cancelDate = new Date(sub.cancel_at);
           const now = new Date();
-          const hasAccess = cancelDate > now;
-          console.log('[ChatArea] Scheduled cancellation check:', {
-            cancelDate: cancelDate.toISOString(),
-            now: now.toISOString(),
-            hasAccess
-          });
-          return hasAccess;
+          return cancelDate > now;
         }
         
         return false;
       }
     );
     
-    console.log('[ChatArea] hasAccess result:', hasAccessResult);
     return hasAccessResult;
   };
 
