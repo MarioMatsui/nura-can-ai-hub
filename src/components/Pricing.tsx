@@ -143,13 +143,9 @@ const Pricing = ({ showFree = true }: PricingProps) => {
             .filter(plan => plan.cancel_at_period_end)
             .map(plan => plan.plan_type);
           
-          console.log('Pricing - Setting active plans:', activePlanTypes);
-          console.log('Pricing - Scheduled cancellations:', scheduledPlans);
-          
           setActivePlans(activePlanTypes);
           setScheduledCancellations(scheduledPlans);
         } else {
-          console.log('Pricing - No active plans found');
           setActivePlans([]);
           setScheduledCancellations([]);
         }
