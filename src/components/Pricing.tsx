@@ -372,8 +372,6 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               const isActive = activePlans.includes(planKey);
               const isScheduled = scheduledCancellations.includes(planKey);
               
-              console.log('Pricing - Plan check:', { planKey, isActive, isScheduled, activePlans, scheduledCancellations });
-              
               let buttonText = "Assinar";
               
               if (planKey === 'free') {
