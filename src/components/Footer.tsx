@@ -1,5 +1,5 @@
-import logoLight from "@/assets/logo-light.png";
-import logoDark from "@/assets/logo-dark.png";
+import logoLight from "@/assets/canfy-light.png";
+import logoDark from "@/assets/canfy-dark.png";
 
 const Footer = () => {
 
