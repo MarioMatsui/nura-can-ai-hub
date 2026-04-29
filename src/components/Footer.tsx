@@ -13,16 +13,18 @@ const Footer = () => {
               <img 
                 src={logoLight} 
                 alt="NuraCan AI" 
-                className="h-12 w-auto dark:hidden"
+                className="h-14 w-auto dark:hidden"
               />
               <img 
                 src={logoDark} 
                 alt="NuraCan AI" 
-                className="h-12 w-auto hidden dark:block"
+                className="h-14 w-auto hidden dark:block"
               />
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              IA especializada, para profissionais da saúde e direito.
+              IA especialista.
+              <br />
+              Um produto Canfy.
             </p>
           </div>
 
