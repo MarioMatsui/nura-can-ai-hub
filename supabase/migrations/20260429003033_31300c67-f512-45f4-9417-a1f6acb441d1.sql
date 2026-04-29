@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.get_receituario_quota(uuid) TO authenticated;
