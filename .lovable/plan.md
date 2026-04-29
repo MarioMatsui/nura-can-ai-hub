@@ -1,17 +1,14 @@
-## Remover logs de debug do console
+## Remover console.logs restantes do Dashboard
 
 ### Causa
-Existem `console.log` de debug em dois componentes que aparecem em `/`, `/planos` e `/app`:
-
-- `src/components/Pricing.tsx` — 5 logs (`Pricing - ...`)
-- `src/components/dashboard/ChatArea.tsx` — 10 logs (`[ChatArea] ...`)
+Os logs `[Dashboard] Mapping plan type: ...` e `[Dashboard] Active plans found: ...` que ainda aparecem no console do `/app` vêm de `src/pages/Dashboard.tsx`, dentro de `fetchSubscriptions` — não foram removidos nas iterações anteriores porque só limpamos `Pricing.tsx` e `ChatArea.tsx`.
 
 ### Mudanças
-1. **`src/components/Pricing.tsx`** — remover as 5 chamadas `console.log('Pricing - ...')` (linhas 138, 146, 147, 152, 379), mantendo a lógica de fetch/set state intacta.
-2. **`src/components/dashboard/ChatArea.tsx`** — remover as 10 chamadas `console.log('[ChatArea] ...')` mantendo toda a lógica de seleção de modelo e `hasAccess`.
+**`src/pages/Dashboard.tsx`** — remover 2 chamadas em `fetchSubscriptions`:
+- `console.log('[Dashboard] Mapping plan type:', plan.plan_type, '->', mappedPlanType);` (dentro do `.map`)
+- `console.log('[Dashboard] Active plans found:', activePlans.length);` (após o filter/map)
 
-Nenhum `console.error` será removido (esses são úteis para erros reais). Nenhuma lógica de negócio é alterada.
+Toda a lógica de mapeamento de planos (`planTypeMap`, detecção de cancelamento, fallback para `free`) é preservada. Os `console.error` permanecem.
 
 ### Arquivos editados
-- `src/components/Pricing.tsx`
-- `src/components/dashboard/ChatArea.tsx`
+- `src/pages/Dashboard.tsx`
