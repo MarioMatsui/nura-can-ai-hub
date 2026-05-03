@@ -34,6 +34,7 @@ interface ChatAreaProps {
   currentConversation: Conversation | null;
   onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist', attachments?: Attachment[]) => void;
   onOpenSidebar: () => void;
+  showModelSelector?: boolean;
 }
 
 type ModelType = 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist';
