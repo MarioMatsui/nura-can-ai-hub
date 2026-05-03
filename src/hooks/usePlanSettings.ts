@@ -66,10 +66,10 @@ export const usePlanSettings = () => {
   }, []);
 
   const isPlanActive = (planCode: string): boolean => {
-    // If settings haven't loaded yet, assume all plans are active
-    if (isLoading) return true;
-    // If plan not found in settings, assume active (fallback)
-    if (!(planCode in activePlansMap)) return true;
+    // While loading, never render plans (avoids flicker of hidden plans)
+    if (isLoading) return false;
+    // Fail-safe: if plan not configured in settings, hide it
+    if (!(planCode in activePlansMap)) return false;
     return activePlansMap[planCode];
   };
 
