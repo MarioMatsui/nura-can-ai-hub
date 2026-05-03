@@ -350,7 +350,13 @@ const Pricing = ({ showFree = true }: PricingProps) => {
         </div>
 
         {/* Plans Grid - Dynamic grid based on active plans count */}
-        {(() => {
+        {isLoadingPlanSettings ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mx-auto max-w-6xl">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[480px] w-full rounded-lg" />
+            ))}
+          </div>
+        ) : (() => {
           const visiblePlans = Object.entries(plans)
             .filter(([key]) => showFree || key !== 'free')
             .filter(([key]) => isPlanActive(key));
