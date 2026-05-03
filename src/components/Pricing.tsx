@@ -386,9 +386,9 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               }
 
               return (
-                <div key={key} className="flex flex-col">
+                <div key={key} className="flex flex-col h-full">
                   <Card
-                    className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
+                    className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col flex-grow ${
                       plan.popular ? "ring-2 ring-primary" : ""
                     }`}
                   >
