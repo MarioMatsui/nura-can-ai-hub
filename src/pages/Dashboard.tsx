@@ -8,6 +8,7 @@ import { PrescriptionView } from '@/components/dashboard/prescription/Prescripti
 import { useToast } from '@/hooks/use-toast';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { preloadAppSettings, useAppSettings } from '@/hooks/useAppSettings';
 
 export interface Conversation {
   id: string;
