@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { usePlanSettings } from "@/hooks/usePlanSettings";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { 
   Sparkles, 
   Stethoscope, 
@@ -32,7 +33,23 @@ const planDescriptions: Record<string, string> = {
 
 const PlanManagement = () => {
   const { planSettings, isLoading, togglePlanActive } = usePlanSettings();
+  const { getFlag, setFlag, isLoading: settingsLoading } = useAppSettings();
   const [updatingPlan, setUpdatingPlan] = useState<string | null>(null);
+  const [updatingFlag, setUpdatingFlag] = useState(false);
+  const showModelSelector = getFlag('show_model_selector', false);
+
+  const handleToggleModelSelector = async (next: boolean) => {
+    setUpdatingFlag(true);
+    try {
+      await setFlag('show_model_selector', next);
+      toast.success(next ? "Seletor de modelo ativado" : "Seletor de modelo ocultado");
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao atualizar configuração");
+    } finally {
+      setUpdatingFlag(false);
+    }
+  };
 
   const handleToggle = async (planCode: string, currentState: boolean) => {
     setUpdatingPlan(planCode);
@@ -75,6 +92,27 @@ const PlanManagement = () => {
           Ative ou desative planos sem deletar dados. Planos desativados não aparecem na landing page ou no app.
         </p>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Configurações Globais</CardTitle>
+          <CardDescription>Flags que afetam o app inteiro.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between">
+          <div className="pr-4">
+            <h3 className="font-semibold">Exibir seletor de modelo no app</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Quando desativado, o dropdown de seleção de modelo (ex: "Médico") não aparece em /app.
+            </p>
+          </div>
+          <Switch
+            checked={showModelSelector}
+            onCheckedChange={handleToggleModelSelector}
+            disabled={updatingFlag || settingsLoading}
+            className="data-[state=checked]:bg-primary"
+          />
+        </CardContent>
+      </Card>
 
       <Card className="bg-amber-500/10 border-amber-500/30 mb-6">
         <CardContent className="flex items-start gap-3 pt-4">

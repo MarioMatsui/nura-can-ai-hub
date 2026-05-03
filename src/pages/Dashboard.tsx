@@ -8,6 +8,7 @@ import { PrescriptionView } from '@/components/dashboard/prescription/Prescripti
 import { useToast } from '@/hooks/use-toast';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { preloadAppSettings, useAppSettings } from '@/hooks/useAppSettings';
 
 export interface Conversation {
   id: string;
@@ -48,6 +49,8 @@ const Dashboard = () => {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [activeView, setActiveView] = useState<'chat' | 'prescription'>('chat');
   const isMobile = useIsMobile();
+  const { getFlag } = useAppSettings();
+  const showModelSelector = getFlag('show_model_selector', false);
   const [appTheme, setAppTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme:/app');
     return (saved as 'light' | 'dark') || 'dark';
@@ -99,7 +102,8 @@ const Dashboard = () => {
     await Promise.all([
       fetchProfile(session.user.id),
       fetchConversations(session.user.id),
-      fetchSubscriptions(session.user.id)
+      fetchSubscriptions(session.user.id),
+      preloadAppSettings(),
     ]);
     setLoading(false);
   };
@@ -526,6 +530,7 @@ const Dashboard = () => {
               currentConversation={currentConversation}
               onSendMessage={handleSendMessage}
               onOpenSidebar={() => {}}
+              showModelSelector={showModelSelector}
             />
           )}
         </div>

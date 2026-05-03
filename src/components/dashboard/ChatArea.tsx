@@ -34,6 +34,7 @@ interface ChatAreaProps {
   currentConversation: Conversation | null;
   onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist', attachments?: Attachment[]) => void;
   onOpenSidebar: () => void;
+  showModelSelector?: boolean;
 }
 
 type ModelType = 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist';
@@ -46,6 +47,7 @@ export const ChatArea = ({
   currentConversation,
   onSendMessage,
   onOpenSidebar,
+  showModelSelector = false,
 }: ChatAreaProps) => {
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelType>('generic');
@@ -341,6 +343,7 @@ export const ChatArea = ({
             <Menu className="h-5 w-5" />
           </Button>
         )}
+        {showModelSelector && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-full sm:w-64 justify-between gap-2 h-10">
@@ -415,6 +418,7 @@ export const ChatArea = ({
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
 
       <ScrollArea className="flex-1 p-3" ref={scrollRef}>
