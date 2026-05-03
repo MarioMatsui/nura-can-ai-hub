@@ -29,7 +29,7 @@ const plans = {
     popular: false,
   },
   medico: {
-    name: "Médico",
+    name: "Nura Pro",
     description: "",
     features: [
       "Modelo especializado para médicos",
@@ -38,11 +38,11 @@ const plans = {
       "Respostas baseadas em evidências científicas",
       "Geração de receituário ilimitado",
     ],
-    monthlyPrice: 84.99,
-    monthlyOriginalPrice: 99.9,
-    annualPrice: 922.99,
-    annualOriginalPrice: 89.9,
-    annualTotalPrice: 922.99,
+    monthlyPrice: 14.90,
+    monthlyOriginalPrice: 39.90,
+    annualPrice: 119.90,
+    annualOriginalPrice: 27.90,
+    annualTotalPrice: 119.90,
     popular: false,
   },
   juridico: {
@@ -54,11 +54,11 @@ const plans = {
       "Acesso a banco de dados jurídico",
       "Informações sobre regulamentação",
     ],
-    monthlyPrice: 76.9,
-    monthlyOriginalPrice: 89.9,
-    annualPrice: 816.0,
-    annualOriginalPrice: 79.9,
-    annualTotalPrice: 816.0,
+    monthlyPrice: 76.90,
+    monthlyOriginalPrice: 89.90,
+    annualPrice: 816.00,
+    annualOriginalPrice: 79.90,
+    annualTotalPrice: 816.00,
     popular: false,
   },
   veterinario: {
@@ -70,10 +70,10 @@ const plans = {
       "Acesso a banco de dados veterinário",
       "Evidências científicas em medicina veterinária",
     ],
-    monthlyPrice: 68.0,
-    monthlyOriginalPrice: 79.9,
+    monthlyPrice: 68.00,
+    monthlyOriginalPrice: 79.90,
     annualPrice: 719.88,
-    annualOriginalPrice: 69.9,
+    annualOriginalPrice: 69.90,
     annualTotalPrice: 719.88,
     popular: false,
   },
@@ -87,16 +87,16 @@ const plans = {
       "Máxima flexibilidade profissional",
       "Melhor custo-benefício",
     ],
-    monthlyPrice: 109.9,
-    monthlyOriginalPrice: 129.9,
-    annualPrice: 1188.0,
-    annualOriginalPrice: 109.9,
-    annualTotalPrice: 1188.0,
+    monthlyPrice: 109.90,
+    monthlyOriginalPrice: 129.90,
+    annualPrice: 1188.00,
+    annualOriginalPrice: 109.90,
+    annualTotalPrice: 1188.00,
     popular: true,
   },
 };
 
-type PlanKey = "free" | "medico" | "juridico" | "veterinario" | "especialista";
+type PlanKey = 'free' | 'medico' | 'juridico' | 'veterinario' | 'especialista';
 
 interface PricingProps {
   showFree?: boolean;
@@ -112,7 +112,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
 
   // Calculate average discount percentage
   const calculateAverageDiscount = () => {
-    const paidPlans = Object.values(plans).filter((p) => p.monthlyPrice > 0);
+    const paidPlans = Object.values(plans).filter(p => p.monthlyPrice > 0);
     const totalDiscount = paidPlans.reduce((sum, plan) => {
       const monthlyTotal = plan.monthlyPrice * 12;
       const discount = ((monthlyTotal - plan.annualPrice) / monthlyTotal) * 100;
@@ -125,23 +125,25 @@ const Pricing = ({ showFree = true }: PricingProps) => {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       const currentUserId = session?.user?.id ?? null;
       setUserId(currentUserId);
 
       if (currentUserId) {
         const { data: userPlans, error } = await supabase
-          .from("user_plans")
-          .select("plan_type, status, cancel_at_period_end")
-          .eq("user_id", currentUserId)
-          .eq("status", "active");
-
+          .from('user_plans')
+          .select('plan_type, status, cancel_at_period_end')
+          .eq('user_id', currentUserId)
+          .eq('status', 'active');
+        
+        
+        
         if (!error && userPlans && userPlans.length > 0) {
-          const activePlanTypes = userPlans.map((plan) => plan.plan_type);
-          const scheduledPlans = userPlans.filter((plan) => plan.cancel_at_period_end).map((plan) => plan.plan_type);
-
+          const activePlanTypes = userPlans.map(plan => plan.plan_type);
+          const scheduledPlans = userPlans
+            .filter(plan => plan.cancel_at_period_end)
+            .map(plan => plan.plan_type);
+          
           setActivePlans(activePlanTypes);
           setScheduledCancellations(scheduledPlans);
         } else {
@@ -153,25 +155,23 @@ const Pricing = ({ showFree = true }: PricingProps) => {
 
     fetchUserData();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUserId = session?.user?.id ?? null;
       setUserId(currentUserId);
-
+      
       if (currentUserId) {
         supabase
-          .from("user_plans")
-          .select("plan_type, status, cancel_at_period_end")
-          .eq("user_id", currentUserId)
-          .eq("status", "active")
+          .from('user_plans')
+          .select('plan_type, status, cancel_at_period_end')
+          .eq('user_id', currentUserId)
+          .eq('status', 'active')
           .then(({ data: userPlans, error }) => {
             if (!error && userPlans && userPlans.length > 0) {
-              const activePlanTypes = userPlans.map((plan) => plan.plan_type);
+              const activePlanTypes = userPlans.map(plan => plan.plan_type);
               const scheduledPlans = userPlans
-                .filter((plan) => plan.cancel_at_period_end)
-                .map((plan) => plan.plan_type);
-
+                .filter(plan => plan.cancel_at_period_end)
+                .map(plan => plan.plan_type);
+              
               setActivePlans(activePlanTypes);
               setScheduledCancellations(scheduledPlans);
             } else {
@@ -189,31 +189,31 @@ const Pricing = ({ showFree = true }: PricingProps) => {
   }, []);
 
   const getDisplayPrice = (plan: typeof plans.medico) => {
-    if (plan.monthlyPrice === 0) return "Grátis";
-
-    if (isAnnual) {
-      const monthlyEquivalent = plan.annualPrice / 12;
-
+    if (plan.monthlyPrice === 0) {
       return (
         <div className="flex flex-col items-center">
-          <div className="relative inline-flex items-center justify-center">
-            <span className="text-2xl sm:text-3xl font-bold">R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}</span>
-            <span className="absolute -top-2 -right-2 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
-              -15%
-            </span>
-          </div>
-          <span className="text-sm text-muted-foreground">/mês</span>
+          <span className="text-xl sm:text-2xl font-bold">Grátis</span>
         </div>
       );
     }
 
+    const currentPrice = isAnnual ? plan.annualPrice / 12 : plan.monthlyPrice;
+    const originalPrice = isAnnual ? plan.annualOriginalPrice : plan.monthlyOriginalPrice;
+    const showOriginal = originalPrice > currentPrice;
+
     return (
       <div className="flex flex-col items-center">
         <div className="relative inline-flex items-center justify-center">
-          <span className="text-2xl sm:text-3xl font-bold">R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}</span>
-          <span className="absolute -top-2 -right-2 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
-            -15%
+          <span className="text-2xl sm:text-3xl font-bold">
+            R$ {currentPrice.toFixed(2).replace(".", ",")}
           </span>
+          {showOriginal && (
+            <span
+              className="absolute -top-2 -right-2 text-xs font-semibold text-white/50 line-through decoration-red-500 decoration-2"
+            >
+              R$ {originalPrice.toFixed(2).replace(".", ",")}
+            </span>
+          )}
         </div>
         <span className="text-sm text-muted-foreground">/mês</span>
       </div>
@@ -222,11 +222,11 @@ const Pricing = ({ showFree = true }: PricingProps) => {
 
   const handleSubscribe = async (planKey: PlanKey) => {
     // Free plan - redirect to signup or app
-    if (planKey === "free") {
+    if (planKey === 'free') {
       if (!userId) {
-        window.location.href = "/auth/signup";
+        window.location.href = '/auth/signup';
       } else {
-        window.location.href = "/app";
+        window.location.href = '/app';
       }
       return;
     }
@@ -238,7 +238,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
         description: "Faça login para assinar um plano",
         variant: "destructive",
       });
-      window.location.href = "/auth/login";
+      window.location.href = '/auth/login';
       return;
     }
 
@@ -253,9 +253,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
     }
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) throw new Error("Email não encontrado");
 
       const PRICE_MAP: Record<string, Record<string, string>> = {
@@ -277,14 +275,14 @@ const Pricing = ({ showFree = true }: PricingProps) => {
         },
       };
 
-      const billingCycle = isAnnual ? "anual" : "mensal";
+      const billingCycle = isAnnual ? 'anual' : 'mensal';
       const priceId = PRICE_MAP[planKey]?.[billingCycle];
 
       if (!priceId) {
         throw new Error("Price ID não configurado");
       }
 
-      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
         body: {
           price_id: priceId,
           customer_email: user.email,
@@ -301,7 +299,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
 
       window.location.href = data.url;
     } catch (error: any) {
-      console.error("Erro ao criar checkout:", error);
+      console.error('Erro ao criar checkout:', error);
       toast({
         title: "Erro",
         description: error.message || "Falha ao criar sessão de checkout",
@@ -315,13 +313,13 @@ const Pricing = ({ showFree = true }: PricingProps) => {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="text-4xl font-bold mb-4">Escolha o Plano Ideal Para Você</h2>
-          <p className="text-xl text-muted-foreground mb-8">Acesso especializado para cada área profissional</p>
-
+          <p className="text-xl text-muted-foreground mb-8">
+            Acesso especializado para cada área profissional
+          </p>
+          
           {/* Billing Cycle Toggle */}
           <div className="inline-flex items-center gap-4 bg-muted/50 px-6 py-4 rounded-full border border-border">
-            <span
-              className={`text-xl font-bold transition-all ${!isAnnual ? "text-foreground" : "text-muted-foreground"}`}
-            >
+            <span className={`text-xl font-bold transition-all ${!isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
               Mensal
             </span>
             <Switch
@@ -330,20 +328,18 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               className="data-[state=checked]:bg-primary scale-125"
             />
             <div className="flex items-center gap-2">
-              <span
-                className={`text-xl font-bold transition-all ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}
-              >
+              <span className={`text-xl font-bold transition-all ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
                 Anual
               </span>
-              <Badge
-                variant="secondary"
+              <Badge 
+                variant="secondary" 
                 className={`font-semibold transition-all ${
-                  isAnnual
-                    ? "bg-primary/20 text-foreground border-primary/30"
+                  isAnnual 
+                    ? "bg-primary/20 text-foreground border-primary/30" 
                     : "bg-muted-foreground/20 text-muted-foreground border-muted-foreground/30"
                 }`}
               >
-                -33%
+                -17%
               </Badge>
             </div>
           </div>
@@ -356,101 +352,108 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               <Skeleton key={i} className="h-[480px] w-full rounded-lg" />
             ))}
           </div>
-        ) : (
-          (() => {
-            const visiblePlans = Object.entries(plans)
-              .filter(([key]) => showFree || key !== "free")
-              .filter(([key]) => isPlanActive(key));
+        ) : (() => {
+          const visiblePlans = Object.entries(plans)
+            .filter(([key]) => showFree || key !== 'free')
+            .filter(([key]) => isPlanActive(key));
+          
+          const planCount = visiblePlans.length;
+          
+          // Dynamic grid classes based on number of visible plans
+          const getGridClasses = () => {
+            if (planCount === 1) return 'grid-cols-1 max-w-md';
+            if (planCount === 2) return 'grid-cols-1 sm:grid-cols-2 max-w-2xl';
+            if (planCount === 3) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl';
+            if (planCount === 4) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl';
+            return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 max-w-7xl';
+          };
+          
+          return (
+            <div className={`grid ${getGridClasses()} gap-6 mx-auto`}>
+              {visiblePlans.map(([key, plan]) => {
+              const planKey = key as PlanKey;
+              const isActive = activePlans.includes(planKey);
+              const isScheduled = scheduledCancellations.includes(planKey);
+              
+              let buttonText = "Assinar";
+              
+              if (planKey === 'free') {
+                buttonText = userId ? "Ir para o App" : "Começar Grátis";
+              } else if (isActive) {
+                buttonText = "Plano Ativo";
+              } else if (isScheduled) {
+                buttonText = "Cancelamento Programado";
+              }
 
-            const planCount = visiblePlans.length;
+              return (
+                <div key={key} className="flex flex-col h-full">
+                  <Card
+                    className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col flex-grow ${
+                      plan.popular ? "ring-2 ring-primary" : ""
+                    }`}
+                  >
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-primary text-primary-foreground">Popular</Badge>
+                      </div>
+                    )}
 
-            // Dynamic grid classes based on number of visible plans
-            const getGridClasses = () => {
-              if (planCount === 1) return "grid-cols-1 max-w-md";
-              if (planCount === 2) return "grid-cols-1 sm:grid-cols-2 max-w-2xl";
-              if (planCount === 3) return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-4xl";
-              if (planCount === 4) return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 max-w-6xl";
-              return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 max-w-7xl";
-            };
+                    <CardHeader className="pb-6 min-h-[160px] flex flex-col items-center text-center">
+                      <h3 className="text-xl font-bold mb-2">
+                        {plan.name}
+                      </h3>
+                      <div className="mb-2">{getDisplayPrice(plan)}</div>
+                    </CardHeader>
 
-            return (
-              <div className={`grid ${getGridClasses()} gap-6 mx-auto`}>
-                {visiblePlans.map(([key, plan]) => {
-                  const planKey = key as PlanKey;
-                  const isActive = activePlans.includes(planKey);
-                  const isScheduled = scheduledCancellations.includes(planKey);
+                    <CardContent className="flex flex-col flex-grow">
+                      <ul className="space-y-3 flex-grow mb-6">
+                        {plan.features.map((feature, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                            <span className="text-sm">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
 
-                  let buttonText = "Assinar";
+                      <Button
+                        onClick={() => handleSubscribe(planKey)}
+                        disabled={isActive}
+                        className={`w-full font-semibold transition-smooth ${
+                          isActive
+                            ? "bg-muted text-muted-foreground cursor-not-allowed"
+                            : plan.popular
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        }`}
+                        size="lg"
+                      >
+                        {buttonText}
+                      </Button>
+                    </CardContent>
+                  </Card>
 
-                  if (planKey === "free") {
-                    buttonText = userId ? "Ir para o App" : "Começar Grátis";
-                  } else if (isActive) {
-                    buttonText = "Plano Ativo";
-                  } else if (isScheduled) {
-                    buttonText = "Cancelamento Programado";
-                  }
-
-                  return (
-                    <Card
-                      key={key}
-                      className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
-                        plan.popular ? "ring-2 ring-primary" : ""
-                      }`}
-                    >
-                      {plan.popular && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                          <Badge className="bg-primary text-primary-foreground">Popular</Badge>
-                        </div>
-                      )}
-
-                      <CardHeader className="pb-6">
-                        <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
-                        <div className="mb-6">{getDisplayPrice(plan)}</div>
-                      </CardHeader>
-
-                      <CardContent className="flex flex-col flex-grow">
-                        <ul className="space-y-3 flex-grow mb-6">
-                          {plan.features.map((feature, index) => (
-                            <li key={index} className="flex items-start gap-2">
-                              <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                              <span className="text-sm">{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <Button
-                          onClick={() => handleSubscribe(planKey)}
-                          disabled={isActive}
-                          className={`w-full font-semibold transition-smooth ${
-                            isActive
-                              ? "bg-muted text-muted-foreground cursor-not-allowed"
-                              : plan.popular
-                                ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
-                                : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                          }`}
-                          size="lg"
-                        >
-                          {buttonText}
-                        </Button>
-
-                        {isAnnual && plan.monthlyPrice > 0 && (
-                          <div className="text-xs text-muted-foreground text-center mt-3">
-                            (R$ {plan.annualTotalPrice.toFixed(2).replace(".", ",")} cobrados anualmente)
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            );
-          })()
-        )}
+                  <div
+                    className={`text-[11px] text-center mt-2 ${
+                      isAnnual && plan.monthlyPrice > 0
+                        ? "text-muted-foreground"
+                        : "invisible"
+                    }`}
+                    aria-hidden={!(isAnnual && plan.monthlyPrice > 0)}
+                  >
+                    (R$ {(plan.annualTotalPrice || 0).toFixed(2).replace(".", ",")} cobrados anualmente)
+                  </div>
+                </div>
+              );
+            })}
+            </div>
+          );
+        })()}
 
         {/* Additional Info */}
         <div className="mt-8 sm:mt-12 text-center px-4">
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Todos os planos incluem 7 dias de garantia de reembolso • Cancele a qualquer momento
+            Todos os planos incluem 7 dias de garantia de reembolso • Cancele a
+            qualquer momento
           </p>
         </div>
       </div>
