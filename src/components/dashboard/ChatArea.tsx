@@ -47,6 +47,7 @@ export const ChatArea = ({
   currentConversation,
   onSendMessage,
   onOpenSidebar,
+  showModelSelector = false,
 }: ChatAreaProps) => {
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelType>('generic');
