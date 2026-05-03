@@ -1,48 +1,45 @@
 ## Objetivo
-Renomear o plano "Médico" para "Nura Pro" (apenas título visível na landing/`/planos`) e atualizar preços para R$ 14,90 mensal / R$ 9,99 mês (anual) com total anual R$ 119,90.
+Três ajustes visuais nos cards de `/planos` e landing (componente `src/components/Pricing.tsx`):
+1. Alinhar verticalmente o conteúdo entre cards (checklist começa na mesma altura)
+2. Remover badge "-15%" e substituir por preço antigo riscado (39,99 mensal / 27,90 anual no Nura Pro)
+3. Mover texto "(R$ X cobrados anualmente)" para fora do card
 
-## Escopo da mudança
+## Mudanças em `src/components/Pricing.tsx`
 
-### 1. `src/components/Pricing.tsx` — fonte única dos valores exibidos
+### 1. Alinhamento dos cards
+- Dar ao `CardHeader` uma altura mínima fixa para que o bloco título+preço ocupe sempre o mesmo espaço, independente do plano ser "Grátis" ou ter preço com riscado.
+- Aplicar `min-h-[140px]` ao `CardHeader` (suficiente para acomodar título + preço de duas linhas + riscado).
+- Garantir `flex flex-col justify-center` no header para centralizar verticalmente quando o conteúdo for menor (ex.: Gratuito).
+- O `CardContent` já usa `flex flex-col flex-grow`, então a checklist alinhará automaticamente após o header padronizado.
 
-No objeto `plans.medico`, alterar:
-- `name: "Médico"` → `name: "Nura Pro"` (afeta landing + `/planos`, ambos usam este componente)
-- `monthlyPrice: 84.99` → `14.90`
-- `monthlyOriginalPrice: 99.90` → remover badge "-15%" deste card OU manter consistente (ver decisão abaixo)
-- `annualPrice: 922.99` → `119.90` (total anual cobrado)
-- `annualTotalPrice: 922.99` → `119.90`
-- `annualOriginalPrice: 89.90` → não é usado no render, pode ficar
+### 2. Remover badge "-15%" e adicionar preço antigo riscado
+Na função `getDisplayPrice`, em ambos os branches (anual e mensal):
+- Remover o `<span>` da badge "-15%" (com pseudo-elemento ::after rotacionado).
+- Renderizar acima ou ao lado do preço principal um preço antigo:
+  - Para Nura Pro (`medico`): mensal R$ 39,90 / anual R$ 27,90 mês
+  - Para os outros planos: usar `monthlyOriginalPrice` (mensal) e `annualOriginalPrice` (mês equivalente anual) que já existem no objeto
+- Estilo do preço antigo: `text-white/50 line-through decoration-red-500 decoration-2`
+- Posicionamento: pequeno, próximo ao preço principal, no mesmo local onde estava a badge (canto superior direito do preço, ou logo acima — escolher pequeno acima do preço para melhor leitura).
 
-A função `getDisplayPrice` já calcula `annualPrice / 12` → `119.90 / 12 = 9.991...` → exibe `R$ 9,99`. ✓
-O texto abaixo do botão usa `annualTotalPrice.toFixed(2)` → `R$ 119,90 cobrados anualmente`. ✓
+Atualizar valores no objeto `plans.medico`:
+- `monthlyOriginalPrice: 39.90`
+- `annualOriginalPrice: 27.90` (já é interpretado como "mês equivalente original")
 
-### 2. Backend / lógica de plano — NÃO alterar
-- A chave interna `medico` permanece (DB usa termo PT, ver memória `plan-type-mapping`).
-- `plan_type` no checkout, webhook, dashboard, admin, edge functions: tudo intacto.
-- Stripe Price IDs: intactos (já atualizados anteriormente).
+Lógica do display:
+- Se `originalPrice > currentPrice`: mostra riscado
+- Se igual: não mostra nada (evita "39,90 riscado em cima de 39,90")
 
-### 3. Badge "-15%" no card
-O badge "-15%" em `getDisplayPrice` é hardcoded e aplicado a todos os planos pagos. Com o novo preço Nura Pro (14,90 → 9,99 = ~33% off no anual), o "-15%" fica incorreto especificamente para este card.
+### 3. Mover texto "cobrados anualmente" para fora do card
+Atualmente o texto está dentro do `CardContent`. Mover para fora:
+- Envolver cada `<Card>` em um `<div className="flex flex-col">`
+- Mover o bloco `{isAnnual && plan.monthlyPrice > 0 && (...)}` para fora do `<Card>`, logo abaixo
+- Ajustar estilos: `mt-2 text-[11px] text-muted-foreground text-center` (1px menor que `text-xs` que é 12px)
 
-**Decisão necessária:** manter o badge "-15%" como está (aplica a todos uniformemente) ou calcular dinamicamente por plano? Para evitar scope creep, **manter como está** — a HARD RULE pede consistência de preço, não do badge. Confirmo isso na execução salvo orientação contrária.
-
-### 4. Consistência sem flicker
-- O componente já usa `isAnnual` state com Switch — toggle é síncrono, sem flicker.
-- Skeleton durante `isLoadingPlanSettings` já protege contra flash inicial.
-- Como mudamos apenas constantes do objeto `plans`, não há risco novo de inconsistência.
-
-### 5. Validação pós-mudança
-- Card exibe "Nura Pro"
-- Toggle Mensal → R$ 14,90 /mês
-- Toggle Anual → R$ 9,99 /mês + "(R$ 119,90 cobrados anualmente)"
-- Checkout continua usando `VITE_PRICE_MEDICO_MENSAL` / `VITE_PRICE_MEDICO_ANUAL` (Stripe é fonte de verdade do valor cobrado — confirmar que os Price IDs no Stripe refletem 14,90 e 119,90)
-
-## Atenção — Stripe
-Os preços exibidos na UI devem bater com os Price IDs do Stripe. O Price ID anual atual (`price_1TSo3YK5Zr0li1N8MJJ4xfVs`) foi configurado recentemente para R$ 922,99. **Você precisa criar/confirmar no Stripe os novos Price IDs**:
-- Mensal R$ 14,90
-- Anual R$ 119,90
-
-Se os Price IDs precisarem ser trocados, me envie os novos `price_...` para atualizar `VITE_PRICE_MEDICO_MENSAL` e `VITE_PRICE_MEDICO_ANUAL`.
+## Validação
+- Card Gratuito e Nura Pro com checklist alinhada na mesma altura
+- Preço antigo R$ 39,90 (mensal) / R$ 27,90 (anual) em branco/50% com risco vermelho no card Nura Pro
+- Sem badge "-15%" em nenhum card
+- Texto "(R$ 119,90 cobrados anualmente)" abaixo do card, fora dele, fonte menor
 
 ## Arquivos alterados
-- `src/components/Pricing.tsx` (apenas constantes do objeto `plans.medico`)
+- `src/components/Pricing.tsx` (apenas)
