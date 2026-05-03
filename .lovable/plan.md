@@ -1,20 +1,13 @@
 ## Objetivo
-Corrigir alinhamento entre cards de planos e ajustar exibição do "Grátis".
+Alinhar os botões dos cards de planos mesmo quando a lista de features tem tamanhos diferentes.
 
-## Mudanças em `src/components/Pricing.tsx`
+## Causa
+O grid coloca os cards lado a lado com mesma altura, mas o wrapper `<div className="flex flex-col">` que envolve cada Card não tem `h-full`, então o Card não estica para ocupar toda a altura disponível. Resultado: card com menos features (Gratuito) fica menor e o botão sobe.
 
-### 1. Alinhar títulos e botões entre cards
-Atualmente o `CardHeader` usa `flex flex-col justify-center` com `min-h-[160px]`, o que centraliza verticalmente o conteúdo do header. Como o Gratuito tem header menor que o Nura Pro (sem preço riscado), o título e o preço ficam em alturas diferentes.
-
-Trocar para alinhamento ao topo:
-- `CardHeader`: remover `justify-center`, manter `min-h-[160px]` e estrutura flex-col padrão (conteúdo começa do topo).
-- Resultado: título "Gratuito" e "Nura Pro" alinhados no topo; bloco de preço logo abaixo do título em ambos.
-
-Como o `CardContent` já é `flex flex-col flex-grow` com `flex-grow` na lista e botão no final, os botões alinham automaticamente quando os headers têm a mesma altura.
-
-### 2. Texto "Grátis" centralizado e maior
-- Renderizar "Grátis" dentro de `<div className="flex flex-col items-center">` com `<span className="text-xl sm:text-2xl font-bold">Grátis</span>`.
-- Tamanho menor que o preço (`text-2xl sm:text-3xl`) e centralizado horizontalmente como os demais preços.
+## Mudança em `src/components/Pricing.tsx`
+- Wrapper externo de cada card: `flex flex-col` → `flex flex-col h-full`
+- `<Card>`: adicionar `flex-grow` à className para esticar até o fim do wrapper
+- O `CardContent` já usa `flex flex-col flex-grow` com `<ul className="flex-grow">`, então a lista ocupa o espaço extra e o botão alinha no fundo automaticamente.
 
 ## Arquivos alterados
 - `src/components/Pricing.tsx`
