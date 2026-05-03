@@ -380,57 +380,58 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               }
 
               return (
-                <Card
-                  key={key}
-                  className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
-                    plan.popular ? "ring-2 ring-primary" : ""
-                  }`}
-                >
-                  {plan.popular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-primary text-primary-foreground">Popular</Badge>
-                    </div>
-                  )}
-
-                  <CardHeader className="pb-6">
-                    <h3 className="text-xl font-bold mb-2">
-                      {plan.name}
-                    </h3>
-                    <div className="mb-6">{getDisplayPrice(plan)}</div>
-                  </CardHeader>
-
-                  <CardContent className="flex flex-col flex-grow">
-                    <ul className="space-y-3 flex-grow mb-6">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    <Button
-                      onClick={() => handleSubscribe(planKey)}
-                      disabled={isActive}
-                      className={`w-full font-semibold transition-smooth ${
-                        isActive
-                          ? "bg-muted text-muted-foreground cursor-not-allowed"
-                          : plan.popular
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                      }`}
-                      size="lg"
-                    >
-                      {buttonText}
-                    </Button>
-                    
-                    {isAnnual && plan.monthlyPrice > 0 && (
-                      <div className="text-xs text-muted-foreground text-center mt-3">
-                        (R$ {plan.annualTotalPrice.toFixed(2).replace(".", ",")} cobrados anualmente)
+                <div key={key} className="flex flex-col">
+                  <Card
+                    className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
+                      plan.popular ? "ring-2 ring-primary" : ""
+                    }`}
+                  >
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-primary text-primary-foreground">Popular</Badge>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+
+                    <CardHeader className="pb-6 min-h-[160px] flex flex-col justify-center">
+                      <h3 className="text-xl font-bold mb-2">
+                        {plan.name}
+                      </h3>
+                      <div className="mb-2">{getDisplayPrice(plan)}</div>
+                    </CardHeader>
+
+                    <CardContent className="flex flex-col flex-grow">
+                      <ul className="space-y-3 flex-grow mb-6">
+                        {plan.features.map((feature, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                            <span className="text-sm">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <Button
+                        onClick={() => handleSubscribe(planKey)}
+                        disabled={isActive}
+                        className={`w-full font-semibold transition-smooth ${
+                          isActive
+                            ? "bg-muted text-muted-foreground cursor-not-allowed"
+                            : plan.popular
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        }`}
+                        size="lg"
+                      >
+                        {buttonText}
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {isAnnual && plan.monthlyPrice > 0 && (
+                    <div className="text-[11px] text-muted-foreground text-center mt-2">
+                      (R$ {plan.annualTotalPrice.toFixed(2).replace(".", ",")} cobrados anualmente)
+                    </div>
+                  )}
+                </div>
               );
             })}
             </div>
