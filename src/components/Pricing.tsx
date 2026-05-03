@@ -39,9 +39,9 @@ const plans = {
       "Geração de receituário ilimitado",
     ],
     monthlyPrice: 14.90,
-    monthlyOriginalPrice: 14.90,
+    monthlyOriginalPrice: 39.90,
     annualPrice: 119.90,
-    annualOriginalPrice: 14.90,
+    annualOriginalPrice: 27.90,
     annualTotalPrice: 119.90,
     popular: false,
   },
@@ -190,34 +190,24 @@ const Pricing = ({ showFree = true }: PricingProps) => {
 
   const getDisplayPrice = (plan: typeof plans.medico) => {
     if (plan.monthlyPrice === 0) return "Grátis";
-    
-    if (isAnnual) {
-      const monthlyEquivalent = plan.annualPrice / 12;
-      
-      return (
-        <div className="flex flex-col items-center">
-          <div className="relative inline-flex items-center justify-center">
-            <span className="text-2xl sm:text-3xl font-bold">
-              R$ {monthlyEquivalent.toFixed(2).replace(".", ",")}
-            </span>
-            <span className="absolute -top-2 -right-2 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
-              -15%
-            </span>
-          </div>
-          <span className="text-sm text-muted-foreground">/mês</span>
-        </div>
-      );
-    }
-    
+
+    const currentPrice = isAnnual ? plan.annualPrice / 12 : plan.monthlyPrice;
+    const originalPrice = isAnnual ? plan.annualOriginalPrice : plan.monthlyOriginalPrice;
+    const showOriginal = originalPrice > currentPrice;
+
     return (
       <div className="flex flex-col items-center">
         <div className="relative inline-flex items-center justify-center">
           <span className="text-2xl sm:text-3xl font-bold">
-            R$ {plan.monthlyPrice.toFixed(2).replace(".", ",")}
+            R$ {currentPrice.toFixed(2).replace(".", ",")}
           </span>
-          <span className="absolute -top-2 -right-2 text-xs font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded relative overflow-visible after:content-[''] after:absolute after:left-0 after:right-0 after:top-1/2 after:h-[1px] after:bg-red-500 after:rotate-[-15deg] after:origin-center">
-            -15%
-          </span>
+          {showOriginal && (
+            <span
+              className="absolute -top-2 -right-2 text-xs font-semibold text-white/50 line-through decoration-red-500 decoration-2"
+            >
+              R$ {originalPrice.toFixed(2).replace(".", ",")}
+            </span>
+          )}
         </div>
         <span className="text-sm text-muted-foreground">/mês</span>
       </div>
@@ -390,57 +380,58 @@ const Pricing = ({ showFree = true }: PricingProps) => {
               }
 
               return (
-                <Card
-                  key={key}
-                  className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
-                    plan.popular ? "ring-2 ring-primary" : ""
-                  }`}
-                >
-                  {plan.popular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <Badge className="bg-primary text-primary-foreground">Popular</Badge>
-                    </div>
-                  )}
-
-                  <CardHeader className="pb-6">
-                    <h3 className="text-xl font-bold mb-2">
-                      {plan.name}
-                    </h3>
-                    <div className="mb-6">{getDisplayPrice(plan)}</div>
-                  </CardHeader>
-
-                  <CardContent className="flex flex-col flex-grow">
-                    <ul className="space-y-3 flex-grow mb-6">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    <Button
-                      onClick={() => handleSubscribe(planKey)}
-                      disabled={isActive}
-                      className={`w-full font-semibold transition-smooth ${
-                        isActive
-                          ? "bg-muted text-muted-foreground cursor-not-allowed"
-                          : plan.popular
-                          ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
-                          : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                      }`}
-                      size="lg"
-                    >
-                      {buttonText}
-                    </Button>
-                    
-                    {isAnnual && plan.monthlyPrice > 0 && (
-                      <div className="text-xs text-muted-foreground text-center mt-3">
-                        (R$ {plan.annualTotalPrice.toFixed(2).replace(".", ",")} cobrados anualmente)
+                <div key={key} className="flex flex-col">
+                  <Card
+                    className={`gradient-card border-border hover:border-primary/50 transition-smooth hover:shadow-glow relative flex flex-col ${
+                      plan.popular ? "ring-2 ring-primary" : ""
+                    }`}
+                  >
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-primary text-primary-foreground">Popular</Badge>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+
+                    <CardHeader className="pb-6 min-h-[160px] flex flex-col justify-center">
+                      <h3 className="text-xl font-bold mb-2">
+                        {plan.name}
+                      </h3>
+                      <div className="mb-2">{getDisplayPrice(plan)}</div>
+                    </CardHeader>
+
+                    <CardContent className="flex flex-col flex-grow">
+                      <ul className="space-y-3 flex-grow mb-6">
+                        {plan.features.map((feature, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                            <span className="text-sm">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <Button
+                        onClick={() => handleSubscribe(planKey)}
+                        disabled={isActive}
+                        className={`w-full font-semibold transition-smooth ${
+                          isActive
+                            ? "bg-muted text-muted-foreground cursor-not-allowed"
+                            : plan.popular
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-glow"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                        }`}
+                        size="lg"
+                      >
+                        {buttonText}
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {isAnnual && plan.monthlyPrice > 0 && (
+                    <div className="text-[11px] text-muted-foreground text-center mt-2">
+                      (R$ {plan.annualTotalPrice.toFixed(2).replace(".", ",")} cobrados anualmente)
+                    </div>
+                  )}
+                </div>
               );
             })}
             </div>
