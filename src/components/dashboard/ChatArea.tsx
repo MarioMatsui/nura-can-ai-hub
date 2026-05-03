@@ -331,6 +331,7 @@ export const ChatArea = ({
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
       {/* Header with hamburger menu on mobile + model dropdown */}
+      {(isMobile || showModelSelector) && (
       <div className="p-4 flex items-center gap-2">
         {isMobile && (
           <Button
@@ -420,6 +421,7 @@ export const ChatArea = ({
         </DropdownMenu>
         )}
       </div>
+      )}
 
       <ScrollArea className="flex-1 p-3" ref={scrollRef}>
         {messages.length === 0 ? (
