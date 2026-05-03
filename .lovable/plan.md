@@ -1,13 +1,6 @@
-## Objetivo
-Reservar espaço fixo do texto "(R$ X cobrados anualmente)" para evitar deslocamento dos cards ao alternar Mensal/Anual.
-
-## Mudança em `src/components/Pricing.tsx`
-Trocar o render condicional do texto por um elemento sempre presente, com visibilidade controlada:
-- Sempre renderizar o `<div>` abaixo do card.
-- Quando `isAnnual && plan.monthlyPrice > 0`: visível (`text-muted-foreground`).
-- Caso contrário: `invisible` (mantém espaço, esconde conteúdo) + `aria-hidden`.
-
-Isso reserva a mesma altura nos dois estados, alinhando os cards no toggle Mensal.
+## Mudança
+Em `src/components/Pricing.tsx` (span do preço antigo riscado dentro de `getDisplayPrice`):
+- Trocar `text-white/50` por `text-muted-foreground dark:text-white/50` para que no light mode apareça em cinza e no dark mode mantenha o branco translúcido atual.
 
 ## Arquivos alterados
 - `src/components/Pricing.tsx`

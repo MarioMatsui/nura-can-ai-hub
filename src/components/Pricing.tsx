@@ -209,7 +209,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
           </span>
           {showOriginal && (
             <span
-              className="absolute -top-2 -right-2 text-xs font-semibold text-white/50 line-through decoration-red-500 decoration-2"
+              className="absolute -top-2 -right-2 text-xs font-semibold text-muted-foreground dark:text-white/50 line-through decoration-red-500 decoration-2"
             >
               R$ {originalPrice.toFixed(2).replace(".", ",")}
             </span>
