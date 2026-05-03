@@ -189,7 +189,13 @@ const Pricing = ({ showFree = true }: PricingProps) => {
   }, []);
 
   const getDisplayPrice = (plan: typeof plans.medico) => {
-    if (plan.monthlyPrice === 0) return "Grátis";
+    if (plan.monthlyPrice === 0) {
+      return (
+        <div className="flex flex-col items-center">
+          <span className="text-xl sm:text-2xl font-bold">Grátis</span>
+        </div>
+      );
+    }
 
     const currentPrice = isAnnual ? plan.annualPrice / 12 : plan.monthlyPrice;
     const originalPrice = isAnnual ? plan.annualOriginalPrice : plan.monthlyOriginalPrice;
@@ -392,7 +398,7 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                       </div>
                     )}
 
-                    <CardHeader className="pb-6 min-h-[160px] flex flex-col justify-center">
+                    <CardHeader className="pb-6 min-h-[160px] flex flex-col items-center text-center">
                       <h3 className="text-xl font-bold mb-2">
                         {plan.name}
                       </h3>
