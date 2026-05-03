@@ -421,6 +421,7 @@ export const ChatArea = ({
         </DropdownMenu>
         )}
       </div>
+      )}
 
       <ScrollArea className="flex-1 p-3" ref={scrollRef}>
         {messages.length === 0 ? (
