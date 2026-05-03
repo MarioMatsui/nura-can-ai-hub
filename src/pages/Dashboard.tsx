@@ -49,6 +49,8 @@ const Dashboard = () => {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [activeView, setActiveView] = useState<'chat' | 'prescription'>('chat');
   const isMobile = useIsMobile();
+  const { getFlag } = useAppSettings();
+  const showModelSelector = getFlag('show_model_selector', false);
   const [appTheme, setAppTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('theme:/app');
     return (saved as 'light' | 'dark') || 'dark';
