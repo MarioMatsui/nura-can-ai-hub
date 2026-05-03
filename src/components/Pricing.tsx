@@ -29,7 +29,7 @@ const plans = {
     popular: false,
   },
   medico: {
-    name: "Médico",
+    name: "Nura Pro",
     description: "",
     features: [
       "Modelo especializado para médicos",
@@ -38,11 +38,11 @@ const plans = {
       "Respostas baseadas em evidências científicas",
       "Geração de receituário ilimitado",
     ],
-    monthlyPrice: 84.99,
-    monthlyOriginalPrice: 99.90,
-    annualPrice: 922.99,
-    annualOriginalPrice: 89.90,
-    annualTotalPrice: 922.99,
+    monthlyPrice: 14.90,
+    monthlyOriginalPrice: 14.90,
+    annualPrice: 119.90,
+    annualOriginalPrice: 14.90,
+    annualTotalPrice: 119.90,
     popular: false,
   },
   juridico: {
