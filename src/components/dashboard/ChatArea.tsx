@@ -343,6 +343,7 @@ export const ChatArea = ({
             <Menu className="h-5 w-5" />
           </Button>
         )}
+        {showModelSelector && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="w-full sm:w-64 justify-between gap-2 h-10">
@@ -417,6 +418,7 @@ export const ChatArea = ({
             })}
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
 
       <ScrollArea className="flex-1 p-3" ref={scrollRef}>
