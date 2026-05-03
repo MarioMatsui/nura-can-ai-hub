@@ -1,19 +1,13 @@
-## Remover espaço do header quando dropdown desativado
+## Renomear "Médico" para "Nura Pro" no modal de Configurações
 
-No `src/components/dashboard/ChatArea.tsx` (linhas ~333-422), o wrapper `<div className="p-4 flex items-center gap-2">` é renderizado mesmo quando `showModelSelector` é falso e `isMobile` é falso, ocupando ~72px de altura vazia.
+No arquivo `src/components/dashboard/SettingsModal.tsx`, na função `getPlanLabel` (linhas 69-82), alterar apenas os labels exibidos para os planos médicos:
 
-**Mudança:** envolver o `<div>` do header com condicional — só renderiza se houver pelo menos um conteúdo (botão de menu mobile OU dropdown):
-
-```tsx
-{(isMobile || showModelSelector) && (
-  <div className="p-4 flex items-center gap-2">
-    {isMobile && (<Button ...menu... />)}
-    {showModelSelector && (<DropdownMenu>...</DropdownMenu>)}
-  </div>
-)}
+```ts
+medico: 'Nura Pro',
+medical: 'Nura Pro',
 ```
 
-Assim, em desktop com dropdown desativado, o header desaparece completamente e o ScrollArea do chat ocupa todo o espaço. Em mobile, o header continua existindo (precisa do botão de menu).
+Sem alterar IDs, slugs, lógica, permissões ou integrações. Mudança puramente visual no card "Seus planos" do modal.
 
 **Arquivos alterados:**
-- `src/components/dashboard/ChatArea.tsx`
+- `src/components/dashboard/SettingsModal.tsx`
