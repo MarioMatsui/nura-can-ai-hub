@@ -69,11 +69,11 @@ export const SettingsModal = ({
   const getPlanLabel = (planType: string) => {
     const labels: Record<string, string> = {
       free: 'Gratuito',
-      medico: 'Médico',
+      medico: 'Nura Pro',
       juridico: 'Jurídico',
       veterinario: 'Veterinário',
       especialista: 'Especialista',
-      medical: 'Médico',
+      medical: 'Nura Pro',
       legal: 'Jurídico',
       veterinary: 'Veterinário',
       specialist: 'Especialista',
