@@ -33,7 +33,23 @@ const planDescriptions: Record<string, string> = {
 
 const PlanManagement = () => {
   const { planSettings, isLoading, togglePlanActive } = usePlanSettings();
+  const { getFlag, setFlag, isLoading: settingsLoading } = useAppSettings();
   const [updatingPlan, setUpdatingPlan] = useState<string | null>(null);
+  const [updatingFlag, setUpdatingFlag] = useState(false);
+  const showModelSelector = getFlag('show_model_selector', false);
+
+  const handleToggleModelSelector = async (next: boolean) => {
+    setUpdatingFlag(true);
+    try {
+      await setFlag('show_model_selector', next);
+      toast.success(next ? "Seletor de modelo ativado" : "Seletor de modelo ocultado");
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao atualizar configuração");
+    } finally {
+      setUpdatingFlag(false);
+    }
+  };
 
   const handleToggle = async (planCode: string, currentState: boolean) => {
     setUpdatingPlan(planCode);
