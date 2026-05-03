@@ -100,7 +100,8 @@ const Dashboard = () => {
     await Promise.all([
       fetchProfile(session.user.id),
       fetchConversations(session.user.id),
-      fetchSubscriptions(session.user.id)
+      fetchSubscriptions(session.user.id),
+      preloadAppSettings(),
     ]);
     setLoading(false);
   };
