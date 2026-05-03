@@ -432,11 +432,16 @@ const Pricing = ({ showFree = true }: PricingProps) => {
                     </CardContent>
                   </Card>
 
-                  {isAnnual && plan.monthlyPrice > 0 && (
-                    <div className="text-[11px] text-muted-foreground text-center mt-2">
-                      (R$ {plan.annualTotalPrice.toFixed(2).replace(".", ",")} cobrados anualmente)
-                    </div>
-                  )}
+                  <div
+                    className={`text-[11px] text-center mt-2 ${
+                      isAnnual && plan.monthlyPrice > 0
+                        ? "text-muted-foreground"
+                        : "invisible"
+                    }`}
+                    aria-hidden={!(isAnnual && plan.monthlyPrice > 0)}
+                  >
+                    (R$ {(plan.annualTotalPrice || 0).toFixed(2).replace(".", ",")} cobrados anualmente)
+                  </div>
                 </div>
               );
             })}
