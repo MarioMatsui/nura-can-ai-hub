@@ -93,6 +93,27 @@ const PlanManagement = () => {
         </p>
       </div>
 
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Configurações Globais</CardTitle>
+          <CardDescription>Flags que afetam o app inteiro.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between">
+          <div className="pr-4">
+            <h3 className="font-semibold">Exibir seletor de modelo no app</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Quando desativado, o dropdown de seleção de modelo (ex: "Médico") não aparece em /app.
+            </p>
+          </div>
+          <Switch
+            checked={showModelSelector}
+            onCheckedChange={handleToggleModelSelector}
+            disabled={updatingFlag || settingsLoading}
+            className="data-[state=checked]:bg-primary"
+          />
+        </CardContent>
+      </Card>
+
       <Card className="bg-amber-500/10 border-amber-500/30 mb-6">
         <CardContent className="flex items-start gap-3 pt-4">
           <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
