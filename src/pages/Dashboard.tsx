@@ -530,6 +530,7 @@ const Dashboard = () => {
               currentConversation={currentConversation}
               onSendMessage={handleSendMessage}
               onOpenSidebar={() => {}}
+              showModelSelector={showModelSelector}
             />
           )}
         </div>
