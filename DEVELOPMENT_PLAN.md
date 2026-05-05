@@ -61,21 +61,21 @@ The project is considered complete when **all** of the following are measurably 
 
 ### 1B. Frontend streaming (`src/components/dashboard/ChatArea.tsx` + `Dashboard.tsx`)
 
-- [ ] **1.10** — Locate the function that calls `chat-ai` (likely `onSendMessage` in [Dashboard.tsx](src/pages/Dashboard.tsx))
-- [ ] **1.11** — Replace `supabase.functions.invoke()` with `fetch()` returning `ReadableStream`
-- [ ] **1.12** — Add new state in `ChatArea`: `streamingMessage: { id, content }`
-- [ ] **1.13** — On each SSE chunk, append delta to `streamingMessage.content`
-- [ ] **1.14** — Throttle React updates to ~50ms intervals (use `requestAnimationFrame` or a 50ms buffer)
-- [ ] **1.15** — On `done` event, transfer `streamingMessage` into `messages` and clear streaming state
-- [ ] **1.16** — Add `AbortController` with a "Stop generating" button
-- [ ] **1.17** — Handle network errors and reconnection gracefully
+- [x] **1.10** — `handleSendMessage` in `Dashboard.tsx` was the right entry point
+- [x] **1.11** — Replaced `supabase.functions.invoke()` with `fetch(${SUPABASE_URL}/functions/v1/chat-ai, { signal })`. Branches on `Content-Type` (JSON for daily-limit/errors, SSE for stream)
+- [x] **1.12** — Added `streamingContent: string \| null` state in `Dashboard`, passed down as prop to `ChatArea` (cleaner: messages list lives in Dashboard, so streaming display follows)
+- [x] **1.13** — Each `data: {"delta":"..."}` event appends to a per-request `buffer` accumulator
+- [x] **1.14** — 50ms `setTimeout`-based throttle. `cancelFlush()` clears any pending flush on `done`, `error`, or `abort` to prevent stale state writes after we move on
+- [x] **1.15** — On `done`, optimistically appends `{ id: messageId, role: 'assistant', content: buffer, ... }` to `messages` using the messageId returned by the backend. Falls back to `fetchMessages()` if backend reported no messageId (insert failed server-side)
+- [x] **1.16** — `AbortController` ref. New `handleStopGenerating` exposed. ChatArea swaps the Send icon for a destructive Square (stop) button while `streamingContent !== null`
+- [x] **1.17** — try/catch around stream loop. AbortError swallowed (re-fetches messages to recover any partial content backend persisted). All other errors toast.
 
 ### 1C. Frontend memoization
 
-- [ ] **1.18** — Wrap [MarkdownMessage.tsx](src/components/dashboard/MarkdownMessage.tsx) in `React.memo`
-- [ ] **1.19** — Add `useMemo` for the message list rendering in [ChatArea.tsx:447-485](src/components/dashboard/ChatArea.tsx#L447)
-- [ ] **1.20** — Verify keys remain stable (already using `message.id` ✓)
-- [ ] **1.21** — Profile with React DevTools — confirm only the streaming message re-renders
+- [x] **1.18** — `MarkdownMessage` now wrapped with `memo()`. Renamed inner to `MarkdownMessageInner`
+- [x] **1.19** — `renderedMessages = useMemo(...)` in `ChatArea` — only recomputes when `messages` array reference changes
+- [x] **1.20** — Keys remain `message.id` (verified)
+- [ ] **1.21** — Profile with React DevTools — **manual step, deferred to staging deploy**
 
 ### 1D. Testing
 
@@ -247,7 +247,7 @@ If the client requests any of these, it becomes a separate Option 2 contract.
 - **Day 2 (2026-05-06):** Prepared all baseline measurement artifacts so Phase 0 can finish in one session once env access is granted. Created `baseline/` directory with: `test-questions.json` (20 representative queries, 4 per model_type), `queries.sql` (8 SQL queries covering latency p50/p95 by phase + model, cost from ai_usage, traffic pattern, error rate, knowledge base size), and `RUNBOOK.md` (step-by-step execution procedure with troubleshooting). Created `BASELINE_REPORT.md` template at root with placeholder structure ready to fill. **Blocker stands:** tasks 0.4/0.5/0.7 cannot proceed without staging or production access. Recommend client either (a) approve deploy of instrumented function to production (safe — fire-and-forget) or (b) provide staging credentials.
 - **Day 3 (2026-05-07):** Phase 0 still blocked on env access for measurement. Used the day for Phase 1 prep: read `Dashboard.tsx` end-to-end, traced full chat send lifecycle (user message INSERT, `functions.invoke('chat-ai')`, assistant message INSERT), audited `MarkdownMessage.tsx` for memoization compatibility (it's a pure function of props — `React.memo` will work cleanly). Documented current architecture, target streaming architecture, and concrete integration points in [`baseline/CURRENT_FLOW.md`](baseline/CURRENT_FLOW.md). Includes ASCII sequence diagrams (today vs. Phase 1), a per-file change matrix, edge-case inventory (daily-limit signaling, attachments, abort), risks introduced by streaming, and a pre-Phase 1 checklist. **Critical finding:** with streaming, the assistant message persistence should move from frontend (current `Dashboard.tsx:431`) to backend (after stream completes) — this is an architectural shift the plan implicitly required but didn't call out. Documented in section 6 of CURRENT_FLOW.md. Day 4 should start with this doc as the design spec.
 - **Day 4 (2026-05-08):** Phase 1 section 1A complete (backend streaming). All 9 tasks (1.1–1.9) implemented in [supabase/functions/chat-ai/index.ts](supabase/functions/chat-ai/index.ts). Key changes: (a) LLM call uses `stream: true` and returns SSE; (b) backend now owns assistant message persistence — INSERTs into `messages` after stream completes (was frontend's job); (c) `ai_usage` and `flushPerfMetrics` moved into the post-stream block, eliminating the duplicate `auth.getUser()`; (d) added `t_llm_first_token` to perf tracking + `duration_ttft_ms` column to metrics; (e) ReadableStream `cancel()` handler propagates client disconnect to upstream Gemini call. Pre-stream errors (429 rate-limit from gateway, 402 payment, 500 config) still return JSON so the client can branch on Content-Type. Daily-limit at line 749 untouched — still returns JSON with HTTP 200. **Frontend not yet updated** — currently the existing frontend will break because it expects `{ response: "..." }` JSON, but now gets SSE. Day 5+ will update Dashboard.tsx to consume the stream.
-- **Day 5:**
+- **Day 5 (2026-05-09):** Phase 1 frontend (sections 1B + 1C) complete. `Dashboard.tsx` `handleSendMessage` rewritten: pulls session token, opens streaming `fetch` with AbortController, branches on `Content-Type`, parses SSE `data:` events with line-buffering, accumulates content into a buffer, throttles state updates to 50ms via setTimeout. On `done` event, optimistically appends the assistant message using the `messageId` returned by backend — no extra DB round-trip. On error/abort, refetches messages to recover any partial content the backend persisted. `ChatArea` accepts `streamingContent` + `onStopGenerating` props; renders the in-flight bubble below the persisted messages, hides `TypingIndicator` once tokens arrive, swaps Send for a destructive Square stop button while streaming. `MarkdownMessage` wrapped in `memo()`. Persisted-message list memoized via `useMemo` keyed on `messages` reference. **TypeScript typecheck passes (`tsc --noEmit -p tsconfig.app.json`, exit 0)**. Phase 1 task 1.21 (DevTools profile) deferred until we can run the app against the deployed function. Remaining Phase 1 work: testing block 1D — all 7 manual tests require staging access.
 
 ### Week 2
 - **Day 6:**

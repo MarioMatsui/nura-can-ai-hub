@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
@@ -8,7 +9,7 @@ interface MarkdownMessageProps {
   className?: string;
 }
 
-export const MarkdownMessage = ({ content, className }: MarkdownMessageProps) => {
+const MarkdownMessageInner = ({ content, className }: MarkdownMessageProps) => {
   // Remove o sidecar JSON do Receituário+ antes do render. O bloco fica dentro
   // de um comentário HTML, mas o ```json``` interno seria interpretado como bloco
   // de código pelo react-markdown — o strip garante invisibilidade total.
@@ -135,3 +136,5 @@ export const MarkdownMessage = ({ content, className }: MarkdownMessageProps) =>
     </div>
   );
 };
+
+export const MarkdownMessage = memo(MarkdownMessageInner);

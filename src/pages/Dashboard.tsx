@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 import { ChatSidebar } from '@/components/dashboard/ChatSidebar';
 import { ChatArea } from '@/components/dashboard/ChatArea';
 import { SearchModal } from '@/components/dashboard/SearchModal';
@@ -48,6 +50,10 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [activeView, setActiveView] = useState<'chat' | 'prescription'>('chat');
+  // Phase 1: streaming state. null = not streaming. Empty string = streaming
+  // started but no token yet. Non-empty = streaming with content.
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const isMobile = useIsMobile();
   const { getFlag } = useAppSettings();
   const showModelSelector = getFlag('show_model_selector', false);
@@ -395,66 +401,163 @@ const Dashboard = () => {
       attachments: userMessage.attachments as any
     } as Message]);
 
-    // Call AI API and save response
+    // Call AI API and stream the response. The backend now returns
+    // text/event-stream on success and JSON on errors / daily-limit, so we
+    // branch on Content-Type after fetch returns. Persistence of the assistant
+    // message moved to the backend (see chat-ai/index.ts) — we only optimistically
+    // append the persisted row to local state when the `done` event arrives.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast({ title: 'Erro', description: 'Sessão expirada. Faça login novamente.', variant: 'destructive' });
+      navigate('/auth/login');
+      return;
+    }
+
+    // Tracks per-request streaming state. The throttle keeps React renders ≤20fps
+    // so very fast streams don't flood the reconciler.
+    let buffer = '';
+    let pendingFlush: ReturnType<typeof setTimeout> | null = null;
+    const scheduleFlush = () => {
+      if (pendingFlush) return;
+      pendingFlush = setTimeout(() => {
+        pendingFlush = null;
+        setStreamingContent(buffer);
+      }, 50);
+    };
+    const cancelFlush = () => {
+      if (pendingFlush) {
+        clearTimeout(pendingFlush);
+        pendingFlush = null;
+      }
+    };
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setStreamingContent(''); // signal: streaming started, no tokens yet
+
     try {
-      const response = await supabase.functions.invoke('chat-ai', {
-        body: {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/chat-ai`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           conversationId,
           message: content,
           modelType,
           attachments: attachments || [],
-        }
+        }),
+        signal: controller.signal,
       });
 
-      const aiData = response.data as any;
+      const contentType = response.headers.get('content-type') || '';
 
-      // Check for business logic errors (like daily limit)
-      if (aiData?.error === 'limite_diario') {
-        toast({
-          title: 'Limite Diário Atingido',
-          description: aiData.message || 'Você atingiu o limite de 5 mensagens por dia do plano gratuito.',
-          variant: 'destructive',
-        });
+      // JSON path = error or daily-limit. Same semantics as before.
+      if (contentType.includes('application/json')) {
+        const aiData = await response.json();
+
+        if (aiData?.error === 'limite_diario') {
+          toast({
+            title: 'Limite Diário Atingido',
+            description: aiData.message || 'Você atingiu o limite de 5 mensagens por dia do plano gratuito.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(aiData?.error || `chat-ai returned ${response.status}`);
+        }
+
+        // Unexpected JSON success — shouldn't happen with the new backend, but
+        // handle defensively in case the function is rolled back temporarily.
+        throw new Error('Unexpected JSON response from chat-ai');
+      }
+
+      if (!contentType.includes('text/event-stream') || !response.body) {
+        throw new Error(`Unexpected response type: ${contentType}`);
+      }
+
+      // SSE path — read chunks, parse `data: {...}` events.
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let lineBuffer = '';
+      let assistantMessageId: string | null = null;
+      let streamError: string | null = null;
+
+      streamLoop: while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        lineBuffer += value;
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const dataStr = trimmed.slice(5).trim();
+          if (!dataStr) continue;
+
+          try {
+            const event = JSON.parse(dataStr);
+
+            if (typeof event.delta === 'string') {
+              buffer += event.delta;
+              scheduleFlush();
+              continue;
+            }
+
+            if (event.error) {
+              streamError = event.error;
+              break streamLoop;
+            }
+
+            if (event.done) {
+              assistantMessageId = event.messageId ?? null;
+              break streamLoop;
+            }
+          } catch (parseErr) {
+            console.error('SSE parse error:', parseErr, 'data:', dataStr.slice(0, 200));
+          }
+        }
+      }
+
+      cancelFlush();
+
+      if (streamError) {
+        throw new Error(streamError);
+      }
+
+      // Optimistically append the assistant message using buffered content +
+      // the persisted messageId from the backend. Avoids an extra DB round-trip.
+      if (assistantMessageId && buffer.length > 0) {
+        setMessages(prev => [...prev, {
+          id: assistantMessageId!,
+          role: 'assistant',
+          content: buffer,
+          created_at: new Date().toISOString(),
+          attachments: [],
+        } as Message]);
+      } else if (buffer.length > 0) {
+        // Backend didn't return messageId (insert failed server-side). Refetch
+        // to recover an authoritative state.
+        await fetchMessages(conversationId);
+      }
+    } catch (error: any) {
+      cancelFlush();
+
+      if (error?.name === 'AbortError') {
+        // User cancelled — backend may still persist what it has. Refetch to
+        // pick up the partial message if it landed.
+        await fetchMessages(conversationId);
         return;
       }
 
-      // Check for other errors
-      if (response.error) {
-        throw response.error;
-      }
-
-      if (!aiData?.response) {
-        throw new Error('No response from AI');
-      }
-
-      // Save AI response to database
-      const { data: aiMessage, error: aiMsgError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          role: 'assistant',
-          content: aiData.response,
-        })
-        .select()
-        .single();
-
-      if (aiMsgError) {
-        throw aiMsgError;
-      }
-
-      if (aiMessage) {
-        setMessages(prev => [...prev, {
-          ...aiMessage,
-          attachments: aiMessage.attachments as any
-        } as Message]);
-      }
-    } catch (error: any) {
-      console.error('Error getting AI response:', error);
-      
-      // Check if it's a daily limit error
+      console.error('Error streaming AI response:', error);
       const errorMessage = error?.message || '';
-      const isLimitError = errorMessage.includes('limite diário');
-      
+      const isLimitError = errorMessage.includes('limite diário') || errorMessage.includes('limite_diario');
+
       if (!isLimitError) {
         toast({
           title: 'Erro',
@@ -462,7 +565,14 @@ const Dashboard = () => {
           variant: 'destructive',
         });
       }
+    } finally {
+      setStreamingContent(null);
+      abortRef.current = null;
     }
+  };
+
+  const handleStopGenerating = () => {
+    abortRef.current?.abort();
   };
 
   if (loading) {
@@ -531,6 +641,8 @@ const Dashboard = () => {
               onSendMessage={handleSendMessage}
               onOpenSidebar={() => {}}
               showModelSelector={showModelSelector}
+              streamingContent={streamingContent}
+              onStopGenerating={handleStopGenerating}
             />
           )}
         </div>

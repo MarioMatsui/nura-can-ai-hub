@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Send, Lock, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon, Menu } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Send, Lock, Sparkles, Stethoscope, Scale, PawPrint, GraduationCap, ChevronDown, Check, Paperclip, X, FileText, Image as ImageIcon, Menu, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -35,6 +35,8 @@ interface ChatAreaProps {
   onSendMessage: (content: string, modelType: 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist', attachments?: Attachment[]) => void;
   onOpenSidebar: () => void;
   showModelSelector?: boolean;
+  streamingContent?: string | null;
+  onStopGenerating?: () => void;
 }
 
 type ModelType = 'generic' | 'medical' | 'legal' | 'veterinary' | 'specialist';
@@ -48,7 +50,11 @@ export const ChatArea = ({
   onSendMessage,
   onOpenSidebar,
   showModelSelector = false,
+  streamingContent = null,
+  onStopGenerating,
 }: ChatAreaProps) => {
+  const isStreaming = streamingContent !== null;
+  const hasStreamedTokens = !!streamingContent && streamingContent.length > 0;
   const [inputValue, setInputValue] = useState('');
   const [selectedModel, setSelectedModel] = useState<ModelType>('generic');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -118,10 +124,10 @@ export const ChatArea = ({
     }, 100);
   };
 
-  // Scroll when messages change or when processing state changes
+  // Scroll when messages change, processing flips, or streaming content grows.
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isProcessing]);
+  }, [messages, isProcessing, streamingContent]);
 
   const hasAccess = (modelType: ModelType): boolean => {
     // Generic model is always available for everyone
@@ -328,6 +334,50 @@ export const ChatArea = ({
     .map(sub => planTypeMap[sub.plan_type] || sub.plan_type)
     .filter(Boolean);
 
+  // Memoize the persisted message list so streaming-driven re-renders don't
+  // re-walk every prior message through ReactMarkdown. The streaming bubble
+  // below renders separately and is the only one that updates per chunk.
+  const renderedMessages = useMemo(() => (
+    messages.map((message) => (
+      <div
+        id={`message-${message.id}`}
+        key={message.id}
+        className={cn(
+          'flex transition-all',
+          message.role === 'user' ? 'justify-end' : 'justify-start'
+        )}
+      >
+        <div
+          className={cn(
+            'max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4',
+            message.role === 'user'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted'
+          )}
+        >
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="mb-2 space-y-1">
+              {message.attachments.map((att: any, idx: number) => (
+                <div key={idx} className="flex items-center gap-2 text-xs opacity-80">
+                  {att.file_type?.startsWith('image/') ? (
+                    <ImageIcon className="h-3 w-3" />
+                  ) : (
+                    <FileText className="h-3 w-3" />
+                  )}
+                  <span className="truncate">{att.file_name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <MarkdownMessage
+            content={message.content}
+            className="text-sm sm:text-base"
+          />
+        </div>
+      </div>
+    ))
+  ), [messages]);
+
   return (
     <div className="flex-1 flex flex-col bg-background min-w-0">
       {/* Header with hamburger menu on mobile + model dropdown */}
@@ -445,47 +495,24 @@ export const ChatArea = ({
           </div>
         ) : (
           <div className="space-y-3 sm:space-y-4 max-w-4xl mx-auto">
-            {messages.map((message) => (
-              <div
-                id={`message-${message.id}`}
-                key={message.id}
-                className={cn(
-                  'flex transition-all',
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                )}
-              >
-                <div
-                  className={cn(
-                    'max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4',
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
-                  )}
-                >
-                  {message.attachments && message.attachments.length > 0 && (
-                    <div className="mb-2 space-y-1">
-                      {message.attachments.map((att: any, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs opacity-80">
-                          {att.file_type?.startsWith('image/') ? (
-                            <ImageIcon className="h-3 w-3" />
-                          ) : (
-                            <FileText className="h-3 w-3" />
-                          )}
-                          <span className="truncate">{att.file_name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <MarkdownMessage 
-                    content={message.content}
+            {renderedMessages}
+
+            {/* In-flight streamed assistant response. Once the stream completes,
+                Dashboard appends the persisted message to `messages` and clears
+                streamingContent, so this bubble is replaced atomically. */}
+            {hasStreamedTokens && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] sm:max-w-[75%] rounded-lg p-3 sm:p-4 bg-muted">
+                  <MarkdownMessage
+                    content={streamingContent!}
                     className="text-sm sm:text-base"
                   />
                 </div>
               </div>
-            ))}
-            
-            {/* AI Processing Indicator */}
-            {isProcessing && <TypingIndicator />}
+            )}
+
+            {/* Show typing dots only between send and first token. */}
+            {(isProcessing || isStreaming) && !hasStreamedTokens && <TypingIndicator />}
             {/* Invisible element to scroll to */}
             <div ref={messagesEndRef} />
           </div>
@@ -564,14 +591,26 @@ export const ChatArea = ({
               className="min-h-[50px] sm:min-h-[60px] max-h-[120px] sm:max-h-[200px] text-sm sm:text-base"
               disabled={!hasAccess(selectedModel) || isProcessing}
             />
-            <Button
-              onClick={handleSend}
-              size="icon"
-              className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
-              disabled={(!inputValue.trim() && attachments.length === 0) || !hasAccess(selectedModel) || isProcessing}
-            >
-              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
+            {isStreaming && onStopGenerating ? (
+              <Button
+                onClick={onStopGenerating}
+                size="icon"
+                variant="destructive"
+                className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
+                title="Parar geração"
+              >
+                <Square className="h-4 w-4 sm:h-5 sm:w-5" />
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSend}
+                size="icon"
+                className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px] flex-shrink-0"
+                disabled={(!inputValue.trim() && attachments.length === 0) || !hasAccess(selectedModel) || isProcessing}
+              >
+                <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+              </Button>
+            )}
           </div>
           {!hasAccess(selectedModel) && (
             <p className="text-xs text-muted-foreground text-center mt-2 px-2">
