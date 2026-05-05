@@ -104,16 +104,11 @@ The project is considered complete when **all** of the following are measurably 
 
 ### Tasks
 
-- [ ] **2.1** — Change default model in `chat-ai/index.ts:806`:
-  ```ts
-  const model = modelType === 'specialist'
-    ? 'google/gemini-2.5-pro'
-    : 'google/gemini-2.5-flash';
-  ```
-- [ ] **2.2** — Reduce `max_tokens` from `8000` to `2000` (line 971)
-- [ ] **2.3** — Add per-model temperature if relevance issues appear (defer if not needed)
-- [ ] **2.4** — Run a 10-query relevance comparison Flash vs. Pro on staging
-- [ ] **2.5** — Document the model decision in `BASELINE_REPORT.md` update
+- [x] **2.1** — Default model: Flash for non-specialist, Pro for specialist
+- [x] **2.2** — `max_tokens: 8000` → `2000`
+- [ ] **2.3** — Per-model temperature — deferred (no relevance issues observed yet)
+- [ ] **2.4** — Flash vs. Pro relevance comparison — **blocked on staging**
+- [ ] **2.5** — Document model decision in BASELINE_REPORT.md after 2.4
 
 ### Acceptance criteria
 - [ ] Output tokens/second measurably 3× higher than Phase 1
@@ -128,32 +123,18 @@ The project is considered complete when **all** of the following are measurably 
 
 ### 3A. Database
 
-- [ ] **3.1** — Create migration `supabase/migrations/<timestamp>_add_chunks_trgm_index.sql`:
-  ```sql
-  CREATE EXTENSION IF NOT EXISTS pg_trgm;
-  CREATE INDEX IF NOT EXISTS idx_chunks_content_trgm
-    ON document_chunks USING gin (content gin_trgm_ops);
-  ```
-- [ ] **3.2** — Apply migration to staging, measure index build time
-- [ ] **3.3** — Verify query plan uses the index (`EXPLAIN ANALYZE` on a typical RAG query)
+- [x] **3.1** — Migration created: `supabase/migrations/20260510000001_*.sql` (pg_trgm extension + GIN index on `document_chunks.content`)
+- [ ] **3.2** — Apply migration to staging — **blocked**
+- [ ] **3.3** — Verify query plan via `EXPLAIN ANALYZE` — **blocked**
 
 ### 3B. Backend RAG refactor (`chat-ai/index.ts:195-290`)
 
-- [ ] **3.4** — Reduce `generateSearchQueries()` cap from 15 → 5 (line 133)
-- [ ] **3.5** — Convert nested `for` loops in `searchKnowledgeBase()` to a single `Promise.all`:
-  ```ts
-  const queryPromises = [];
-  for (const kType of knowledgeTypes) {
-    for (const query of searchQueries) {
-      queryPromises.push(runQuery(kType, query));
-    }
-  }
-  const results = await Promise.all(queryPromises);
-  ```
-- [ ] **3.6** — Move chunk ranking/scoring after all results return
-- [ ] **3.7** — For `specialist`/`generic` (knowledge_type='all'), parallelize across all 3 types in same `Promise.all`
-- [ ] **3.8** — Cap total returned chunks at 8 (already done — keep)
-- [ ] **3.9** — Add timing log: `t_rag_done - t_rag_start` per request
+- [x] **3.4** — `generateSearchQueries()` cap: 15 → 5
+- [x] **3.5** — Nested loops collapsed into single `Promise.all`. Tasks built up as array, then awaited at once.
+- [x] **3.6** — Scoring/dedup runs in a single pass after `Promise.all` resolves
+- [x] **3.7** — `specialist` / `all` knowledge type already fans out across all 3 types in the same `Promise.all`
+- [x] **3.8** — Top-8 cap preserved
+- [x] **3.9** — Timing log already present (Phase 0 added `t_rag_done - t_rag_start`); same field reused
 
 ### 3C. Testing
 
@@ -250,7 +231,7 @@ If the client requests any of these, it becomes a separate Option 2 contract.
 - **Day 5 (2026-05-09):** Phase 1 frontend (sections 1B + 1C) complete. `Dashboard.tsx` `handleSendMessage` rewritten: pulls session token, opens streaming `fetch` with AbortController, branches on `Content-Type`, parses SSE `data:` events with line-buffering, accumulates content into a buffer, throttles state updates to 50ms via setTimeout. On `done` event, optimistically appends the assistant message using the `messageId` returned by backend — no extra DB round-trip. On error/abort, refetches messages to recover any partial content the backend persisted. `ChatArea` accepts `streamingContent` + `onStopGenerating` props; renders the in-flight bubble below the persisted messages, hides `TypingIndicator` once tokens arrive, swaps Send for a destructive Square stop button while streaming. `MarkdownMessage` wrapped in `memo()`. Persisted-message list memoized via `useMemo` keyed on `messages` reference. **TypeScript typecheck passes (`tsc --noEmit -p tsconfig.app.json`, exit 0)**. Phase 1 task 1.21 (DevTools profile) deferred until we can run the app against the deployed function. Remaining Phase 1 work: testing block 1D — all 7 manual tests require staging access.
 
 ### Week 2
-- **Day 6:**
+- **Day 6 (2026-05-10):** Phase 2 + Phase 3 backend changes complete. Phase 2: `model` switched to `gemini-2.5-flash` for non-specialist plans, `gemini-2.5-pro` retained for specialist; `max_tokens: 8000` → `2000`. Phase 3: `generateSearchQueries` capped at 5 (was 15); `searchKnowledgeBase` refactored from sequential nested loops into one `Promise.all` of all (kType, query) pairs, scoring/dedup runs in single post-await pass; new migration `20260510000001_*.sql` adds `pg_trgm` extension and GIN index on `document_chunks.content`. **Critical finding documented in BASELINE_REPORT.md §9.5:** pgvector + ivfflat are already installed and embeddings are populated — semantic search infrastructure exists but `searchKnowledgeBase` ignores it. Migrating to it would slash RAG latency to ~100ms but is out of Option 1 scope; flagged as the highest-value Option 2 candidate. Also flagged: untracked rename of `chunk_index` → `chunk_order` (drift between `migrations/` folder and live DB). Phase 1 testing block 1D and Phase 2/3 staging-dependent tasks all still blocked on env access.
 - **Day 7:**
 - **Day 8:**
 - **Day 9:**

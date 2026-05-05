@@ -153,6 +153,25 @@ ___        | ___        | ___    | ___    | ___    | ___    | ___
 
 ---
 
+## 9.5. Significant finding — pgvector is already installed (added Day 6)
+
+While auditing for the trgm index migration, I discovered that the database already has **pgvector + ivfflat installed** and the `document_chunks.embedding` column is populated with `vector(1536)` (OpenAI-format embeddings). A working `search_similar_chunks(query_embedding, knowledge_type, match_count)` Postgres function also exists.
+
+**The current `searchKnowledgeBase()` in `chat-ai/index.ts` ignores all of this** and uses ILIKE-based text matching instead.
+
+**Implication:** the "definitive RAG fix" (semantic search via pgvector) is much cheaper than the original Option 2 estimate suggested — most of the setup work (extension install, embedding column, backfill, ivfflat index) is already done. The remaining work is:
+
+1. Generate query embeddings at request time (one Gemini/OpenAI call, ~100-200ms)
+2. Replace `searchKnowledgeBase()` with a single call to `search_similar_chunks()`
+3. Verify embeddings are still populated for all current chunks
+4. Drop the ILIKE-based `extractKeyTerms` / `expandTermWithAliases` machinery
+
+Estimated effort: **~1 day instead of 3-5 days**. This is a strong candidate to add to a follow-up Option 2 contract.
+
+Also discovered: the `document_chunks.chunk_index` column was renamed to `chunk_order` at some point but no migration in the repo records the change. There is drift between `migrations/` and the live DB. Not a blocker for Option 1 work but worth flagging for any future schema work.
+
+---
+
 ## 10. Conclusions & recommendation
 
 _(Fill in 2–3 sentences after data is collected. Example template:)_

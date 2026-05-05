@@ -130,7 +130,7 @@ function generateSearchQueries(message: string): string[] {
     }
   }
   
-  return Array.from(queries).slice(0, 15); // Limita a 15 queries
+  return Array.from(queries).slice(0, 5); // Phase 3: capped at 5 (was 15) to reduce DB load
 }
 
 // =============================================================================
@@ -199,23 +199,29 @@ async function searchKnowledgeBase(
 ): Promise<ChunkResult[]> {
   const searchQueries = generateSearchQueries(message);
   console.log(`Generated ${searchQueries.length} search queries:`, searchQueries.slice(0, 5));
-  
-  const knowledgeTypes = knowledgeType === 'all' 
-    ? ['medical', 'legal', 'veterinary'] 
+
+  const knowledgeTypes = knowledgeType === 'all'
+    ? ['medical', 'legal', 'veterinary']
     : [knowledgeType];
-  
-  const allResults: Map<string, ChunkResult> = new Map();
-  
+
+  // Phase 3: fan out every (kType, query) pair in parallel. With Promise.all,
+  // total RAG time becomes max(query_ms) instead of sum(query_ms). With the
+  // pg_trgm GIN index on document_chunks.content (added in the same phase),
+  // each ILIKE is also faster individually. Scoring/dedup happens in a single
+  // pass after all results return.
+  type RawSearchResult = { kType: string; queryTerms: string[]; chunks: any[] };
+
+  const tasks: Promise<RawSearchResult>[] = [];
+
   for (const kType of knowledgeTypes) {
     for (const query of searchQueries) {
-      try {
-        // Busca por texto usando ILIKE com múltiplos termos
-        const queryTerms = query.split(' ').filter(t => t.length > 2);
-        
-        if (queryTerms.length === 0) continue;
-        
-        // Constrói busca com OR para cada termo
-        let queryBuilder = supabase
+      const queryTerms = query.split(' ').filter(t => t.length > 2);
+      if (queryTerms.length === 0) continue;
+
+      const orConditions = queryTerms.map(term => `content.ilike.%${term}%`).join(',');
+
+      tasks.push(
+        supabase
           .from('document_chunks')
           .select(`
             id,
@@ -223,69 +229,68 @@ async function searchKnowledgeBase(
             chunk_order,
             knowledge_documents!inner(id, title, knowledge_type)
           `)
-          .eq('knowledge_documents.knowledge_type', kType);
-        
-        // Busca por qualquer termo no conteúdo
-        const orConditions = queryTerms.map(term => `content.ilike.%${term}%`).join(',');
-        queryBuilder = queryBuilder.or(orConditions);
-        
-        const { data: chunks, error } = await queryBuilder.limit(5);
-        
-        if (error) {
-          console.error(`Search error for query "${query}":`, error);
-          continue;
-        }
-        
-        if (chunks && chunks.length > 0) {
-          for (const chunk of chunks) {
-            const chunkId = chunk.id;
-            
-            // Calcula score de relevância baseado em quantos termos aparecem
-            let score = 0;
-            const contentLower = chunk.content.toLowerCase();
-            
-            for (const term of queryTerms) {
-              const termLower = term.toLowerCase();
-              // Conta ocorrências do termo
-              const matches = (contentLower.match(new RegExp(termLower, 'g')) || []).length;
-              score += matches;
-              
-              // Bonus para termos expandidos (aliases)
-              const expandedTerms = expandTermWithAliases(term);
-              for (const expTerm of expandedTerms) {
-                if (expTerm !== termLower && contentLower.includes(expTerm)) {
-                  score += 0.5;
-                }
-              }
+          .eq('knowledge_documents.knowledge_type', kType)
+          .or(orConditions)
+          .limit(5)
+          .then(({ data, error }: { data: any; error: any }) => {
+            if (error) {
+              console.error(`Search error for query "${query}" (${kType}):`, error);
+              return { kType, queryTerms, chunks: [] };
             }
-            
-            // Atualiza ou adiciona resultado
-            const existing = allResults.get(chunkId);
-            if (!existing || existing.relevance_score < score) {
-              allResults.set(chunkId, {
-                id: chunkId,
-                content: chunk.content,
-                document_title: chunk.knowledge_documents?.title || 'Documento',
-                chunk_order: chunk.chunk_order,
-                relevance_score: score,
-                knowledge_type: kType
-              });
-            }
+            return { kType, queryTerms, chunks: data || [] };
+          })
+          .catch((err: any) => {
+            console.error(`Error in search query "${query}" (${kType}):`, err);
+            return { kType, queryTerms, chunks: [] };
+          })
+      );
+    }
+  }
+
+  const allResults = await Promise.all(tasks);
+
+  // Score and dedupe in one pass.
+  const chunkMap: Map<string, ChunkResult> = new Map();
+
+  for (const { kType, queryTerms, chunks } of allResults) {
+    for (const chunk of chunks) {
+      const chunkId = chunk.id;
+      let score = 0;
+      const contentLower = chunk.content.toLowerCase();
+
+      for (const term of queryTerms) {
+        const termLower = term.toLowerCase();
+        const matches = (contentLower.match(new RegExp(termLower, 'g')) || []).length;
+        score += matches;
+
+        const expandedTerms = expandTermWithAliases(term);
+        for (const expTerm of expandedTerms) {
+          if (expTerm !== termLower && contentLower.includes(expTerm)) {
+            score += 0.5;
           }
         }
-      } catch (err) {
-        console.error(`Error in search query "${query}":`, err);
+      }
+
+      const existing = chunkMap.get(chunkId);
+      if (!existing || existing.relevance_score < score) {
+        chunkMap.set(chunkId, {
+          id: chunkId,
+          content: chunk.content,
+          document_title: chunk.knowledge_documents?.title || 'Documento',
+          chunk_order: chunk.chunk_order,
+          relevance_score: score,
+          knowledge_type: kType,
+        });
       }
     }
   }
-  
-  // Ordena por relevância e retorna os melhores
-  const results = Array.from(allResults.values())
+
+  const results = Array.from(chunkMap.values())
     .sort((a, b) => b.relevance_score - a.relevance_score)
-    .slice(0, 8); // Top 8 chunks mais relevantes
-  
-  console.log(`RAG search found ${allResults.size} unique chunks, returning top ${results.length}`);
-  
+    .slice(0, 8);
+
+  console.log(`RAG search ran ${tasks.length} parallel queries, found ${chunkMap.size} unique chunks, returning top ${results.length}`);
+
   return results;
 }
 
@@ -835,7 +840,11 @@ serve(async (req) => {
     // PROCESSAMENTO DE ANEXOS DO USUÁRIO
     // ==========================================================================
     
-    const model = 'google/gemini-2.5-pro';
+    // Phase 2: Flash for single-domain queries (3-5x faster, ~75% cheaper).
+    // Reserve Pro for `specialist`, which integrates medical + legal + veterinary.
+    const model = modelType === 'specialist'
+      ? 'google/gemini-2.5-pro'
+      : 'google/gemini-2.5-flash';
     perf.model = model;
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
@@ -1002,7 +1011,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: model,
         messages: geminiMessages,
-        max_tokens: 8000,
+        max_tokens: 2000,
         stream: true,
       }),
     });
