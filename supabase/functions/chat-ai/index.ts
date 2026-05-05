@@ -588,6 +588,28 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Phase 0 perf instrumentation — captured per request, persisted at end (best-effort).
+  const perf = {
+    t_request_start: Date.now(),
+    t_auth_done: 0,
+    t_rag_start: 0,
+    t_rag_done: 0,
+    t_llm_start: 0,
+    t_llm_done: 0,
+    t_response_sent: 0,
+    rag_chunk_count: 0,
+    attachment_count: 0,
+    tokens_input: 0,
+    tokens_output: 0,
+    model: '',
+    model_type: '',
+    knowledge_type: '',
+    conversation_id: null as string | null,
+    user_id: null as string | null,
+    status_code: 0,
+    error: null as string | null,
+  };
+
   try {
     // Validate authorization header first
     const authHeader = req.headers.get('Authorization');
@@ -600,6 +622,9 @@ serve(async (req) => {
     }
 
     const { conversationId, message, modelType, attachments = [] } = await req.json();
+    perf.conversation_id = conversationId ?? null;
+    perf.model_type = modelType ?? '';
+    perf.attachment_count = Array.isArray(attachments) ? attachments.length : 0;
 
     if (!conversationId || !message || !modelType) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -634,6 +659,8 @@ serve(async (req) => {
     }
 
     const authenticatedUserId = userData.user.id;
+    perf.user_id = authenticatedUserId;
+    perf.t_auth_done = Date.now();
 
     // Get conversation to check user_id
     const { data: conversation, error: convError } = await supabase
@@ -749,14 +776,18 @@ serve(async (req) => {
     
     let ragContext = "";
     const knowledgeType = getKnowledgeType(modelType);
-    
+    perf.knowledge_type = knowledgeType ?? '';
+
     if (knowledgeType) {
       try {
         console.log(`\n=== RAG SEARCH ===`);
         console.log(`Model type: ${modelType}, Knowledge type: ${knowledgeType}`);
         console.log(`User message: "${message.substring(0, 100)}..."`);
-        
+
+        perf.t_rag_start = Date.now();
         const relevantChunks = await searchKnowledgeBase(supabase, message, knowledgeType);
+        perf.t_rag_done = Date.now();
+        perf.rag_chunk_count = relevantChunks.length;
         
         if (relevantChunks.length > 0) {
           console.log(`Found ${relevantChunks.length} relevant chunks from knowledge base`);
@@ -804,6 +835,7 @@ serve(async (req) => {
     // ==========================================================================
     
     const model = 'google/gemini-2.5-pro';
+    perf.model = model;
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
     let attachmentContext = "";
@@ -959,6 +991,7 @@ serve(async (req) => {
     console.log(`- System prompt length: ${systemContent.length} chars`);
 
     // Call Lovable AI Gateway
+    perf.t_llm_start = Date.now();
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -971,6 +1004,7 @@ serve(async (req) => {
         max_tokens: 8000,
       }),
     });
+    perf.t_llm_done = Date.now();
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -1003,6 +1037,8 @@ serve(async (req) => {
       const usage = data.usage || {};
       const tokensInput = usage.prompt_tokens || 0;
       const tokensOutput = usage.completion_tokens || 0;
+      perf.tokens_input = tokensInput;
+      perf.tokens_output = tokensOutput;
       
       const costPer1kInputTokens = 0.00015;
       const costPer1kOutputTokens = 0.0006;
@@ -1035,6 +1071,10 @@ serve(async (req) => {
       console.error('Error recording AI usage:', usageError);
     }
 
+    perf.t_response_sent = Date.now();
+    perf.status_code = 200;
+    flushPerfMetrics(perf);
+
     return new Response(JSON.stringify({ response: aiResponse }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1042,11 +1082,97 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in chat-ai function:', error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    perf.t_response_sent = Date.now();
+    perf.status_code = 500;
+    perf.error = error instanceof Error ? error.message : 'Unknown error';
+    flushPerfMetrics(perf);
+    return new Response(JSON.stringify({
+      error: error instanceof Error ? error.message : 'Unknown error'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
+
+// =============================================================================
+// PERF METRICS FLUSH (Phase 0 instrumentation)
+// =============================================================================
+
+interface PerfPayload {
+  t_request_start: number;
+  t_auth_done: number;
+  t_rag_start: number;
+  t_rag_done: number;
+  t_llm_start: number;
+  t_llm_done: number;
+  t_response_sent: number;
+  rag_chunk_count: number;
+  attachment_count: number;
+  tokens_input: number;
+  tokens_output: number;
+  model: string;
+  model_type: string;
+  knowledge_type: string;
+  conversation_id: string | null;
+  user_id: string | null;
+  status_code: number;
+  error: string | null;
+}
+
+// Fire-and-forget. Logs a structured summary line and persists to chat_perf_metrics.
+// Never throws — failure to log perf must not affect user response.
+function flushPerfMetrics(p: PerfPayload): void {
+  const total = p.t_response_sent ? p.t_response_sent - p.t_request_start : 0;
+  const auth = p.t_auth_done ? p.t_auth_done - p.t_request_start : 0;
+  const rag = p.t_rag_start && p.t_rag_done ? p.t_rag_done - p.t_rag_start : 0;
+  const llm = p.t_llm_start && p.t_llm_done ? p.t_llm_done - p.t_llm_start : 0;
+  const responsePhase = p.t_llm_done && p.t_response_sent ? p.t_response_sent - p.t_llm_done : 0;
+
+  console.log(JSON.stringify({
+    perf: 'chat-ai',
+    total_ms: total,
+    auth_ms: auth,
+    rag_ms: rag,
+    llm_ms: llm,
+    response_ms: responsePhase,
+    rag_chunks: p.rag_chunk_count,
+    attachments: p.attachment_count,
+    tokens_in: p.tokens_input,
+    tokens_out: p.tokens_output,
+    model_type: p.model_type,
+    status: p.status_code,
+    error: p.error,
+  }));
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseServiceKey) return;
+    const client = createClient(supabaseUrl, supabaseServiceKey);
+    // Don't await — fire and forget
+    client.from('chat_perf_metrics').insert({
+      conversation_id: p.conversation_id,
+      user_id: p.user_id,
+      model: p.model || null,
+      model_type: p.model_type || null,
+      knowledge_type: p.knowledge_type || null,
+      t_request_start: new Date(p.t_request_start).toISOString(),
+      duration_total_ms: total || null,
+      duration_auth_ms: auth || null,
+      duration_rag_ms: rag || null,
+      duration_llm_ms: llm || null,
+      duration_response_ms: responsePhase || null,
+      rag_chunk_count: p.rag_chunk_count,
+      attachment_count: p.attachment_count,
+      tokens_input: p.tokens_input,
+      tokens_output: p.tokens_output,
+      status_code: p.status_code || null,
+      error: p.error,
+    }).then(({ error }) => {
+      if (error) console.error('perf insert error:', error.message);
+    });
+  } catch (e) {
+    console.error('perf flush exception:', e);
+  }
+}
