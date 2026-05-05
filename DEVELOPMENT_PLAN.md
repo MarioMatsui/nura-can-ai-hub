@@ -49,17 +49,15 @@ The project is considered complete when **all** of the following are measurably 
 
 ### 1A. Backend streaming (`supabase/functions/chat-ai/index.ts`)
 
-- [ ] **1.1** — Add `stream: true` to the Lovable AI Gateway request body (line ~968)
-- [ ] **1.2** — Replace `await response.json()` (line 998) with streaming response parser:
-  - Parse SSE chunks from `response.body.getReader()`
-  - Forward each token chunk to client as `data: {"delta":"..."}\n\n`
-- [ ] **1.3** — Switch response from `application/json` to `text/event-stream`
-- [ ] **1.4** — Buffer the full response in memory while streaming
-- [ ] **1.5** — After stream completes, persist final assembled message to `messages` table
-- [ ] **1.6** — Send final SSE event `data: {"done":true,"usage":{...}}\n\n`
-- [ ] **1.7** — Move `ai_usage` insert (line ~1024) into the post-stream block
-- [ ] **1.8** — Eliminate the duplicate `auth.getUser()` call at line 1021 by reusing `userData.user` from earlier
-- [ ] **1.9** — Handle stream errors: forward to client as `data: {"error":"..."}\n\n` then close
+- [x] **1.1** — Added `stream: true` to gateway request body
+- [x] **1.2** — Replaced `await response.json()` with `ReadableStream` + `getReader()` SSE parser; chunks forwarded as `data: {"delta":"..."}\n\n`
+- [x] **1.3** — Success path returns `text/event-stream`; pre-stream errors (429/402/500-config) stay JSON so client can branch on Content-Type
+- [x] **1.4** — Full content accumulated in `fullContent` while streaming
+- [x] **1.5** — Backend now INSERTs the assistant `messages` row after stream completes (architectural shift from frontend ownership)
+- [x] **1.6** — Final SSE event: `data: {"done":true,"messageId":"<uuid>","usage":{...}}\n\n`
+- [x] **1.7** — `ai_usage` insert moved inside the stream `start` callback, after the LLM stream completes
+- [x] **1.8** — Duplicate `auth.getUser()` eliminated; reuses `authenticatedUserId` from outer scope
+- [x] **1.9** — Stream errors caught, sent as `data: {"error":"..."}\n\n`, controller closed via `finally`. `cancel()` handler calls `upstream.body.cancel()` if client disconnects.
 
 ### 1B. Frontend streaming (`src/components/dashboard/ChatArea.tsx` + `Dashboard.tsx`)
 
@@ -248,7 +246,7 @@ If the client requests any of these, it becomes a separate Option 2 contract.
 - **Day 1 (2026-05-05):** Kickoff. Branch `feat/perf-optimization` already in place. Added perf instrumentation to `chat-ai/index.ts` (request/auth/RAG/LLM/response timing, token counts, RAG chunk count). Created migration `20260505000001_*.sql` adding `chat_perf_metrics` table with admin-readable RLS. Helper `flushPerfMetrics` is fire-and-forget — does not block user response. Staging env (task 0.2) is blocked pending client confirmation.
 - **Day 2 (2026-05-06):** Prepared all baseline measurement artifacts so Phase 0 can finish in one session once env access is granted. Created `baseline/` directory with: `test-questions.json` (20 representative queries, 4 per model_type), `queries.sql` (8 SQL queries covering latency p50/p95 by phase + model, cost from ai_usage, traffic pattern, error rate, knowledge base size), and `RUNBOOK.md` (step-by-step execution procedure with troubleshooting). Created `BASELINE_REPORT.md` template at root with placeholder structure ready to fill. **Blocker stands:** tasks 0.4/0.5/0.7 cannot proceed without staging or production access. Recommend client either (a) approve deploy of instrumented function to production (safe — fire-and-forget) or (b) provide staging credentials.
 - **Day 3 (2026-05-07):** Phase 0 still blocked on env access for measurement. Used the day for Phase 1 prep: read `Dashboard.tsx` end-to-end, traced full chat send lifecycle (user message INSERT, `functions.invoke('chat-ai')`, assistant message INSERT), audited `MarkdownMessage.tsx` for memoization compatibility (it's a pure function of props — `React.memo` will work cleanly). Documented current architecture, target streaming architecture, and concrete integration points in [`baseline/CURRENT_FLOW.md`](baseline/CURRENT_FLOW.md). Includes ASCII sequence diagrams (today vs. Phase 1), a per-file change matrix, edge-case inventory (daily-limit signaling, attachments, abort), risks introduced by streaming, and a pre-Phase 1 checklist. **Critical finding:** with streaming, the assistant message persistence should move from frontend (current `Dashboard.tsx:431`) to backend (after stream completes) — this is an architectural shift the plan implicitly required but didn't call out. Documented in section 6 of CURRENT_FLOW.md. Day 4 should start with this doc as the design spec.
-- **Day 4:**
+- **Day 4 (2026-05-08):** Phase 1 section 1A complete (backend streaming). All 9 tasks (1.1–1.9) implemented in [supabase/functions/chat-ai/index.ts](supabase/functions/chat-ai/index.ts). Key changes: (a) LLM call uses `stream: true` and returns SSE; (b) backend now owns assistant message persistence — INSERTs into `messages` after stream completes (was frontend's job); (c) `ai_usage` and `flushPerfMetrics` moved into the post-stream block, eliminating the duplicate `auth.getUser()`; (d) added `t_llm_first_token` to perf tracking + `duration_ttft_ms` column to metrics; (e) ReadableStream `cancel()` handler propagates client disconnect to upstream Gemini call. Pre-stream errors (429 rate-limit from gateway, 402 payment, 500 config) still return JSON so the client can branch on Content-Type. Daily-limit at line 749 untouched — still returns JSON with HTTP 200. **Frontend not yet updated** — currently the existing frontend will break because it expects `{ response: "..." }` JSON, but now gets SSE. Day 5+ will update Dashboard.tsx to consume the stream.
 - **Day 5:**
 
 ### Week 2
