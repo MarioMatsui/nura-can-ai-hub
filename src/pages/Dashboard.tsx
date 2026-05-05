@@ -396,7 +396,7 @@ const Dashboard = () => {
       return;
     }
 
-    setMessages([...messages, {
+    setMessages(prev => [...prev, {
       ...userMessage,
       attachments: userMessage.attachments as any
     } as Message]);
