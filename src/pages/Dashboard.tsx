@@ -529,20 +529,27 @@ const Dashboard = () => {
         throw new Error(streamError);
       }
 
-      // Optimistically append the assistant message using buffered content +
-      // the persisted messageId from the backend. Avoids an extra DB round-trip.
-      if (assistantMessageId && buffer.length > 0) {
+      // Always show the response if we received any tokens. If the backend
+      // returned a messageId, use it (matches the persisted row, survives
+      // refresh). If not, the DB INSERT failed server-side — keep the response
+      // visible with a synthetic id so the user sees the answer they waited
+      // for, and warn that history may not persist on refresh.
+      if (buffer.length > 0) {
         setMessages(prev => [...prev, {
-          id: assistantMessageId!,
+          id: assistantMessageId ?? `local-${Date.now()}`,
           role: 'assistant',
           content: buffer,
           created_at: new Date().toISOString(),
           attachments: [],
         } as Message]);
-      } else if (buffer.length > 0) {
-        // Backend didn't return messageId (insert failed server-side). Refetch
-        // to recover an authoritative state.
-        await fetchMessages(conversationId);
+
+        if (!assistantMessageId) {
+          toast({
+            title: 'Aviso',
+            description: 'Resposta exibida mas não foi salva no histórico. Recarregue se quiser tentar novamente.',
+            variant: 'destructive',
+          });
+        }
       }
     } catch (error: any) {
       cancelFlush();
