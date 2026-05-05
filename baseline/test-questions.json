@@ -1,0 +1,106 @@
+{
+  "purpose": "20 representative queries used to baseline chat-ai latency. 4 per model_type. Submit each at least once on staging/prod after the perf instrumentation is deployed.",
+  "instructions": "For each entry, create a fresh conversation in the matching plan, send the question text via the normal chat UI (not the edge function directly), then wait for the response. Repeat the full set 3 times to get a usable sample (~60 rows in chat_perf_metrics).",
+  "queries": [
+    {
+      "id": "gen-01",
+      "model_type": "generic",
+      "question": "Quais são os principais canabinoides da cannabis medicinal e suas funções?"
+    },
+    {
+      "id": "gen-02",
+      "model_type": "generic",
+      "question": "Como o CBD atua no sistema endocanabinoide?"
+    },
+    {
+      "id": "gen-03",
+      "model_type": "generic",
+      "question": "Quais doenças são mais estudadas no contexto da cannabis medicinal?"
+    },
+    {
+      "id": "gen-04",
+      "model_type": "generic",
+      "question": "Existem efeitos colaterais conhecidos do uso terapêutico de CBD?"
+    },
+    {
+      "id": "med-01",
+      "model_type": "medical",
+      "question": "Qual a dosagem recomendada de CBD para epilepsia refratária em adultos, segundo ensaios clínicos recentes?"
+    },
+    {
+      "id": "med-02",
+      "model_type": "medical",
+      "question": "Quais são as interações medicamentosas conhecidas entre CBD e antiepilépticos como clobazam e valproato?"
+    },
+    {
+      "id": "med-03",
+      "model_type": "medical",
+      "question": "Que evidências de meta-análises existem para o uso de THC em dor neuropática crônica?"
+    },
+    {
+      "id": "med-04",
+      "model_type": "medical",
+      "question": "Como a farmacocinética do CBD difere entre administração oral, sublingual e inalatória?"
+    },
+    {
+      "id": "leg-01",
+      "model_type": "legal",
+      "question": "Quais são os requisitos da RDC 660/2022 da ANVISA para importação de cannabis medicinal por pessoa física?"
+    },
+    {
+      "id": "leg-02",
+      "model_type": "legal",
+      "question": "Como funciona o habeas corpus preventivo para cultivo terapêutico de cannabis no Brasil?"
+    },
+    {
+      "id": "leg-03",
+      "model_type": "legal",
+      "question": "Quais decisões recentes do STJ existem sobre cannabis medicinal e cultivo associativo?"
+    },
+    {
+      "id": "leg-04",
+      "model_type": "legal",
+      "question": "Pacientes podem importar cannabis medicinal sem autorização individual prévia da ANVISA? Em que condições?"
+    },
+    {
+      "id": "vet-01",
+      "model_type": "veterinary",
+      "question": "É seguro administrar CBD em cães com osteoartrite? Quais são as evidências de eficácia?"
+    },
+    {
+      "id": "vet-02",
+      "model_type": "veterinary",
+      "question": "Qual a dosagem inicial recomendada de CBD para gatos com ansiedade?"
+    },
+    {
+      "id": "vet-03",
+      "model_type": "veterinary",
+      "question": "Existem estudos clínicos sobre uso de CBD em epilepsia canina refratária?"
+    },
+    {
+      "id": "vet-04",
+      "model_type": "veterinary",
+      "question": "Quais regulamentações do CFMV e MAPA se aplicam ao uso de cannabis em animais no Brasil?"
+    },
+    {
+      "id": "spe-01",
+      "model_type": "specialist",
+      "question": "Como integrar evidência clínica e regulamentação da ANVISA para iniciar tratamento de paciente oncológico com cannabis medicinal?"
+    },
+    {
+      "id": "spe-02",
+      "model_type": "specialist",
+      "question": "Qual o protocolo completo — clínico, farmacológico e legal — para prescrição de CBD em criança com epilepsia refratária?"
+    },
+    {
+      "id": "spe-03",
+      "model_type": "specialist",
+      "question": "Como combinar farmacologia veterinária e a regulação do MAPA para uso de canabinoides em felinos domésticos?"
+    },
+    {
+      "id": "spe-04",
+      "model_type": "specialist",
+      "question": "Quais são as principais meta-análises sobre cannabis medicinal publicadas após 2023, e como sua jurisprudência impacta a prática brasileira?"
+    }
+  ]
+}

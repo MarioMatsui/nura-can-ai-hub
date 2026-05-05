@@ -35,13 +35,9 @@ The project is considered complete when **all** of the following are measurably 
 - [x] **0.3** — Add timing instrumentation to `chat-ai/index.ts`:
   - Log `t_request_start`, `t_auth_done`, `t_rag_start`, `t_rag_done`, `t_llm_start`, `t_llm_done`, `t_response_sent` (first_token deferred to Phase 1 once streaming exists)
   - Persisted to new `chat_perf_metrics` table (migration `20260505000001_*`)
-- [ ] **0.4** — Run 20 representative queries against staging, capture metrics
-- [ ] **0.5** — Query `ai_usage` table for current cost baseline (last 30 days)
-- [ ] **0.6** — Write `BASELINE_REPORT.md` with:
-  - p50/p95 of each timing phase
-  - Average tokens in/out per request
-  - Average cost per message
-  - Top 3 bottlenecks (annotated with file:line)
+- [ ] **0.4** — Run 20 representative queries against staging, capture metrics — **prepared:** [`baseline/test-questions.json`](baseline/test-questions.json), procedure in [`baseline/RUNBOOK.md`](baseline/RUNBOOK.md). Execution blocked on env access (0.2).
+- [ ] **0.5** — Query `ai_usage` table for current cost baseline (last 30 days) — **prepared:** SQL ready in [`baseline/queries.sql`](baseline/queries.sql) (Q3, Q4). Execution blocked on env access.
+- [x] **0.6** — Write `BASELINE_REPORT.md` (template at repo root). Numbers will be filled in after 0.4/0.5 run.
 - [ ] **0.7** — Send report to client. **Hold for go-ahead before Phase 1.**
 
 
@@ -250,7 +246,7 @@ If the client requests any of these, it becomes a separate Option 2 contract.
 
 ### Week 1
 - **Day 1 (2026-05-05):** Kickoff. Branch `feat/perf-optimization` already in place. Added perf instrumentation to `chat-ai/index.ts` (request/auth/RAG/LLM/response timing, token counts, RAG chunk count). Created migration `20260505000001_*.sql` adding `chat_perf_metrics` table with admin-readable RLS. Helper `flushPerfMetrics` is fire-and-forget — does not block user response. Staging env (task 0.2) is blocked pending client confirmation.
-- **Day 2:**
+- **Day 2 (2026-05-06):** Prepared all baseline measurement artifacts so Phase 0 can finish in one session once env access is granted. Created `baseline/` directory with: `test-questions.json` (20 representative queries, 4 per model_type), `queries.sql` (8 SQL queries covering latency p50/p95 by phase + model, cost from ai_usage, traffic pattern, error rate, knowledge base size), and `RUNBOOK.md` (step-by-step execution procedure with troubleshooting). Created `BASELINE_REPORT.md` template at root with placeholder structure ready to fill. **Blocker stands:** tasks 0.4/0.5/0.7 cannot proceed without staging or production access. Recommend client either (a) approve deploy of instrumented function to production (safe — fire-and-forget) or (b) provide staging credentials.
 - **Day 3:**
 - **Day 4:**
 - **Day 5:**
