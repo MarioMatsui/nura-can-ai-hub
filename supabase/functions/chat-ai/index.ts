@@ -130,7 +130,7 @@ function generateSearchQueries(message: string): string[] {
     }
   }
   
-  return Array.from(queries).slice(0, 15); // Limita a 15 queries
+  return Array.from(queries).slice(0, 5); // Phase 3: capped at 5 (was 15) to reduce DB load
 }
 
 // =============================================================================
@@ -199,23 +199,29 @@ async function searchKnowledgeBase(
 ): Promise<ChunkResult[]> {
   const searchQueries = generateSearchQueries(message);
   console.log(`Generated ${searchQueries.length} search queries:`, searchQueries.slice(0, 5));
-  
-  const knowledgeTypes = knowledgeType === 'all' 
-    ? ['medical', 'legal', 'veterinary'] 
+
+  const knowledgeTypes = knowledgeType === 'all'
+    ? ['medical', 'legal', 'veterinary']
     : [knowledgeType];
-  
-  const allResults: Map<string, ChunkResult> = new Map();
-  
+
+  // Phase 3: fan out every (kType, query) pair in parallel. With Promise.all,
+  // total RAG time becomes max(query_ms) instead of sum(query_ms). With the
+  // pg_trgm GIN index on document_chunks.content (added in the same phase),
+  // each ILIKE is also faster individually. Scoring/dedup happens in a single
+  // pass after all results return.
+  type RawSearchResult = { kType: string; queryTerms: string[]; chunks: any[] };
+
+  const tasks: Promise<RawSearchResult>[] = [];
+
   for (const kType of knowledgeTypes) {
     for (const query of searchQueries) {
-      try {
-        // Busca por texto usando ILIKE com múltiplos termos
-        const queryTerms = query.split(' ').filter(t => t.length > 2);
-        
-        if (queryTerms.length === 0) continue;
-        
-        // Constrói busca com OR para cada termo
-        let queryBuilder = supabase
+      const queryTerms = query.split(' ').filter(t => t.length > 2);
+      if (queryTerms.length === 0) continue;
+
+      const orConditions = queryTerms.map(term => `content.ilike.%${term}%`).join(',');
+
+      tasks.push(
+        supabase
           .from('document_chunks')
           .select(`
             id,
@@ -223,69 +229,68 @@ async function searchKnowledgeBase(
             chunk_order,
             knowledge_documents!inner(id, title, knowledge_type)
           `)
-          .eq('knowledge_documents.knowledge_type', kType);
-        
-        // Busca por qualquer termo no conteúdo
-        const orConditions = queryTerms.map(term => `content.ilike.%${term}%`).join(',');
-        queryBuilder = queryBuilder.or(orConditions);
-        
-        const { data: chunks, error } = await queryBuilder.limit(5);
-        
-        if (error) {
-          console.error(`Search error for query "${query}":`, error);
-          continue;
-        }
-        
-        if (chunks && chunks.length > 0) {
-          for (const chunk of chunks) {
-            const chunkId = chunk.id;
-            
-            // Calcula score de relevância baseado em quantos termos aparecem
-            let score = 0;
-            const contentLower = chunk.content.toLowerCase();
-            
-            for (const term of queryTerms) {
-              const termLower = term.toLowerCase();
-              // Conta ocorrências do termo
-              const matches = (contentLower.match(new RegExp(termLower, 'g')) || []).length;
-              score += matches;
-              
-              // Bonus para termos expandidos (aliases)
-              const expandedTerms = expandTermWithAliases(term);
-              for (const expTerm of expandedTerms) {
-                if (expTerm !== termLower && contentLower.includes(expTerm)) {
-                  score += 0.5;
-                }
-              }
+          .eq('knowledge_documents.knowledge_type', kType)
+          .or(orConditions)
+          .limit(5)
+          .then(({ data, error }: { data: any; error: any }) => {
+            if (error) {
+              console.error(`Search error for query "${query}" (${kType}):`, error);
+              return { kType, queryTerms, chunks: [] };
             }
-            
-            // Atualiza ou adiciona resultado
-            const existing = allResults.get(chunkId);
-            if (!existing || existing.relevance_score < score) {
-              allResults.set(chunkId, {
-                id: chunkId,
-                content: chunk.content,
-                document_title: chunk.knowledge_documents?.title || 'Documento',
-                chunk_order: chunk.chunk_order,
-                relevance_score: score,
-                knowledge_type: kType
-              });
-            }
+            return { kType, queryTerms, chunks: data || [] };
+          })
+          .catch((err: any) => {
+            console.error(`Error in search query "${query}" (${kType}):`, err);
+            return { kType, queryTerms, chunks: [] };
+          })
+      );
+    }
+  }
+
+  const allResults = await Promise.all(tasks);
+
+  // Score and dedupe in one pass.
+  const chunkMap: Map<string, ChunkResult> = new Map();
+
+  for (const { kType, queryTerms, chunks } of allResults) {
+    for (const chunk of chunks) {
+      const chunkId = chunk.id;
+      let score = 0;
+      const contentLower = chunk.content.toLowerCase();
+
+      for (const term of queryTerms) {
+        const termLower = term.toLowerCase();
+        const matches = (contentLower.match(new RegExp(termLower, 'g')) || []).length;
+        score += matches;
+
+        const expandedTerms = expandTermWithAliases(term);
+        for (const expTerm of expandedTerms) {
+          if (expTerm !== termLower && contentLower.includes(expTerm)) {
+            score += 0.5;
           }
         }
-      } catch (err) {
-        console.error(`Error in search query "${query}":`, err);
+      }
+
+      const existing = chunkMap.get(chunkId);
+      if (!existing || existing.relevance_score < score) {
+        chunkMap.set(chunkId, {
+          id: chunkId,
+          content: chunk.content,
+          document_title: chunk.knowledge_documents?.title || 'Documento',
+          chunk_order: chunk.chunk_order,
+          relevance_score: score,
+          knowledge_type: kType,
+        });
       }
     }
   }
-  
-  // Ordena por relevância e retorna os melhores
-  const results = Array.from(allResults.values())
+
+  const results = Array.from(chunkMap.values())
     .sort((a, b) => b.relevance_score - a.relevance_score)
-    .slice(0, 8); // Top 8 chunks mais relevantes
-  
-  console.log(`RAG search found ${allResults.size} unique chunks, returning top ${results.length}`);
-  
+    .slice(0, 8);
+
+  console.log(`RAG search ran ${tasks.length} parallel queries, found ${chunkMap.size} unique chunks, returning top ${results.length}`);
+
   return results;
 }
 
@@ -588,6 +593,29 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Perf instrumentation — captured per request, persisted at end (best-effort).
+  const perf = {
+    t_request_start: Date.now(),
+    t_auth_done: 0,
+    t_rag_start: 0,
+    t_rag_done: 0,
+    t_llm_start: 0,
+    t_llm_first_token: 0,
+    t_llm_done: 0,
+    t_response_sent: 0,
+    rag_chunk_count: 0,
+    attachment_count: 0,
+    tokens_input: 0,
+    tokens_output: 0,
+    model: '',
+    model_type: '',
+    knowledge_type: '',
+    conversation_id: null as string | null,
+    user_id: null as string | null,
+    status_code: 0,
+    error: null as string | null,
+  };
+
   try {
     // Validate authorization header first
     const authHeader = req.headers.get('Authorization');
@@ -600,6 +628,9 @@ serve(async (req) => {
     }
 
     const { conversationId, message, modelType, attachments = [] } = await req.json();
+    perf.conversation_id = conversationId ?? null;
+    perf.model_type = modelType ?? '';
+    perf.attachment_count = Array.isArray(attachments) ? attachments.length : 0;
 
     if (!conversationId || !message || !modelType) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -634,6 +665,8 @@ serve(async (req) => {
     }
 
     const authenticatedUserId = userData.user.id;
+    perf.user_id = authenticatedUserId;
+    perf.t_auth_done = Date.now();
 
     // Get conversation to check user_id
     const { data: conversation, error: convError } = await supabase
@@ -749,14 +782,18 @@ serve(async (req) => {
     
     let ragContext = "";
     const knowledgeType = getKnowledgeType(modelType);
-    
+    perf.knowledge_type = knowledgeType ?? '';
+
     if (knowledgeType) {
       try {
         console.log(`\n=== RAG SEARCH ===`);
         console.log(`Model type: ${modelType}, Knowledge type: ${knowledgeType}`);
         console.log(`User message: "${message.substring(0, 100)}..."`);
-        
+
+        perf.t_rag_start = Date.now();
         const relevantChunks = await searchKnowledgeBase(supabase, message, knowledgeType);
+        perf.t_rag_done = Date.now();
+        perf.rag_chunk_count = relevantChunks.length;
         
         if (relevantChunks.length > 0) {
           console.log(`Found ${relevantChunks.length} relevant chunks from knowledge base`);
@@ -803,7 +840,12 @@ serve(async (req) => {
     // PROCESSAMENTO DE ANEXOS DO USUÁRIO
     // ==========================================================================
     
-    const model = 'google/gemini-2.5-pro';
+    // Phase 2: Flash for single-domain queries (3-5x faster, ~75% cheaper).
+    // Reserve Pro for `specialist`, which integrates medical + legal + veterinary.
+    const model = modelType === 'specialist'
+      ? 'google/gemini-2.5-pro'
+      : 'google/gemini-2.5-flash';
+    perf.model = model;
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
     let attachmentContext = "";
@@ -958,8 +1000,9 @@ serve(async (req) => {
     console.log(`- RAG Context: ${ragContext ? 'Yes' : 'No'}`);
     console.log(`- System prompt length: ${systemContent.length} chars`);
 
-    // Call Lovable AI Gateway
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // Call Lovable AI Gateway — streaming (Phase 1)
+    perf.t_llm_start = Date.now();
+    const upstream = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
@@ -968,85 +1011,288 @@ serve(async (req) => {
       body: JSON.stringify({
         model: model,
         messages: geminiMessages,
-        max_tokens: 8000,
+        max_tokens: 2000,
+        stream: true,
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Lovable AI API error:', response.status, errorText);
-      
-      if (response.status === 429) {
+    // Pre-stream errors stay as JSON so the client can branch on Content-Type.
+    if (!upstream.ok) {
+      perf.t_llm_done = Date.now();
+      const errorText = await upstream.text();
+      console.error('Lovable AI API error:', upstream.status, errorText);
+      perf.error = `LLM gateway ${upstream.status}: ${errorText.slice(0, 200)}`;
+      perf.status_code = upstream.status === 429 || upstream.status === 402 ? upstream.status : 500;
+      perf.t_response_sent = Date.now();
+      flushPerfMetrics(perf);
+
+      if (upstream.status === 429) {
         return new Response(JSON.stringify({ error: 'Rate limits exceeded, please try again later.' }), {
           status: 429,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      if (response.status === 402) {
+      if (upstream.status === 402) {
         return new Response(JSON.stringify({ error: 'Payment required, please add funds to your Lovable AI workspace.' }), {
           status: 402,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      
       return new Response(JSON.stringify({ error: 'AI service error' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const data = await response.json();
-    const aiResponse = data.choices[0].message.content;
+    // Stream the LLM response back to the client as Server-Sent Events.
+    // Once the stream completes we own persistence: we INSERT the assistant
+    // message and the ai_usage row. The frontend used to do the message INSERT
+    // (Dashboard.tsx:431); with streaming that responsibility moves here so the
+    // record is preserved even if the client disconnects mid-stream.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (data: object) => {
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+          } catch (e) {
+            console.error('Failed to enqueue SSE event:', e);
+          }
+        };
 
-    // Register AI usage for cost tracking
-    try {
-      const usage = data.usage || {};
-      const tokensInput = usage.prompt_tokens || 0;
-      const tokensOutput = usage.completion_tokens || 0;
-      
-      const costPer1kInputTokens = 0.00015;
-      const costPer1kOutputTokens = 0.0006;
-      
-      const inputCost = (tokensInput / 1000) * costPer1kInputTokens;
-      const outputCost = (tokensOutput / 1000) * costPer1kOutputTokens;
-      const totalCost = inputCost + outputCost;
-      
-      const authHeader = req.headers.get('Authorization');
-      if (authHeader) {
-        const token = authHeader.replace('Bearer ', '');
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-        const adminClient = createClient(supabaseUrl, supabaseServiceKey);
-        
-        const { data: { user } } = await adminClient.auth.getUser(token);
-        
-        if (user) {
-          await adminClient.from('ai_usage').insert({
-            user_id: user.id,
-            conversation_id: conversationId,
-            model: model,
-            tokens_input: tokensInput,
-            tokens_output: tokensOutput,
-            cost: totalCost,
+        let fullContent = '';
+        let usage: { prompt_tokens?: number; completion_tokens?: number } | null = null;
+        let firstTokenSent = false;
+        let assistantMessageId: string | null = null;
+
+        try {
+          const reader = upstream.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data:')) continue;
+              const dataStr = trimmed.slice(5).trim();
+              if (!dataStr || dataStr === '[DONE]') continue;
+
+              try {
+                const json = JSON.parse(dataStr);
+                const delta = json.choices?.[0]?.delta?.content;
+                if (delta) {
+                  if (!firstTokenSent) {
+                    perf.t_llm_first_token = Date.now();
+                    firstTokenSent = true;
+                  }
+                  fullContent += delta;
+                  sendEvent({ delta });
+                }
+                if (json.usage) usage = json.usage;
+              } catch (parseErr) {
+                console.error('SSE chunk parse error:', parseErr, 'chunk:', trimmed.slice(0, 200));
+              }
+            }
+          }
+
+          perf.t_llm_done = Date.now();
+
+          // Persist assistant message — backend now owns this.
+          if (fullContent.length > 0) {
+            const { data: insertedMsg, error: insertErr } = await supabase
+              .from('messages')
+              .insert({
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: fullContent,
+              })
+              .select('id')
+              .single();
+
+            if (insertErr) {
+              console.error('Failed to persist assistant message:', insertErr);
+            } else {
+              assistantMessageId = insertedMsg.id;
+            }
+          } else {
+            console.error('Empty AI response — not persisting');
+          }
+
+          // Record AI usage. Reuses authenticatedUserId from outer scope (no
+          // duplicate auth.getUser — task 1.8).
+          if (usage) {
+            const tokensInput = usage.prompt_tokens || 0;
+            const tokensOutput = usage.completion_tokens || 0;
+            perf.tokens_input = tokensInput;
+            perf.tokens_output = tokensOutput;
+
+            const costPer1kInputTokens = 0.00015;
+            const costPer1kOutputTokens = 0.0006;
+            const totalCost = (tokensInput / 1000) * costPer1kInputTokens
+                            + (tokensOutput / 1000) * costPer1kOutputTokens;
+
+            try {
+              await supabase.from('ai_usage').insert({
+                user_id: authenticatedUserId,
+                conversation_id: conversationId,
+                model: model,
+                tokens_input: tokensInput,
+                tokens_output: tokensOutput,
+                cost: totalCost,
+              });
+            } catch (usageErr) {
+              console.error('Error recording AI usage:', usageErr);
+            }
+          }
+
+          // Final event — signals completion and gives the client the persisted
+          // messageId so it can replace the streaming bubble with the saved row.
+          sendEvent({
+            done: true,
+            messageId: assistantMessageId,
+            usage,
           });
-        }
-      }
-    } catch (usageError) {
-      console.error('Error recording AI usage:', usageError);
-    }
 
-    return new Response(JSON.stringify({ response: aiResponse }), {
+          perf.t_response_sent = Date.now();
+          perf.status_code = 200;
+          flushPerfMetrics(perf);
+        } catch (streamErr) {
+          console.error('Stream processing error:', streamErr);
+          perf.t_response_sent = Date.now();
+          perf.status_code = 500;
+          perf.error = streamErr instanceof Error ? streamErr.message : 'stream error';
+          flushPerfMetrics(perf);
+          sendEvent({
+            error: streamErr instanceof Error ? streamErr.message : 'Unknown stream error',
+          });
+        } finally {
+          try { controller.close(); } catch { /* already closed */ }
+        }
+      },
+      cancel() {
+        // Client disconnected before stream completed.
+        console.log('Stream cancelled by client');
+        try { upstream.body?.cancel(); } catch { /* ignore */ }
+      },
+    });
+
+    return new Response(stream, {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        // Disable any intermediate buffering (e.g. nginx) so chunks reach the
+        // client as soon as we enqueue them.
+        'X-Accel-Buffering': 'no',
+      },
     });
 
   } catch (error) {
     console.error('Error in chat-ai function:', error);
-    return new Response(JSON.stringify({ 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    perf.t_response_sent = Date.now();
+    perf.status_code = 500;
+    perf.error = error instanceof Error ? error.message : 'Unknown error';
+    flushPerfMetrics(perf);
+    return new Response(JSON.stringify({
+      error: error instanceof Error ? error.message : 'Unknown error'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
+
+// =============================================================================
+// PERF METRICS FLUSH (Phase 0 instrumentation)
+// =============================================================================
+
+interface PerfPayload {
+  t_request_start: number;
+  t_auth_done: number;
+  t_rag_start: number;
+  t_rag_done: number;
+  t_llm_start: number;
+  t_llm_first_token: number;
+  t_llm_done: number;
+  t_response_sent: number;
+  rag_chunk_count: number;
+  attachment_count: number;
+  tokens_input: number;
+  tokens_output: number;
+  model: string;
+  model_type: string;
+  knowledge_type: string;
+  conversation_id: string | null;
+  user_id: string | null;
+  status_code: number;
+  error: string | null;
+}
+
+// Fire-and-forget. Logs a structured summary line and persists to chat_perf_metrics.
+// Never throws — failure to log perf must not affect user response.
+function flushPerfMetrics(p: PerfPayload): void {
+  const total = p.t_response_sent ? p.t_response_sent - p.t_request_start : 0;
+  const auth = p.t_auth_done ? p.t_auth_done - p.t_request_start : 0;
+  const rag = p.t_rag_start && p.t_rag_done ? p.t_rag_done - p.t_rag_start : 0;
+  const llm = p.t_llm_start && p.t_llm_done ? p.t_llm_done - p.t_llm_start : 0;
+  const ttft = p.t_llm_start && p.t_llm_first_token ? p.t_llm_first_token - p.t_llm_start : 0;
+  const responsePhase = p.t_llm_done && p.t_response_sent ? p.t_response_sent - p.t_llm_done : 0;
+
+  console.log(JSON.stringify({
+    perf: 'chat-ai',
+    total_ms: total,
+    auth_ms: auth,
+    rag_ms: rag,
+    llm_ms: llm,
+    ttft_ms: ttft,
+    response_ms: responsePhase,
+    rag_chunks: p.rag_chunk_count,
+    attachments: p.attachment_count,
+    tokens_in: p.tokens_input,
+    tokens_out: p.tokens_output,
+    model_type: p.model_type,
+    status: p.status_code,
+    error: p.error,
+  }));
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseServiceKey) return;
+    const client = createClient(supabaseUrl, supabaseServiceKey);
+    // Don't await — fire and forget
+    client.from('chat_perf_metrics').insert({
+      conversation_id: p.conversation_id,
+      user_id: p.user_id,
+      model: p.model || null,
+      model_type: p.model_type || null,
+      knowledge_type: p.knowledge_type || null,
+      t_request_start: new Date(p.t_request_start).toISOString(),
+      duration_total_ms: total || null,
+      duration_auth_ms: auth || null,
+      duration_rag_ms: rag || null,
+      duration_llm_ms: llm || null,
+      duration_ttft_ms: ttft || null,
+      duration_response_ms: responsePhase || null,
+      rag_chunk_count: p.rag_chunk_count,
+      attachment_count: p.attachment_count,
+      tokens_input: p.tokens_input,
+      tokens_output: p.tokens_output,
+      status_code: p.status_code || null,
+      error: p.error,
+    }).then(({ error }) => {
+      if (error) console.error('perf insert error:', error.message);
+    });
+  } catch (e) {
+    console.error('perf flush exception:', e);
+  }
+}
