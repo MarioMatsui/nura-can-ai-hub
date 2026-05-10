@@ -38,6 +38,7 @@ const HowItWorks = () => {
             onEnded={handleVideoEnd}
             onPause={handleVideoPause}
             onPlay={handleVideoPlay}
+            preload="none"
             playsInline
           />
 
