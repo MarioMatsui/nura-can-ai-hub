@@ -104,7 +104,11 @@ function extractKeyTerms(message: string): string[] {
   // Também identifica siglas (2-5 caracteres maiúsculos)
   const acronyms = message.match(/\b[A-Z]{2,5}\b/g) || [];
   
-  return [...new Set([...words, ...acronyms.map(a => a.toLowerCase())])];
+  // Hotfix (2026-05-13): acronyms BEFORE words. Cannabis names like CBL, THCV,
+  // CBG, CBC are almost always the subject of the question and should never
+  // get pushed out of the top search-query slots by noise words like
+  // "resumo", "didático", "detalhado".
+  return [...new Set([...acronyms.map(a => a.toLowerCase()), ...words])];
 }
 
 // Gera múltiplas queries de busca
@@ -130,7 +134,10 @@ function generateSearchQueries(message: string): string[] {
     }
   }
   
-  return Array.from(queries).slice(0, 5); // Phase 3: capped at 5 (was 15) to reduce DB load
+  // Hotfix (2026-05-13): reverted from 5 → 12. Cap of 5 was too aggressive:
+  // long user prompts with intent words pushed actual subject acronyms out of
+  // the search budget. The pg_trgm GIN index keeps the DB cost low even at 12.
+  return Array.from(queries).slice(0, 12);
 }
 
 // =============================================================================
