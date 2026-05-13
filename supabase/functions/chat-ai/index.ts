@@ -840,11 +840,14 @@ serve(async (req) => {
     // PROCESSAMENTO DE ANEXOS DO USUÁRIO
     // ==========================================================================
     
-    // Phase 2: Flash for single-domain queries (3-5x faster, ~75% cheaper).
-    // Reserve Pro for `specialist`, which integrates medical + legal + veterinary.
-    const model = modelType === 'specialist'
-      ? 'google/gemini-2.5-pro'
-      : 'google/gemini-2.5-flash';
+    // Hotfix (2026-05-12): revert paid plans to Pro.
+    // Flash was too conservative for nuanced medical / legal / veterinary
+    // synthesis — answers regressed to "I don't have information" even when
+    // RAG returned relevant chunks. Keep Flash only for the free `generic`
+    // plan where answer depth matters less.
+    const model = modelType === 'generic'
+      ? 'google/gemini-2.5-flash'
+      : 'google/gemini-2.5-pro';
     perf.model = model;
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
@@ -1011,7 +1014,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: model,
         messages: geminiMessages,
-        max_tokens: 2000,
+        max_tokens: 4000,
         stream: true,
       }),
     });
