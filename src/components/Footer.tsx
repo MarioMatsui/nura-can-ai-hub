@@ -1,5 +1,5 @@
-import logoLight from "@/assets/canfy-light.png";
-import logoDark from "@/assets/canfy-dark.png";
+import logoLight from "@/assets/canfy-light.webp";
+import logoDark from "@/assets/canfy-dark.webp";
 
 const Footer = () => {
 
@@ -16,15 +16,19 @@ const Footer = () => {
               className="inline-flex items-center gap-2 mb-1"
               aria-label="Canfy"
             >
-              <img 
-                src={logoLight} 
-                alt="NuraCan AI" 
+              <img
+                src={logoLight}
+                alt="NuraCan AI"
                 className="h-14 w-auto dark:hidden"
+                loading="lazy"
+                decoding="async"
               />
-              <img 
-                src={logoDark} 
-                alt="NuraCan AI" 
+              <img
+                src={logoDark}
+                alt="NuraCan AI"
                 className="h-14 w-auto hidden dark:block"
+                loading="lazy"
+                decoding="async"
               />
             </a>
             <p className="text-sm text-muted-foreground leading-relaxed">

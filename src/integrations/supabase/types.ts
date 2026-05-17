@@ -252,83 +252,6 @@ export type Database = {
           },
         ]
       }
-      chat_perf_metrics: {
-        Row: {
-          attachment_count: number | null
-          conversation_id: string | null
-          created_at: string
-          duration_auth_ms: number | null
-          duration_llm_ms: number | null
-          duration_rag_ms: number | null
-          duration_response_ms: number | null
-          duration_total_ms: number | null
-          duration_ttft_ms: number | null
-          error: string | null
-          id: string
-          knowledge_type: string | null
-          model: string | null
-          model_type: string | null
-          rag_chunk_count: number | null
-          status_code: number | null
-          t_request_start: string
-          tokens_input: number | null
-          tokens_output: number | null
-          user_id: string | null
-        }
-        Insert: {
-          attachment_count?: number | null
-          conversation_id?: string | null
-          created_at?: string
-          duration_auth_ms?: number | null
-          duration_llm_ms?: number | null
-          duration_rag_ms?: number | null
-          duration_response_ms?: number | null
-          duration_total_ms?: number | null
-          duration_ttft_ms?: number | null
-          error?: string | null
-          id?: string
-          knowledge_type?: string | null
-          model?: string | null
-          model_type?: string | null
-          rag_chunk_count?: number | null
-          status_code?: number | null
-          t_request_start: string
-          tokens_input?: number | null
-          tokens_output?: number | null
-          user_id?: string | null
-        }
-        Update: {
-          attachment_count?: number | null
-          conversation_id?: string | null
-          created_at?: string
-          duration_auth_ms?: number | null
-          duration_llm_ms?: number | null
-          duration_rag_ms?: number | null
-          duration_response_ms?: number | null
-          duration_total_ms?: number | null
-          duration_ttft_ms?: number | null
-          error?: string | null
-          id?: string
-          knowledge_type?: string | null
-          model?: string | null
-          model_type?: string | null
-          rag_chunk_count?: number | null
-          status_code?: number | null
-          t_request_start?: string
-          tokens_input?: number | null
-          tokens_output?: number | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "chat_perf_metrics_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "conversations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       conversations: {
         Row: {
           created_at: string
@@ -1399,8 +1322,6 @@ export type Database = {
           table_id: string
         }[]
       }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       upsert_user_plan: {
         Args: {
           _billing_cycle?: Database["public"]["Enums"]["billing_cycle_enum"]

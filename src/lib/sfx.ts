@@ -1,4 +1,4 @@
-import uploadFoi from '@/assets/uploadFoi.wav';
+import uploadFoi from '@/assets/uploadFoi.mp3';
 import receitaFoi from '@/assets/receitaFoi.mp3';
 
 const cache = new Map<string, HTMLAudioElement>();

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo.webp";
 import { GoogleAuthButton } from "@/components/auth/GoogleAuthButton";
 
 const loginSchema = z.object({

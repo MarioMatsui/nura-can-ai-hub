@@ -4,11 +4,11 @@ import { cn } from "@/lib/utils";
 import ImageLightbox from "@/components/ui/image-lightbox";
 
 // Feature images
-import pesquisaImg from "@/assets/features/pesquisa.jpg";
-import atendimentoImg from "@/assets/features/atendimento.jpg";
-import dosagemImg from "@/assets/features/dosagem.jpg";
-import analiseImg from "@/assets/features/analise.jpg";
-import hobbyImg from "@/assets/features/hobby.jpg";
+import pesquisaImg from "@/assets/features/pesquisa.webp";
+import atendimentoImg from "@/assets/features/atendimento.webp";
+import dosagemImg from "@/assets/features/dosagem.webp";
+import analiseImg from "@/assets/features/analise.webp";
+import hobbyImg from "@/assets/features/hobby.webp";
 
 const features = [
   {
@@ -106,6 +106,8 @@ const Features = () => {
                       src={feature.image}
                       alt={feature.label}
                       className="w-full h-auto max-h-[500px] object-cover rounded-2xl cursor-pointer hover:opacity-90 transition-opacity"
+                      loading="lazy"
+                      decoding="async"
                       onClick={() => setLightboxImage({ src: feature.image, alt: feature.label })}
                     />
                   ) : (

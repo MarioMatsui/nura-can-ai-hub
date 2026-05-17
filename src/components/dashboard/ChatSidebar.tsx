@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, PanelLeft, Search, FilePlus2 } from 'lucide-react';
 import { toast } from 'sonner';
-import logoIcon from '@/assets/logo-icon.png';
+import logoIcon from '@/assets/logo-icon.webp';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Conversation } from '@/pages/Dashboard';

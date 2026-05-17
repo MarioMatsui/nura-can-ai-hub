@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft } from "lucide-react";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo.webp";
 
 const forgotPasswordSchema = z.object({
   email: z.string()

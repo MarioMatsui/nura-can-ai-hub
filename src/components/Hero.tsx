@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
-import heroAppPreview from "@/assets/hero-app-preview.png";
+import heroAppPreview from "@/assets/hero-app-preview.webp";
 
 const Hero = () => {
   const scrollToPlans = () => {
@@ -48,6 +48,8 @@ const Hero = () => {
               src={heroAppPreview}
               alt="Preview da aplicação Nura"
               className="w-full max-w-[600px] h-auto rounded-2xl shadow-2xl"
+              fetchPriority="high"
+              decoding="async"
             />
           </div>
         </div>
