@@ -130,7 +130,7 @@ function generateSearchQueries(message: string): string[] {
     }
   }
   
-  return Array.from(queries).slice(0, 5); // Phase 3: capped at 5 (was 15) to reduce DB load
+  return Array.from(queries).slice(0, 15); // Limita a 15 queries
 }
 
 // =============================================================================
@@ -1014,7 +1014,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: model,
         messages: geminiMessages,
-        max_tokens: 4000,
+        max_tokens: 8000,
         stream: true,
       }),
     });
