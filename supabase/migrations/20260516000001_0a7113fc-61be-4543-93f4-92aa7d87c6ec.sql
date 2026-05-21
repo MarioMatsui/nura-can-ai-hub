@@ -1,0 +1,23 @@
+-- Drop the pg_trgm GIN index added in migration 20260510000001.
+--
+-- WHY THIS IS BEING REMOVED:
+-- The RAG search in chat-ai (searchKnowledgeBase) runs ILIKE queries with
+-- `.limit(5)` but WITHOUT an explicit ORDER BY. Postgres therefore returns
+-- whatever 5 matching rows it finds first.
+--
+-- Adding the trgm index changed the query execution plan from a sequential
+-- scan to a bitmap index scan — which changed the physical order in which
+-- matching rows are returned. That silently changed WHICH 5 chunks each query
+-- contributed, and therefore which chunks reached the LLM as context. The net
+-- effect was a regression in answer depth (shallower responses, fewer cited
+-- studies) even though the same total set of chunks still "matched".
+--
+-- Removing the index reverts the query plan to a sequential scan, restoring
+-- the exact chunk selection the system had before the optimization work.
+--
+-- The pg_trgm EXTENSION is intentionally left installed — it is harmless and
+-- will be needed when/if RAG is migrated to proper relevance-ranked retrieval
+-- (semantic search via pgvector), which is the correct long-term fix for the
+-- non-deterministic `.limit(5)` behavior.
+
+DROP INDEX IF EXISTS public.idx_chunks_content_trgm;
