@@ -840,14 +840,13 @@ serve(async (req) => {
     // PROCESSAMENTO DE ANEXOS DO USUÁRIO
     // ==========================================================================
     
-    // Hotfix (2026-05-12): revert paid plans to Pro.
-    // Flash was too conservative for nuanced medical / legal / veterinary
-    // synthesis — answers regressed to "I don't have information" even when
-    // RAG returned relevant chunks. Keep Flash only for the free `generic`
-    // plan where answer depth matters less.
-    const model = modelType === 'generic'
-      ? 'google/gemini-2.5-flash'
-      : 'google/gemini-2.5-pro';
+    // Restored to original: Gemini Pro for ALL plans. The Flash split (even
+    // for the free `generic` plan) regressed answer depth and caused the
+    // model to follow the system prompt less strictly (e.g. leaking "[2]"
+    // source markers). The original system used Pro everywhere — restoring
+    // that. Cost optimization on the free tier can be revisited later as a
+    // deliberate, separately-tested decision.
+    const model = 'google/gemini-2.5-pro';
     perf.model = model;
     const systemPrompt = SYSTEM_PROMPTS[modelType as keyof typeof SYSTEM_PROMPTS] || SYSTEM_PROMPTS.generic;
 
