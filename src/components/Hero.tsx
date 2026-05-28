@@ -20,13 +20,13 @@ const Hero = () => {
           <div className="text-left">
             {/* Main Heading */}
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-5xl xl:text-6xl font-bold mb-6 sm:mb-8 leading-tight">
-              A sua nova parceira em <span className="text-primary">Estudos C/\NN/\BICOS</span>
+              A sua nova parceira em <span className="text-primary">Estudos C@nn@bicos</span>
             </h1>
 
             {/* Subtitle */}
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-8 sm:mb-12 leading-relaxed">
-              Consulte uma base de conhecimento científico global, obtenha respostas baseadas em evidências e acelere suas
-              pesquisas.
+              Consulte uma base de conhecimento científico global, obtenha respostas baseadas em evidências e acelere
+              suas pesquisas.
             </p>
 
             {/* CTA Button */}
